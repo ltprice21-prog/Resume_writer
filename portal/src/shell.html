@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMI Order Desk</title>
+<style>/*STYLES*/</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="brandline">
+    <div class="brand">AMI <span>Order Desk</span></div>
+    <div class="tagline">Purchase order &rarr; tracker &rarr; vendor email, without retyping anything</div>
+    <span class="spacer"></span>
+    <div class="tagline">Runs entirely on this computer &middot; no internet, no accounts, no AI service</div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="tracker" role="tab" aria-selected="true"><span class="step-no">1</span>Tracker</button>
+    <button data-tab="intake" role="tab" aria-selected="false" disabled><span class="step-no">2</span>Purchase orders</button>
+    <button data-tab="review" role="tab" aria-selected="false" disabled><span class="step-no">3</span>Review &amp; post</button>
+    <button data-tab="email" role="tab" aria-selected="false" disabled><span class="step-no">4</span>Vendor email</button>
+    <button data-tab="followups" role="tab" aria-selected="false" disabled><span class="step-no">5</span>Follow-ups</button>
+    <button data-tab="settings" role="tab" aria-selected="false">Settings</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- 1. Tracker -->
+  <section class="panel" data-panel="tracker">
+    <div class="card">
+      <h2>Open the order tracking chart</h2>
+      <div class="body">
+        <p class="help">
+          Point this at the tracking chart in your OneDrive folder. Everything the app knows about
+          case sizes, pallet counts, lead times and contract balances is read from that workbook, so
+          nothing has to be configured twice.
+        </p>
+        <div class="btn-row">
+          <button class="btn primary" id="openFolder">Open the tracker folder</button>
+          <button class="btn" id="openFile">Pick the file directly</button>
+          <button class="btn" id="openUpload">Upload a copy instead</button>
+          <input type="file" id="trackerInput" accept=".xlsx,.xlsm" hidden>
+        </div>
+        <div class="msg info" id="fsNote" hidden>
+          <span class="icon">i</span>
+          <div>
+            <strong>This browser cannot save files in place.</strong>
+            <span class="detail">Upload a copy of the tracker and the app will hand you back an updated
+            workbook to save over the original. Microsoft Edge and Chrome support saving in place.</span>
+          </div>
+        </div>
+        <div class="msg info">
+          <span class="icon">i</span>
+          <div>
+            <strong>Opening the folder is worth the extra click.</strong>
+            <span class="detail">With folder access the app writes the updated tracker straight back to
+            OneDrive and drops a timestamped backup beside it. Picking a single file also saves in place,
+            but the backup is downloaded instead.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="trackerPicker"></div>
+    <div id="trackerInfo"></div>
+  </section>
+
+  <!-- 2. Purchase orders -->
+  <section class="panel" data-panel="intake" hidden>
+    <div class="card">
+      <h2>Load purchase order PDFs</h2>
+      <div class="body">
+        <p class="help">
+          Drop in as many POs as you are placing together. Each one is read directly out of the PDF text &mdash;
+          no scanning, no guessing, no data sent anywhere. Anything the PDF does not state is left blank.
+        </p>
+        <div class="dropzone" id="pdfDrop">
+          <strong>Drop purchase order PDFs here</strong>
+          or click to browse
+        </div>
+        <input type="file" id="pdfInput" accept=".pdf" multiple hidden>
+      </div>
+    </div>
+    <div id="poList"></div>
+  </section>
+
+  <!-- 3. Review -->
+  <section class="panel" data-panel="review" hidden>
+    <div class="card">
+      <h2>Review the rows before anything is written</h2>
+      <div class="body">
+        <p class="help">
+          One block per order, showing exactly what will land in each tracker column and where it came from.
+          <span class="chip pdf">from PO</span> read off the PDF.
+          <span class="chip computed">computed</span> arithmetic from the PO and the tracker's own constants.
+          <span class="chip formula">formula</span> the sheet's existing formula, carried down.
+          <span class="chip carried">carried</span> unchanged across recent orders &mdash; check it still applies.
+          <span class="chip manual">blank</span> not on the PO, left for you.
+        </p>
+      </div>
+    </div>
+    <div id="reviewList"></div>
+    <div id="postBar" hidden></div>
+  </section>
+
+  <!-- 4. Email -->
+  <section class="panel" data-panel="email" hidden>
+    <div class="card">
+      <h2>Vendor order email</h2>
+      <div class="body" id="emailPanelBody"></div>
+    </div>
+  </section>
+
+  <!-- 5. Follow-ups -->
+  <section class="panel" data-panel="followups" hidden>
+    <div class="card">
+      <h2>Outstanding items</h2>
+      <div class="body" id="followBody"></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="panel" data-panel="settings" hidden>
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="body" id="settingsBody"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>/*ENGINE*/</script>
+<script>/*APP*/</script>
+</body>
+</html>
