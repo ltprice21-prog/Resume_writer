@@ -186,6 +186,10 @@
     portfolioLoading: false,
     filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
     summaryHtml: '',
+    // Memory across closing the app
+    rememberedFolder: null,
+    pendingSession: null,
+    canRemember: false,
   };
 
   let nextId = 1;
@@ -350,6 +354,10 @@
 
   async function adoptStore(store) {
     state.store = store;
+    if (store.kind === 'folder' && store.root) {
+      await AMI.rememberFolder(store.root, store.root.name);
+      state.rememberedFolder = { handle: store.root, name: store.root.name };
+    }
     const { workspace, created } = await AMI.loadWorkspace(store);
     state.workspace = workspace;
     state.loadedAt = workspace.updated;
@@ -369,10 +377,13 @@
     const preferred = saved.accountId && accounts.some((a) => a.id === saved.accountId)
       ? saved.accountId : (accounts.length ? accounts[0].id : '');
 
+    state.pendingSession = await AMI.loadSession();
+
     renderHeaderBar();
     if (preferred) await selectAccount(preferred, saved.itemId);
     else { renderWorkspace(); refreshTabs(); }
-    if (!created && currentUser()) showTab('dashboard');
+    if (!created && currentUser()) showTab(state.pendingSession ? 'orders' : 'dashboard');
+    if (state.pendingSession) renderIntake();
 
     if (created) {
       toast('New workspace created. Add divisions, accounts and items under Accounts.', 'ok');
@@ -422,6 +433,7 @@
   async function selectAccount(accountId, preferredItemId) {
     state.accountId = accountId || '';
     saveLocal({ accountId: state.accountId });
+    saveSessionSoon.cancel();
 
     state.itemStates = new Map();
     state.pos = [];
@@ -551,6 +563,29 @@
     clear(host);
 
     if (!state.store) {
+      if (state.rememberedFolder) {
+        host.appendChild(el('div', { class: 'msg ok' }, [
+          el('span', { class: 'icon', text: '✓' }),
+          el('div', {}, [
+            el('strong', { text: 'You last used the folder "' + state.rememberedFolder.name + '".' }),
+            el('span', { class: 'detail', text: 'Reconnect and the browser will ask once for permission — you will not have to find the folder again.' }),
+            el('div', { class: 'btn-row' }, [
+              el('button', {
+                class: 'btn primary', text: 'Reconnect to ' + state.rememberedFolder.name,
+                onclick: reconnectFolder,
+              }),
+              el('button', {
+                class: 'btn small', text: 'Forget it',
+                onclick: async () => {
+                  await AMI.forgetFolder();
+                  state.rememberedFolder = null;
+                  renderWorkspace();
+                },
+              }),
+            ]),
+          ]),
+        ]));
+      }
       host.appendChild(el('p', { class: 'help', text: 'Open the shared folder that holds this file. It should be the SharePoint library synced through OneDrive, so everything you save reaches the rest of the team automatically.' }));
       host.appendChild(el('div', { class: 'btn-row' }, [
         el('button', { class: 'btn primary', text: 'Open the workspace folder', onclick: openWorkspaceFolder }),
@@ -696,6 +731,14 @@
       }
     }
 
+    host.appendChild(el('h3', { text: 'What this computer remembers' }));
+    host.appendChild(el('p', {
+      class: 'help',
+      text: state.canRemember
+        ? 'The folder you picked, your name and current account, and any purchase orders you loaded but have not posted — all stored in this browser on this machine, never uploaded. Statuses, templates and trackers live in the shared folder and reach the whole team.'
+        : 'This browser cannot store anything between sessions, so you will be asked for the folder each time. Statuses, templates and trackers are still saved to the shared folder as you work.',
+    }));
+
     host.appendChild(el('div', { class: 'btn-row' }, [
       el('button', {
         class: 'btn', text: 'Export workspace bundle',
@@ -739,6 +782,7 @@
       });
     }
     await rebuildPlans();
+    saveSessionSoon();
     renderIntake(); renderReview(); refreshTabs();
 
     const unrouted = unroutedPos().length;
@@ -749,6 +793,8 @@
     const host = $('#ordersBody');
     clear(host);
     const account = currentAccount();
+    const offer = sessionOfferCard();
+    if (offer) host.appendChild(offer);
     if (!account) { host.appendChild(el('div', { class: 'empty', text: 'Choose an account first.' })); return; }
 
     const items = AMI.accountItems(account);
@@ -786,7 +832,11 @@
       card.appendChild(el('header', {}, [
         el('input', {
           type: 'checkbox', checked: entry.include,
-          onchange: async (e) => { entry.include = e.target.checked; await rebuildPlans(); renderIntake(); renderReview(); refreshTabs(); },
+          onchange: async (e) => {
+            entry.include = e.target.checked;
+            await rebuildPlans(); saveSessionSoon();
+            renderIntake(); renderReview(); refreshTabs();
+          },
         }),
         el('span', { class: 'po-id', text: po ? (po.poNumber || '(no PO number)') : 'Unreadable' }),
         el('span', { class: 'file', text: entry.fileName }),
@@ -798,7 +848,8 @@
           class: 'btn small', text: 'Remove',
           onclick: async () => {
             state.pos = state.pos.filter((p) => p !== entry);
-            await rebuildPlans(); renderIntake(); renderReview(); refreshTabs();
+            await rebuildPlans(); saveSessionSoon();
+            renderIntake(); renderReview(); refreshTabs();
           },
         }),
       ]));
@@ -814,7 +865,7 @@
             entry.match = e.target.value
               ? { item: AMI.findItem(account, e.target.value), reason: 'chosen by you', confident: true }
               : { item: null, reason: 'not assigned', confident: false };
-            await rebuildPlans();
+            await rebuildPlans(); saveSessionSoon();
             renderIntake(); renderReview(); refreshTabs();
           },
         }, [
@@ -906,7 +957,10 @@
             type: f.kind === 'date' ? 'date' : 'text',
             value: f.kind === 'date' ? (f.value instanceof Date ? AMI.formatISO(f.value) : '') : (f.value == null ? '' : String(f.value)),
             placeholder: f.source === AMI.SOURCE.MANUAL ? 'blank' : '',
-            onchange: async (e) => { entry.overrides[f.col] = e.target.value; await rebuildPlans(); renderReview(); },
+            onchange: async (e) => {
+              entry.overrides[f.col] = e.target.value;
+              await rebuildPlans(); saveSessionSoon(); renderReview();
+            },
           }));
         }
         row.appendChild(sourceChip(f.source));
@@ -1019,6 +1073,7 @@
       st.posted = true;
       state.portfolio = null;
       await rebuildPlans();
+      await persistSession();
       renderWorkspace();
       if (!quiet) { renderReview(); showTab('email'); }
       toast('Wrote ' + entries.length + ' row(s) into ' + name + '. Backup saved alongside it.', 'ok');
@@ -2094,6 +2149,136 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Memory across closing the app
+   * ------------------------------------------------------------------ */
+
+  /** Save unposted work. Posted items drop out, so finishing a batch clears it. */
+  async function persistSession() {
+    if (!state.canRemember || !state.store) return;
+    const pending = state.pos.filter((p) => p.po && p.include && !(itemState(p.itemId) || {}).posted);
+    if (!pending.length) { await AMI.forgetSession(); return; }
+    await AMI.saveSession({
+      userId: state.userId,
+      accountId: state.accountId,
+      accountName: (currentAccount() || {}).name || '',
+      itemId: state.itemId,
+      emailRows: state.emailRows,
+      pos: pending.map((p) => ({
+        fileName: p.fileName,
+        // Copy out of the view so IndexedDB stores exactly these bytes.
+        bytes: p.bytes.buffer.slice(p.bytes.byteOffset, p.bytes.byteOffset + p.bytes.byteLength),
+        itemId: p.itemId,
+        include: p.include,
+        overrides: p.overrides,
+      })),
+    });
+  }
+
+  const saveSessionSoon = AMI.debounce(() => { persistSession(); }, 400);
+
+  /**
+   * Put a saved batch back. The PDFs are re-read rather than trusting stored
+   * derivatives, so a restored order goes through exactly the same extraction
+   * and validation as one dropped in fresh.
+   */
+  async function restoreSession() {
+    const saved = state.pendingSession;
+    if (!saved) return;
+    state.pendingSession = null;
+
+    if (saved.accountId && saved.accountId !== state.accountId
+      && visibleAccounts().some((a) => a.id === saved.accountId)) {
+      await selectAccount(saved.accountId, saved.itemId);
+    }
+
+    state.pos = saved.pos.map((p) => ({
+      id: nextId++, fileName: p.fileName, bytes: new Uint8Array(p.bytes),
+      po: null, error: '', include: p.include !== false,
+      itemId: p.itemId || '',
+      match: { item: null, reason: 'restored from your last session', confident: true },
+      overrides: p.overrides || {}, plan: null, issues: [],
+    }));
+
+    for (const entry of state.pos) {
+      try {
+        entry.po = AMI.parsePurchaseOrder(await AMI.extractPdfPages(entry.bytes), entry.fileName);
+      } catch (e) {
+        entry.error = 'Could not re-read this PDF: ' + e.message;
+        entry.include = false;
+      }
+    }
+    state.emailRows = saved.emailRows || {};
+
+    await rebuildPlans();
+    renderIntake(); renderReview(); refreshTabs();
+    showTab('orders');
+    toast('Restored ' + state.pos.length + ' purchase order(s) from your last session.', 'ok');
+  }
+
+  async function discardSession() {
+    state.pendingSession = null;
+    await AMI.forgetSession();
+    renderIntake(); renderWorkspace();
+    toast('Saved work discarded.', 'ok');
+  }
+
+  /** Reconnect to the folder picked last time, silently if the browser allows. */
+  async function tryReconnect() {
+    const record = await AMI.recallFolder();
+    if (!record) return false;
+    state.rememberedFolder = record;
+    const permission = await AMI.handlePermission(record.handle, false);
+    if (permission !== 'granted') return false;
+    try {
+      await adoptStore(handleStore(record.handle));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function reconnectFolder() {
+    const record = state.rememberedFolder;
+    if (!record) return;
+    const permission = await AMI.handlePermission(record.handle, true);
+    if (permission !== 'granted') {
+      toast('Permission declined. Open the folder again to continue.', 'error');
+      return;
+    }
+    try {
+      await adoptStore(handleStore(record.handle));
+    } catch (e) {
+      toast('That folder could not be reopened: ' + e.message, 'error');
+      await AMI.forgetFolder();
+      state.rememberedFolder = null;
+      renderWorkspace();
+    }
+  }
+
+  /** A card offering to put back what was open when the app was last closed. */
+  function sessionOfferCard() {
+    const saved = state.pendingSession;
+    if (!saved) return null;
+    return el('div', { class: 'msg info', id: 'sessionOffer' }, [
+      el('span', { class: 'icon', text: 'i' }),
+      el('div', {}, [
+        el('strong', {
+          text: saved.pos.length + ' purchase order(s) were still open when you last closed the app'
+            + (saved.accountName ? ' on ' + saved.accountName : '') + '.',
+        }),
+        el('span', {
+          class: 'detail',
+          text: 'Saved ' + AMI.describeAge(saved.savedAt) + ', on this computer only. Nothing was posted.',
+        }),
+        el('div', { class: 'btn-row' }, [
+          el('button', { class: 'btn primary small', text: 'Restore them', onclick: restoreSession }),
+          el('button', { class: 'btn small', text: 'Discard', onclick: discardSession }),
+        ]),
+      ]),
+    ]);
+  }
+
+  /* ------------------------------------------------------------------ *
    * Tooltip
    * ------------------------------------------------------------------ */
 
@@ -2404,7 +2589,12 @@
       { label: 'Open orders', value: open.length, sub: 'of ' + orders.length + ' on the trackers', tone: 'neutral' },
       { label: 'Awaiting shipment', value: counts.placed, sub: 'sent, not collected', tone: 'neutral' },
       { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
-      { label: 'Delivered, not closed', value: counts.delivered, sub: 'paperwork outstanding', tone: counts.delivered ? 'warning' : 'neutral' },
+      { label: 'Delivered', value: counts.delivered, sub: 'arrived, not yet invoiced', tone: 'neutral' },
+      {
+        label: 'Invoiced, not closed', value: counts.invoiced,
+        sub: 'billed, awaiting reconciliation',
+        tone: counts.invoiced ? 'warning' : 'neutral',
+      },
       {
         label: 'Follow-ups overdue', value: followUps,
         sub: followUps ? 'across ' + scope.length + ' tracker(s)' : 'nothing outstanding',
@@ -2890,6 +3080,26 @@
     renderWorkspace();
     refreshTabs();
     showTab('workspace');
+
+    // A debounced save may still be pending when the tab goes away.
+    const flush = () => { saveSessionSoon.flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+
+    bootstrap();
+  }
+
+  /** Reconnect to last time's folder, and load any saved work, without blocking startup. */
+  async function bootstrap() {
+    state.canRemember = await AMI.persistAvailable();
+    if (!state.canRemember) { renderWorkspace(); return; }
+    const reconnected = await tryReconnect();
+    if (!reconnected) {
+      state.pendingSession = await AMI.loadSession();
+      renderWorkspace();
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

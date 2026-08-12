@@ -489,6 +489,76 @@ async function buildBundle() {
       'base64').toString('utf8').includes('account summary'));
   }
 
+  console.log('\nRemembering work across closing the app');
+  // Load a PO and let the debounced autosave land.
+  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.waitForSelector('#ordersBody input[type="file"]', { state: 'attached' });
+  await page.locator('#ordersBody input[type="file"]').setInputFiles(fixture(/Purchase_Order.*\.pdf$/i));
+  await page.waitForSelector('#ordersBody .po-card', { timeout: 20000 });
+  await page.waitForTimeout(1200);
+
+  const stored = await page.evaluate(async () => {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('ami-order-desk', 1);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    const rec = await new Promise((res, rej) => {
+      const r = db.transaction('kv', 'readonly').objectStore('kv').get('session');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    db.close();
+    return rec ? { count: rec.pos.length, name: rec.pos[0].fileName,
+      bytes: rec.pos[0].bytes.byteLength, account: rec.accountName } : null;
+  });
+  ok('unposted work is saved without being asked', !!stored, 'nothing stored');
+  ok('with the PDF itself, not a derivative', stored && stored.bytes > 100000, JSON.stringify(stored));
+  ok('and the account it belonged to', stored && /Aeromexico/.test(stored.account), JSON.stringify(stored));
+
+  // Close and reopen the app, exactly as a person would.
+  await page.reload();
+  await page.waitForSelector('#workspaceBody', { timeout: 15000 });
+  const [chooser2] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('#workspaceBody button', { hasText: 'Load a workspace bundle' }).click(),
+  ]);
+  await chooser2.setFiles(bundlePath);
+  await page.waitForSelector('#contextBar .context-row', { timeout: 15000 });
+  await page.waitForSelector('#sessionOffer', { timeout: 15000 });
+
+  const offer = await page.locator('#sessionOffer').innerText();
+  ok('reopening offers the work back', /still open when you last closed/i.test(offer), offer.replace(/\n/g, ' | '));
+  ok('saying when it was saved', /Saved .*(just now|minute|hour|day)/i.test(offer), offer.replace(/\n/g, ' | '));
+  ok('and that nothing was posted', /Nothing was posted/i.test(offer));
+  ok('it stays on this computer', /this computer only/i.test(offer));
+
+  await page.locator('#sessionOffer button', { hasText: 'Restore them' }).click();
+  await page.waitForSelector('#ordersBody .po-card', { timeout: 25000 });
+  const restored = await page.locator('#ordersBody .po-card header').innerText();
+  ok('the order comes back', /350633-2/.test(restored), restored.replace(/\n/g, ' | '));
+  ok('and is routed to its item again', /evidencia tempranillo/i.test(restored), restored.replace(/\n/g, ' | '));
+
+  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.waitForSelector('#reviewBody .po-card');
+  ok('a restored order is validated exactly like a fresh one',
+    (await page.locator('#reviewBody .po-card header .chip').first().innerText()).toLowerCase().includes('blocked'));
+
+  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.waitForSelector('#ordersBody .po-card');
+  await page.locator('#ordersBody .po-card button', { hasText: 'Remove' }).click();
+  await page.waitForTimeout(1200);
+  const afterClear = await page.evaluate(async () => {
+    const db = await new Promise((res) => {
+      const r = indexedDB.open('ami-order-desk', 1); r.onsuccess = () => res(r.result);
+    });
+    const rec = await new Promise((res) => {
+      const r = db.transaction('kv', 'readonly').objectStore('kv').get('session');
+      r.onsuccess = () => res(r.result);
+    });
+    db.close();
+    return rec || null;
+  });
+  ok('clearing the batch clears what was saved', afterClear === null, JSON.stringify(afterClear));
+
   console.log('\nRuntime');
   ok('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' ; '));
 

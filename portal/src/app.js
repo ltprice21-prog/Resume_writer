@@ -207,6 +207,78 @@
    * ------------------------------------------------------------------ */
 
   const FS_AVAILABLE = typeof window.showOpenFilePicker === 'function';
+  const TRACKER_KEY = 'tracker-handle';
+
+  /**
+   * Reopen whatever was used last time. A folder handle gives the tracker plus
+   * a place for backups; a file handle is the tracker alone.
+   */
+  async function openRemembered(handle) {
+    if (handle.kind === 'directory') {
+      state.dirHandle = handle;
+      const candidates = [];
+      for await (const [name, h] of handle.entries()) {
+        if (h.kind === 'file' && /\.xlsx?m?$/i.test(name) && !name.startsWith('~$')) candidates.push({ name, handle: h });
+      }
+      if (!candidates.length) throw new Error('no workbook found in that folder');
+      const pick = candidates.length === 1 ? candidates[0] : await chooseFromList(candidates);
+      if (!pick) return;
+      state.fileHandle = pick.handle;
+      const file = await pick.handle.getFile();
+      await loadTrackerBytes(new Uint8Array(await file.arrayBuffer()), pick.name);
+    } else {
+      state.fileHandle = handle;
+      state.dirHandle = null;
+      const file = await handle.getFile();
+      await loadTrackerBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+    }
+  }
+
+  async function tryReconnectTracker() {
+    const record = await AMI.recallFolder(TRACKER_KEY);
+    if (!record) return false;
+    state.remembered = record;
+    if (await AMI.handlePermission(record.handle, false) !== 'granted') return false;
+    try { await openRemembered(record.handle); return true; } catch (e) { return false; }
+  }
+
+  async function reconnectTracker() {
+    const record = state.remembered;
+    if (!record) return;
+    if (await AMI.handlePermission(record.handle, true) !== 'granted') {
+      toast('Permission declined. Open the tracker again to continue.', 'error');
+      return;
+    }
+    try {
+      await openRemembered(record.handle);
+    } catch (e) {
+      toast('That could not be reopened: ' + e.message, 'error');
+      await AMI.forgetFolder(TRACKER_KEY);
+      state.remembered = null;
+      renderReconnect();
+    }
+  }
+
+  function renderReconnect() {
+    const host = $('#reconnectHost');
+    if (!host) return;
+    clear(host);
+    if (!state.remembered || state.trackerBytes) return;
+    host.appendChild(el('div', { class: 'msg ok' }, [
+      el('span', { class: 'icon', text: '✓' }),
+      el('div', {}, [
+        el('strong', { text: 'You last used "' + state.remembered.name + '".' }),
+        el('span', { class: 'detail', text: 'Reconnect and the browser asks once for permission — no need to find it again.' }),
+        el('div', { class: 'btn-row' }, [
+          el('button', { class: 'btn primary', text: 'Reconnect to ' + state.remembered.name, onclick: reconnectTracker }),
+          el('button', {
+            class: 'btn small', text: 'Forget it',
+            onclick: async () => { await AMI.forgetFolder(TRACKER_KEY); state.remembered = null; renderReconnect(); },
+          }),
+        ]),
+      ]),
+    ]));
+  }
 
   async function loadTrackerBytes(bytes, name) {
     state.trackerBytes = bytes;
@@ -244,6 +316,8 @@
       state.fileHandle = pick.handle;
       const file = await pick.handle.getFile();
       await loadTrackerBytes(new Uint8Array(await file.arrayBuffer()), pick.name);
+      await AMI.rememberFolder(dir, dir.name || 'tracker folder', TRACKER_KEY);
+      state.remembered = { handle: dir, name: dir.name || 'tracker folder' };
     } catch (e) {
       if (e && e.name === 'AbortError') return;
       toast('Could not open that folder: ' + e.message, 'error');
@@ -276,6 +350,8 @@
       state.dirHandle = null;
       const file = await handle.getFile();
       await loadTrackerBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+      await AMI.rememberFolder(handle, file.name, TRACKER_KEY);
+      state.remembered = { handle, name: file.name };
     } catch (e) {
       if (e && e.name === 'AbortError') return;
       toast('Could not open that file: ' + e.message, 'error');
@@ -1130,6 +1206,9 @@
     renderSettings();
     refreshTabAvailability();
     showTab('tracker');
+
+    // Reconnecting must not hold up the first paint.
+    tryReconnectTracker().then((done) => { if (!done) renderReconnect(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

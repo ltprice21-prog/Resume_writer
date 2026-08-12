@@ -36,14 +36,15 @@
       hint: 'Arrived at the delivery point; paperwork may still be open.',
     },
     {
-      id: 'closed', step: 4, open: false,
-      label: 'Closed', short: 'Closed',
-      hint: 'Everything received and reconciled. Not derivable from the tracker — set it here.',
+      id: 'invoiced', step: 4, open: true,
+      label: 'Invoiced', short: 'Invoiced',
+      hint: 'Billed out. Still open until it is reconciled and closed.',
     },
     {
-      id: 'invoiced', step: 5, open: false,
-      label: 'Invoiced', short: 'Invoiced',
-      hint: 'Billed out.',
+      id: 'closed', step: 5, open: false,
+      label: 'Closed', short: 'Closed',
+      hint: 'Received, invoiced and reconciled — the end of the line. '
+        + 'Not derivable from the tracker, so it only ever comes from a person.',
     },
   ];
 

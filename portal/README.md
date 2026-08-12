@@ -86,6 +86,12 @@ written with the correct cached result so the figures are right the moment the f
 **A timestamped backup is written before every post.** With folder access it lands beside
 the tracker; otherwise it downloads.
 
+### It remembers the tracker
+
+Reopen the file and it reconnects to whatever you opened last time — automatically, or one
+click on *Reconnect*, depending on how the browser remembers the grant. You never have to find
+the file again. That memory lives in this browser on this machine; **Forget it** clears it.
+
 ### Saving in place
 
 Choosing **Open the tracker folder** lets the app write straight back to the file in

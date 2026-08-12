@@ -119,7 +119,12 @@ actually have accounts in, so the filter can never show you an empty world by ac
 
 ### The five stages
 
-`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Closed` → `Invoiced`
+`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Invoiced` → `Closed`
+
+**Closed is the end of the line, so everything short of it counts as open** — including
+*Invoiced*. An invoiced order is billed but not yet reconciled, and the dashboard keeps it in
+view until someone closes it. That is why the open count is larger than the number of orders
+still moving physically.
 
 Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
 to…", and filters including *Open only* and *No status set*. Anything you set there is what the
@@ -134,9 +139,11 @@ Every order's stage is one of two things, and the interface always says which:
 | **Set by a person** | Chosen on the Order status page or by dragging a kanban card. Records who and when. |
 | **From the tracker** | Read from the dated columns already in the workbook — a NAV invoice number means *Invoiced*, a delivery date means *Delivered*, a collection date means *In transit*, a PO sent to the winery means *Awaiting shipment*. |
 
+The tracker can carry an order as far as *Invoiced*. *Closed* has no column behind it, so it
+only ever comes from a person — which is the point: closing is a decision, not a side effect.
+
 Nothing is guessed. An order with neither reads **Not set** rather than being filed under a
-stage nobody chose. *Closed* has no equivalent column in the tracker, so it only ever comes from
-a person — the app says so.
+stage nobody chose.
 
 A status you set always wins over what the tracker implies, and clearing it falls back to the
 tracker again.
@@ -166,6 +173,31 @@ then a row per order with its stage, where that stage came from, the last dated 
 long ago. Copy it, download it as HTML, or send it as an Outlook draft addressed from the
 account's customer contact. Every column is read from the tracker or the stored status — there
 is no narrative text beyond the headings.
+
+---
+
+## What survives closing the app
+
+Everything shared — statuses, templates, workspace configuration, tracker rows — is written to
+the shared folder the moment you change it, so it is never waiting on you to save.
+
+Two more things are remembered **in this browser, on this machine**:
+
+- **The folder you picked.** Reopen the file and it reconnects. Depending on how the browser
+  remembers the grant, that is either automatic or one click on *Reconnect to <folder>* — you
+  never have to find the folder again.
+- **Purchase orders you loaded but have not posted**, with their item routing and any edits.
+  Reopen and the Orders tab offers them back: *Restore them* or *Discard*. Restored PDFs are
+  re-read from scratch, so they go through exactly the same extraction and validation as one
+  dropped in fresh — a restored order is never trusted more than a new one.
+
+Posting clears what it has written, so a finished batch does not linger.
+
+None of this leaves the machine, and none of it is required: if the browser blocks local
+storage the app says so on the Workspace page and behaves as it always did, asking for the
+folder each time.
+
+The single-account build remembers its tracker the same way.
 
 ---
 

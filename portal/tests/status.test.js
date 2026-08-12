@@ -50,13 +50,13 @@ function memoryStore(seed) {
 
 (async () => {
   console.log('\nPipeline definition');
-  check('five stages in order', AMI.ORDER_STATUSES.map((s) => s.id),
-    ['placed', 'transit', 'delivered', 'closed', 'invoiced']);
+  check('five stages, invoiced before closed', AMI.ORDER_STATUSES.map((s) => s.id),
+    ['placed', 'transit', 'delivered', 'invoiced', 'closed']);
   check('steps run 1..5', AMI.ORDER_STATUSES.map((s) => s.step), [1, 2, 3, 4, 5]);
-  check('open stages', AMI.ORDER_STATUSES.filter((s) => s.open).map((s) => s.id),
-    ['placed', 'transit', 'delivered']);
-  ok('closed and invoiced are not open',
-    !AMI.isOpenStatus('closed') && !AMI.isOpenStatus('invoiced'));
+  check('everything short of closed is open', AMI.ORDER_STATUSES.filter((s) => s.open).map((s) => s.id),
+    ['placed', 'transit', 'delivered', 'invoiced']);
+  ok('closed is the only terminal stage', !AMI.isOpenStatus('closed'));
+  ok('an invoiced order still counts as open until it is closed', AMI.isOpenStatus('invoiced'));
   ok('an unknown status is treated as open rather than dropped', AMI.isOpenStatus('nonsense'));
   ok('every stage explains itself', AMI.ORDER_STATUSES.every((s) => s.hint && s.label && s.short));
   ok('closed says it cannot be derived', /not derivable/i.test(AMI.statusById('closed').hint));
@@ -149,6 +149,13 @@ function memoryStore(seed) {
   check('counts cover every stage plus unset',
     Object.keys(counts).sort(), ['closed', 'delivered', 'invoiced', 'placed', 'transit', 'unset'].sort());
   check('the counts add up', Object.values(counts).reduce((a, b) => a + b, 0), 12);
+
+  const invoicedDoc = AMI.emptyStatusDoc();
+  AMI.setStatus(invoicedDoc, orders[0].key, 'invoiced', 'Bo');
+  AMI.setStatus(invoicedDoc, orders[1].key, 'closed', 'Bo');
+  const openness = AMI.decorate([orders[0], orders[1]], invoicedDoc, today);
+  ok('an invoiced order is counted among the open ones', openness[0].isOpen === true);
+  ok('a closed order is not', openness[1].isOpen === false);
 
   const account = { id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe' };
   const healthy = AMI.summariseAccount(account, 'Europe', AMI.decorate(

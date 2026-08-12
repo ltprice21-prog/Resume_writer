@@ -23,7 +23,7 @@ const TARGETS = [
   {
     out: 'AMI-Order-Desk.html',
     shell: 'shell.html',
-    parts: { STYLES: 'styles.css', ENGINE: 'engine.js', APP: 'app.js' },
+    parts: { STYLES: 'styles.css', ENGINE: 'engine.js', PERSIST: 'persist.js', APP: 'app.js' },
   },
   {
     out: 'AMI-Order-Desk-Teams.html',
@@ -33,6 +33,7 @@ const TARGETS = [
       ENGINE: 'engine.js',
       TEMPLATES: 'templates.js',
       WORKSPACE: 'workspace.js',
+      PERSIST: 'persist.js',
       STATUS: 'status.js',
       CHARTS: 'charts.js',
       APP: 'app-teams.js',
