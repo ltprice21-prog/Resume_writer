@@ -78,6 +78,19 @@ function findFixture(pattern) {
   check('documents address', po.docsTo, 'euwineorders@amigrp.com');
   check('country of origin', po.countryOfOrigin, 'Spain');
   ok('ship-to names the customer', /Aerovias De Mexico/i.test(po.shipToName), po.shipToName);
+  check('ship-to block stops at the end of the address', po.shipToBlock, [
+    'Aerovias De Mexico, S.A DE C.V',
+    'Magasin Roissy Handling Export Compte',
+    'STPI 32 Rue Des Voyelles 95700 Roissy BAT',
+    ', 3520-FRET 4   95700 France',
+    'STPI-Contact: Steffy Demouchy',
+    'Steffy Demouchy +33 (0) 1 48 61 77 00',
+    'sdemouchy@stpicargo.com; comat@stpicargo.com',
+  ]);
+  ok('ship-to block does not swallow the line-item table',
+    !po.shipToBlock.some((l) => /Ext\. Amount|Subtotal|Currency :/.test(l)), po.shipToBlock.join(' | '));
+  check('vendor address stays the vendor address', po.vendorAddress,
+    '1 route de Rodern, Saint Hippolyte, 68590 France');
   check('final delivery block', po.finalDeliveryTo, [
     'COMI-BOND',
     'AEROPUERTO INTERNACIONAL CIUDAD DE MEXICO',

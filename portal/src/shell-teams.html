@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMI Order Desk — Teams</title>
+<style>/*STYLES*/</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="brandline">
+    <div class="brand">AMI <span>Order Desk</span></div>
+    <div class="tagline">Multi-account &middot; shared templates &middot; Europe and US divisions</div>
+    <span class="spacer"></span>
+    <div class="tagline">Runs entirely on this computer &middot; no internet, no accounts, no AI service</div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
+    <button data-tab="orders" role="tab" aria-selected="false" disabled><span class="step-no">1</span>Orders</button>
+    <button data-tab="review" role="tab" aria-selected="false" disabled><span class="step-no">2</span>Review &amp; post</button>
+    <button data-tab="email" role="tab" aria-selected="false" disabled><span class="step-no">3</span>Emails</button>
+    <button data-tab="followups" role="tab" aria-selected="false" disabled><span class="step-no">4</span>Follow-ups</button>
+    <button data-tab="templates" role="tab" aria-selected="false" disabled>Templates</button>
+    <button data-tab="accounts" role="tab" aria-selected="false" disabled>Accounts</button>
+  </nav>
+</header>
+
+<div id="contextBar" hidden></div>
+
+<main>
+
+  <section class="panel" data-panel="workspace">
+    <div class="card">
+      <h2>Workspace</h2>
+      <div class="body">
+        <div class="msg info" id="noFolderNote" hidden>
+          <span class="icon">i</span>
+          <div>
+            <strong>This browser cannot open folders.</strong>
+            <span class="detail">Use Microsoft Edge or Chrome for the shared-folder setup. Anywhere else,
+            load a workspace bundle instead &mdash; you will need to export a new bundle to share changes.</span>
+          </div>
+        </div>
+        <div id="workspaceBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="orders" hidden>
+    <div class="card">
+      <h2>Purchase orders</h2>
+      <div class="body" id="ordersBody"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="review" hidden>
+    <div class="card">
+      <h2>Review the rows before anything is written</h2>
+      <div class="body">
+        <p class="help">
+          One block per order, showing exactly what will land in each tracker column and where it came from.
+          <span class="chip pdf">from PO</span> read off the PDF.
+          <span class="chip computed">computed</span> arithmetic from the PO and the tracker's own constants.
+          <span class="chip formula">formula</span> the sheet's existing formula, carried down.
+          <span class="chip carried">carried</span> unchanged across recent orders &mdash; check it still applies.
+          <span class="chip manual">blank</span> not on the PO, left for you.
+        </p>
+      </div>
+    </div>
+    <div id="reviewBody"></div>
+  </section>
+
+  <section class="panel" data-panel="email" hidden>
+    <div class="card">
+      <h2>Draft an email</h2>
+      <div class="body" id="emailBody"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="followups" hidden>
+    <div class="card">
+      <h2>Outstanding items</h2>
+      <div class="body" id="followBody"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="templates" hidden>
+    <div class="card">
+      <h2>Templates</h2>
+      <div class="body" id="templatesBody"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="accounts" hidden>
+    <div class="card">
+      <h2>Accounts, divisions and people</h2>
+      <div class="body" id="accountsBody"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>/*ENGINE*/</script>
+<script>/*TEMPLATES*/</script>
+<script>/*WORKSPACE*/</script>
+<script>/*APP*/</script>
+</body>
+</html>

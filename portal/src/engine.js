@@ -516,17 +516,24 @@
     return null;
   }
 
-  /** Lines whose left-most item sits in a column, between two anchor labels. */
+  /**
+   * Lines sitting in one column, between a starting label and either an
+   * explicit stopping label or the first line where that column runs empty.
+   * Address blocks on a PO end by simply stopping, so the empty-column test is
+   * what keeps the line-item table out of a ship-to address.
+   */
   function blockUnder(lines, startRe, stopRe, xMin, xMax) {
     let started = false;
     const out = [];
     for (const line of lines) {
-      const hit = line.items.find((it) => startRe.test(it.text) && it.x >= xMin && it.x <= xMax);
-      if (hit) { started = true; continue; }
-      if (!started) continue;
-      if (line.items.some((it) => stopRe.test(it.text) && it.x >= xMin && it.x <= xMax)) break;
       const inCol = line.items.filter((it) => it.x >= xMin && it.x <= xMax);
-      if (inCol.length) out.push(inCol.map((i) => i.text).join(' ').trim());
+      if (!started) {
+        if (inCol.some((it) => startRe.test(it.text))) started = true;
+        continue;
+      }
+      if (!inCol.length) break;
+      if (inCol.some((it) => stopRe.test(it.text))) break;
+      out.push(inCol.map((i) => i.text).join(' ').trim());
     }
     return out;
   }

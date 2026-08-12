@@ -420,6 +420,65 @@ code.inline {
 
 ul.tight { margin: 8px 0; padding-left: 20px; }
 ul.tight li { margin: 3px 0; }
+
+/* ---------- teams: context bar, contacts, checkbox grids ---------- */
+
+#contextBar {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 22px;
+}
+
+.context-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.context-row select { width: auto; min-width: 190px; max-width: 320px; }
+.context-row .spacer { flex: 1; }
+.context-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.context-note { font-size: 12px; color: var(--faint); }
+
+.contact-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(120px, 1fr) minmax(150px, 1.2fr) minmax(120px, 1fr);
+  gap: 9px;
+  align-items: start;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.contact-row:last-of-type { border-bottom: 0; }
+.contact-role b { font-size: 12.5px; }
+.contact-role .note { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+
+.check-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.check-inline input { width: auto; }
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 14px;
+  margin-bottom: 8px;
+}
+
+button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
+
+@media (max-width: 720px) {
+  .contact-row { grid-template-columns: 1fr; }
+  .context-row select { min-width: 0; flex: 1; }
+}
 </style>
 </head>
 <body>
@@ -1064,17 +1123,24 @@ ul.tight li { margin: 3px 0; }
     return null;
   }
 
-  /** Lines whose left-most item sits in a column, between two anchor labels. */
+  /**
+   * Lines sitting in one column, between a starting label and either an
+   * explicit stopping label or the first line where that column runs empty.
+   * Address blocks on a PO end by simply stopping, so the empty-column test is
+   * what keeps the line-item table out of a ship-to address.
+   */
   function blockUnder(lines, startRe, stopRe, xMin, xMax) {
     let started = false;
     const out = [];
     for (const line of lines) {
-      const hit = line.items.find((it) => startRe.test(it.text) && it.x >= xMin && it.x <= xMax);
-      if (hit) { started = true; continue; }
-      if (!started) continue;
-      if (line.items.some((it) => stopRe.test(it.text) && it.x >= xMin && it.x <= xMax)) break;
       const inCol = line.items.filter((it) => it.x >= xMin && it.x <= xMax);
-      if (inCol.length) out.push(inCol.map((i) => i.text).join(' ').trim());
+      if (!started) {
+        if (inCol.some((it) => startRe.test(it.text))) started = true;
+        continue;
+      }
+      if (!inCol.length) break;
+      if (inCol.some((it) => stopRe.test(it.text))) break;
+      out.push(inCol.map((i) => i.text).join(' ').trim());
     }
     return out;
   }
