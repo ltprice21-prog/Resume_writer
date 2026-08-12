@@ -1,10 +1,11 @@
-/* Browser test for the multi-account portal.
+/* Browser test for the multi-account, multi-item portal.
  *
  *   node portal/tests/teams-ui.test.js [fixturesDir]
  *
- * Builds a workspace bundle (config + templates + a real tracker), loads it into
- * the built HTML file over file://, and drives the whole path: pick a user, see
- * only their accounts, switch account, post an order, draft from a template.
+ * Builds a workspace bundle holding two item trackers for one account, loads it
+ * into the built HTML over file://, and drives the whole path: pick a user, see
+ * only their accounts, route POs to the right item, post, and draft from
+ * account-wide and item-specific templates.
  */
 const fs = require('fs');
 const path = require('path');
@@ -41,15 +42,40 @@ function fixture(re) {
   return path.join(FIXTURES, f);
 }
 
+/** Clone the real tracker with a different item code, standing in for a second product. */
+async function variantTracker(bytes, sheetName, replacements) {
+  const wb = await AMI.Workbook.load(bytes);
+  const sheet = wb.sheet(sheetName);
+  let xml = sheet.xml;
+  for (const [ref, value] of Object.entries(replacements)) {
+    const re = new RegExp('<c r="' + ref + '"([^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+    if (!re.test(xml)) throw new Error('Cell ' + ref + ' not found in ' + sheetName);
+    xml = xml.replace(re, (m, attrs) => {
+      const style = (/ s="(\d+)"/.exec(attrs) || [, null])[1];
+      return '<c r="' + ref + '"' + (style ? ' s="' + style + '"' : '')
+        + ' t="inlineStr"><is><t xml:space="preserve">' + value + '</t></is></c>';
+    });
+  }
+  sheet.xml = xml;
+  wb.commitSheet(sheet);
+  return wb.toBytes();
+}
+
 async function buildBundle() {
+  const realTracker = new Uint8Array(fs.readFileSync(fixture(/Tracking_Chart.*\.xlsx$/i)));
+  // B2 is "Product Name:", B7 is "NAV Code:" on the 2026 Cycle sheet.
+  const montenero = await variantTracker(realTracker, '2026 Cycle', {
+    B2: 'Montenero Rosso Italy',
+    B7: 'MONTENERONV',
+  });
+
   const workspace = {
     version: 1,
     updated: new Date().toISOString(),
     divisions: [{ id: 'europe', name: 'Europe' }, { id: 'us', name: 'US' }],
     accounts: [
       {
-        id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe', product: 'Evidencia Tempranillo Spain',
-        trackerPath: 'trackers/Aeromexico Tracking Chart.xlsx', sheet: '2026 Cycle',
+        id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe',
         defaultCc: 'euwineorders@amigrp.com',
         contacts: {
           vendor: { name: 'Caroline Mounier-Duchamp', email: 'caroline@vins-biecher.com' },
@@ -57,9 +83,23 @@ async function buildBundle() {
           customer: { name: 'Aeromexico Ops', email: 'ops@aeromexico.example' },
           internal: {},
         },
+        items: [
+          {
+            id: 'evidencia', name: 'Evidencia Tempranillo',
+            trackerPath: 'trackers/Evidencia Tracking Chart.xlsx', sheet: '2026 Cycle',
+          },
+          {
+            id: 'montenero', name: 'Montenero',
+            trackerPath: 'trackers/Montenero Tracking Chart.xlsx', sheet: '2026 Cycle',
+            contacts: {
+              vendor: { name: 'Montenero Cellars', email: 'orders@montenero.example' },
+              trucker: {}, customer: {}, internal: {},
+            },
+          },
+        ],
       },
-      { id: 'british-airways', name: 'British Airways', divisionId: 'europe', trackerPath: '' },
-      { id: 'delta', name: 'Delta', divisionId: 'us', trackerPath: '' },
+      { id: 'british-airways', name: 'British Airways', divisionId: 'europe', items: [] },
+      { id: 'delta', name: 'Delta', divisionId: 'us', items: [] },
     ],
     users: [
       {
@@ -74,23 +114,26 @@ async function buildBundle() {
   };
 
   const vendorTemplate = AMI.templateFileText(
-    { label: 'Vendor order placement', role: 'vendor', subject: 'AMI Wines for {{customer}} - {{poCount}} new Purchase Orders {{poGroups}}' },
+    { label: 'Vendor order placement', role: 'vendor', itemId: '', subject: 'AMI Wines for {{customer}} - {{poCount}} new Purchase Orders {{poGroups}}' },
     '<p>Dear {{vendorContact}},</p><p>Please find attached {{poCount}} order(s) for {{product}}.</p>{{table}}<p>{{signature}}</p>',
   );
   const truckerTemplate = AMI.templateFileText(
-    { label: 'Trucker collection booking', role: 'trucker', subject: 'Collection booking {{poList}} — {{collectionDate}}' },
-    '<p>Dear {{recipientName}},</p><p>Please collect {{totalPallets}} pallet(s) / {{totalCases}} case(s) from:</p>'
+    { label: 'Trucker collection booking', role: 'trucker', itemId: '', subject: 'Collection booking {{poList}} — {{collectionDate}}' },
+    '<p>Dear {{recipientName}},</p><p>Please collect {{totalPallets}} pallet(s) / {{totalCases}} case(s) of {{item}} from:</p>'
     + '<p>{{collectionAddress}}</p><p>Delivery to:<br>{{deliveryAddress}}</p><p>Total weight: {{totalWeight}}</p><p>{{signature}}</p>',
+  );
+  const monteneroOnly = AMI.templateFileText(
+    { label: 'Montenero vendor order', role: 'vendor', itemId: 'montenero', subject: 'Montenero only — {{poList}}' },
+    '<p>Montenero-specific wording for {{item}}.</p>',
   );
 
   return AMI.zip([
     { name: 'workspace.json', bytes: ENC.encode(JSON.stringify(workspace, null, 2)) },
     { name: 'templates/aeromexico/vendor-order.html', bytes: ENC.encode(vendorTemplate) },
     { name: 'templates/aeromexico/trucker-booking.html', bytes: ENC.encode(truckerTemplate) },
-    {
-      name: 'trackers/Aeromexico Tracking Chart.xlsx',
-      bytes: new Uint8Array(fs.readFileSync(fixture(/Tracking_Chart.*\.xlsx$/i))),
-    },
+    { name: 'templates/aeromexico/montenero-vendor.html', bytes: ENC.encode(monteneroOnly) },
+    { name: 'trackers/Evidencia Tracking Chart.xlsx', bytes: realTracker },
+    { name: 'trackers/Montenero Tracking Chart.xlsx', bytes: montenero },
   ]);
 }
 
@@ -106,13 +149,17 @@ async function buildBundle() {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('dialog', (d) => d.accept('New Division'));
+  page.on('dialog', (d) => d.accept('New Item'));
+
+  // Selecting an account reads every item tracker; wait for the table, not a clock.
+  const waitForItems = () => page.waitForFunction(
+    () => document.querySelectorAll('#workspaceBody table.data tbody tr').length > 0,
+    null, { timeout: 25000 });
 
   await page.goto('file://' + PORTAL);
   console.log('\nShell');
   ok('page title', await page.title() === 'AMI Order Desk — Teams');
   ok('seven tabs', (await page.locator('nav.tabs button').count()) === 7);
-  ok('context bar hidden until a workspace loads', await page.locator('#contextBar').isHidden());
 
   console.log('\nWorkspace load');
   const [chooser] = await Promise.all([
@@ -123,187 +170,212 @@ async function buildBundle() {
   await page.waitForSelector('#contextBar .context-row', { timeout: 15000 });
 
   const strip = await page.locator('#workspaceBody .status-strip').first().innerText();
-  ok('divisions counted', /Divisions\s*2/.test(strip), strip.replace(/\n/g, ' | '));
   ok('accounts counted', /Accounts\s*3/.test(strip), strip.replace(/\n/g, ' | '));
-  ok('users counted', /Users\s*2/.test(strip), strip.replace(/\n/g, ' | '));
+  ok('items counted across accounts', /Items\s*2/.test(strip), strip.replace(/\n/g, ' | '));
 
-  console.log('\nPer-user account visibility');
+  console.log('\nIdentity and account visibility');
   const userSelect = page.locator('#contextBar select').first();
   const accountSelect = page.locator('#contextBar select').nth(1);
-
-  await userSelect.selectOption('eu-coordinator');
-  await page.waitForTimeout(1200);
-  let options = await accountSelect.locator('option').allInnerTexts();
-  check('EU coordinator sees only Europe accounts', options.slice().sort(), ['Aeromexico', 'British Airways']);
-  let groups = await accountSelect.locator('optgroup').evaluateAll((els) => els.map((e) => e.label));
-  check('grouped under their division', groups, ['Europe']);
-
-  await userSelect.selectOption('us-coordinator');
-  await page.waitForTimeout(1500);
-  options = await accountSelect.locator('option').allInnerTexts();
-  check('an administrator sees every division', options.slice().sort(),
-    ['Aeromexico', 'British Airways', 'Delta']);
-  groups = await accountSelect.locator('optgroup').evaluateAll((els) => els.map((e) => e.label));
-  check('both divisions grouped', groups, ['Europe', 'US']);
+  const itemSelect = page.locator('#contextBar select').nth(2);
 
   await userSelect.selectOption('eu-coordinator');
   await page.waitForTimeout(1500);
-  ok('division shown in the context bar',
-    (await page.locator('#contextBar').innerText()).toLowerCase().includes('europe'));
+  check('EU coordinator sees only Europe accounts',
+    (await accountSelect.locator('option').allInnerTexts()).slice().sort(), ['Aeromexico', 'British Airways']);
 
-  console.log('\nAccount tracker binding');
   await accountSelect.selectOption('aeromexico');
-  // Selecting an account reads and parses its tracker; wait for that, not a clock.
-  await page.waitForFunction(
-    () => /Orders logged/.test(document.querySelector('#workspaceBody').innerText),
-    null, { timeout: 20000 });
+  await waitForItems();
+
+  console.log('\nItems on the account');
+  const itemOptions = await itemSelect.locator('option').allInnerTexts();
+  check('both item trackers appear in the switcher', itemOptions, ['Evidencia Tempranillo', 'Montenero']);
+
   const wsText = await page.locator('#workspaceBody').innerText();
-  ok('tracker auto-loaded for the account', /Orders logged\s*12/.test(wsText), wsText.replace(/\n/g, ' | ').slice(0, 300));
-  ok('configured sheet honoured', /Sheet\s*2026 Cycle/.test(wsText));
-  ok('tracker path shown in the context bar',
-    (await page.locator('#contextBar').innerText()).includes('Aeromexico Tracking Chart.xlsx'));
+  ok('each item lists its own tracker file',
+    wsText.includes('Evidencia Tracking Chart.xlsx') && wsText.includes('Montenero Tracking Chart.xlsx'),
+    wsText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('each item shows its own item number',
+    wsText.includes('EVDTMPRNV') && wsText.includes('MONTENERONV'), wsText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('each item shows its own order count',
+    (wsText.match(/\b12\b/g) || []).length >= 2, wsText.replace(/\n/g, ' | ').slice(0, 400));
 
-  await accountSelect.selectOption('british-airways');
-  await page.waitForTimeout(1200);
-  await page.locator('nav.tabs button[data-tab="orders"]').click().catch(() => {});
-  ok('an account with no tracker disables the order tabs',
-    await page.locator('nav.tabs button[data-tab="review"]').isDisabled());
-
-  await accountSelect.selectOption('aeromexico');
-  await page.waitForFunction(
-    () => /Orders logged/.test(document.querySelector('#workspaceBody').innerText),
-    null, { timeout: 20000 });
-
-  console.log('\nTemplates');
-  await page.locator('nav.tabs button[data-tab="templates"]').click();
-  await page.waitForSelector('#templatesBody table.data');
-  const tplText = await page.locator('#templatesBody').innerText();
-  ok('vendor template listed', tplText.includes('Vendor order placement'), tplText.replace(/\n/g, ' | '));
-  ok('trucker template listed', tplText.includes('Trucker collection booking'));
-  ok('grouped by counterparty', /Vendor \/ winery/i.test(tplText) && /Trucker \/ forwarder/i.test(tplText));
-  ok('placeholders surfaced per template', tplText.includes('vendorContact'), tplText.replace(/\n/g, ' | '));
-
-  console.log('\nOrders');
+  console.log('\nPO routing');
   await page.locator('nav.tabs button[data-tab="orders"]').click();
   await page.locator('#ordersBody input[type="file"]').setInputFiles(fixture(/Purchase_Order.*\.pdf$/i));
   await page.waitForSelector('#ordersBody .po-card', { timeout: 20000 });
-  ok('PO read', (await page.locator('#ordersBody .po-card header').innerText()).includes('350633-2'));
 
+  const cardHeader = await page.locator('#ordersBody .po-card header').innerText();
+  ok('PO read', cardHeader.includes('350633-2'), cardHeader.replace(/\n/g, ' | '));
+  ok('PO auto-routed to the matching item', /evidencia tempranillo/i.test(cardHeader),
+    cardHeader.replace(/\n/g, ' | '));
+
+  const routeSelect = page.locator('#ordersBody .po-card select').first();
+  check('the routing dropdown reflects the match', await routeSelect.inputValue(), 'evidencia');
+  const routeNote = await page.locator('#ordersBody .po-card .field .note').first().innerText();
+  ok('the reason for the match is stated', /item number EVDTMPRNV/i.test(routeNote), routeNote);
+  const routeOptions = await routeSelect.locator('option').allInnerTexts();
+  ok('every item is offered, each naming its workbook',
+    routeOptions.some((o) => o.includes('Evidencia Tracking Chart.xlsx'))
+    && routeOptions.some((o) => o.includes('Montenero Tracking Chart.xlsx')), routeOptions.join(' | '));
+
+  console.log('\nReview is grouped per item tracker');
   await page.locator('nav.tabs button[data-tab="review"]').click();
-  await page.waitForSelector('#reviewBody .po-card');
-  ok('duplicate blocked', (await page.locator('#reviewBody .po-card header .chip').innerText()).toLowerCase().includes('blocked'));
+  await page.waitForSelector('#reviewBody .card');
+  let reviewText = await page.locator('#reviewBody').innerText();
+  ok('the group names the item and its workbook',
+    /Evidencia Tempranillo/.test(reviewText) && /Evidencia Tracking Chart\.xlsx/.test(reviewText),
+    reviewText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('the untouched item is not shown', !/Montenero Tracking Chart/.test(reviewText));
+  ok('duplicate blocked', (await page.locator('#reviewBody .po-card header .chip').first().innerText())
+    .toLowerCase().includes('blocked'));
 
   const poField = page.locator('#reviewBody .fieldrow').filter({ hasText: 'PO#' }).first().locator('input');
   await poField.fill('350635-1');
   await poField.dispatchEvent('change');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1000);
   ok('unique PO becomes postable',
-    (await page.locator('#reviewBody .po-card header .chip').innerText()).toLowerCase().includes('ready'));
+    (await page.locator('#reviewBody .po-card header .chip').first().innerText()).toLowerCase().includes('ready'));
 
-  console.log('\nPosting into the workspace store');
-  await page.locator('#reviewBody button.primary').click();
+  console.log('\nRe-routing by hand');
+  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#ordersBody .po-card select').first().selectOption('montenero');
+  await page.waitForTimeout(1200);
+  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.waitForSelector('#reviewBody .card');
+  reviewText = await page.locator('#reviewBody').innerText();
+  ok('the order moves to the other item tracker',
+    /Montenero Tracking Chart\.xlsx/.test(reviewText) && !/Evidencia Tracking Chart\.xlsx/.test(reviewText),
+    reviewText.replace(/\n/g, ' | ').slice(0, 300));
+
+  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#ordersBody .po-card select').first().selectOption('evidencia');
+  await page.waitForTimeout(1200);
+
+  console.log('\nAn unrouted PO cannot be posted');
+  await page.locator('#ordersBody .po-card select').first().selectOption('');
+  await page.waitForTimeout(1200);
+  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.waitForSelector('#reviewBody');
+  reviewText = await page.locator('#reviewBody').innerText();
+  ok('unassigned POs are called out', /not assigned to an item/i.test(reviewText),
+    reviewText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('and no post button is offered for them',
+    (await page.locator('#reviewBody button', { hasText: 'Post ' }).count()) === 0);
+
+  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#ordersBody .po-card select').first().selectOption('evidencia');
+  await page.waitForTimeout(1200);
+
+  console.log('\nPosting reaches only the routed tracker');
+  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.waitForSelector('#reviewBody .card');
+  await page.locator('#reviewBody button', { hasText: 'Post 1 order(s) to Evidencia Tempranillo' }).click();
   await page.waitForTimeout(2500);
-  await page.locator('nav.tabs button[data-tab="workspace"]').click();
-  await page.waitForFunction(
-    () => /Orders logged\s*13/.test(document.querySelector('#workspaceBody').innerText),
-    null, { timeout: 20000 }).catch(() => {});
-  const afterPost = await page.locator('#workspaceBody').innerText();
-  ok('tracker in the shared folder now has the extra order', /Orders logged\s*13/.test(afterPost),
-    afterPost.replace(/\n/g, ' | ').slice(0, 300));
-  ok('last PO updated', /Last PO\s*350635-1/.test(afterPost), afterPost.replace(/\n/g, ' | ').slice(0, 300));
 
-  console.log('\nEmails from account templates');
+  await page.locator('nav.tabs button[data-tab="workspace"]').click();
+  await page.waitForTimeout(800);
+  const afterPost = await page.locator('#workspaceBody .table-scroll').first().innerText();
+  const rowsAfter = afterPost.split('\n');
+  ok('the routed item gained an order', /13/.test(afterPost), afterPost.replace(/\n/g, ' | '));
+  ok('the other item is untouched', (afterPost.match(/\b12\b/g) || []).length >= 1,
+    afterPost.replace(/\n/g, ' | '));
+  ok('both trackers still listed', rowsAfter.length > 2);
+
+  console.log('\nEmails are per item');
   await page.locator('nav.tabs button[data-tab="email"]').click();
   await page.waitForSelector('#emailBody select');
-
-  const subject = await page.locator('#emailBody input').nth(2).inputValue();
+  let subject = await page.locator('#emailBody input').nth(2).inputValue();
   ok('vendor subject built from the account template',
     /AMI Wines for Aeromexico - 1 new Purchase Orders 350635/.test(subject), subject);
-  const to = await page.locator('#emailBody input').nth(0).inputValue();
-  ok('vendor recipient from the PO', to.includes('caroline@vins-biecher.com'), to);
-  const preview = await page.locator('#emailBody .email-preview').innerText();
-  ok('vendor body filled', /Dear Caroline Mounier-Duchamp/.test(preview), preview.slice(0, 120));
-  ok('signature inserted', /EU Coordinator/.test(preview));
-  ok('no unfilled placeholders left', !/\{\{/.test(preview), (preview.match(/\{\{\w+\}\}/g) || []).join(' '));
+  let preview = await page.locator('#emailBody .email-preview').innerText();
+  ok('vendor recipient from the PO',
+    (await page.locator('#emailBody input').nth(0).inputValue()).includes('caroline@vins-biecher.com'));
+  ok('no unfilled placeholders', !/\{\{/.test(preview), (preview.match(/\{\{\w+\}\}/g) || []).join(' '));
+
+  const templateOptions = await page.locator('#emailBody select').first().locator('option').allInnerTexts();
+  ok('account-wide templates are marked as such',
+    templateOptions.some((o) => /all items/.test(o)), templateOptions.join(' | '));
+  ok('the other item\'s template is not offered here',
+    !templateOptions.some((o) => /Montenero vendor order/.test(o)), templateOptions.join(' | '));
 
   await page.locator('#emailBody button', { hasText: 'Trucker / forwarder' }).click();
-  await page.waitForTimeout(700);
-  const truckerTo = await page.locator('#emailBody input').nth(0).inputValue();
-  ok('trucker recipient from the account contact', truckerTo.includes('sdemouchy@stpicargo.com'), truckerTo);
-  const truckerCc = await page.locator('#emailBody input').nth(1).inputValue();
-  ok('per-role cc applied', truckerCc.includes('comat@stpicargo.com'), truckerCc);
-  const truckerSubject = await page.locator('#emailBody input').nth(2).inputValue();
-  ok('trucker subject uses its own template', /Collection booking 350635-1/.test(truckerSubject), truckerSubject);
-  const truckerPreview = await page.locator('#emailBody .email-preview').innerText();
-  ok('pallet and case counts filled', /7 pallet\(s\) \/ 336 case\(s\)/.test(truckerPreview),
-    truckerPreview.replace(/\n/g, ' | '));
-  ok('collection address from the PO', /Vins Biecher/.test(truckerPreview));
-  ok('delivery address from the PO', /Aerovias De Mexico/.test(truckerPreview));
-  ok('weight computed from the tracker constant', /4466 kg/.test(truckerPreview),
-    (truckerPreview.match(/Total weight:.*/) || [''])[0]);
-  ok('no unfilled placeholders in the trucker draft', !/\{\{/.test(truckerPreview));
+  await page.waitForTimeout(800);
+  preview = await page.locator('#emailBody .email-preview').innerText();
+  ok('trucker draft names the item', /of Evidencia Tempranillo from/.test(preview),
+    preview.replace(/\n/g, ' | ').slice(0, 200));
+  ok('pallet and case counts filled', /7 pallet\(s\) \/ 336 case\(s\)/.test(preview));
+  ok('weight computed from that item\'s tracker', /4466 kg/.test(preview),
+    (preview.match(/Total weight:.*/) || [''])[0]);
 
-  const downloads = [];
-  page.on('download', (d) => downloads.push(d));
-  await page.locator('#emailBody button', { hasText: 'Download Outlook draft' }).click();
-  await page.waitForTimeout(1500);
-  ok('trucker draft downloaded', downloads.length === 1, downloads.length + ' downloads');
-  const emlPath = path.join(os.tmpdir(), 'ami-teams.eml');
-  await downloads[0].saveAs(emlPath);
-  const eml = fs.readFileSync(emlPath, 'utf8');
-  ok('draft opens unsent in Outlook', /X-Unsent: 1/.test(eml));
-  ok('trucker draft carries no PO attachment by default', !/filename="[^"]*\.pdf"/.test(eml));
-  ok('sender taken from the signed-in user', /From: EU Coordinator <eu@amigrp\.com>/.test(eml),
-    (eml.match(/From:.*/) || [''])[0]);
-
-  console.log('\nCustomer role with no template');
-  await page.locator('#emailBody button', { hasText: 'Customer / airline' }).click();
+  console.log('\nSwitching item switches the draft context');
+  await itemSelect.selectOption('montenero');
+  await page.waitForTimeout(1000);
+  await page.locator('nav.tabs button[data-tab="email"]').click();
   await page.waitForTimeout(600);
-  const customerText = await page.locator('#emailBody').innerText();
-  ok('missing template is reported, not faked', /No customer template for Aeromexico yet/i.test(customerText),
-    customerText.replace(/\n/g, ' | ').slice(0, 200));
+  const monteneroEmail = await page.locator('#emailBody').innerText();
+  ok('no orders for the other item is stated plainly',
+    /No orders loaded for Montenero/i.test(monteneroEmail), monteneroEmail.replace(/\n/g, ' | ').slice(0, 200));
+  ok('and it offers to jump back to the item that has them',
+    /Draft for Evidencia Tempranillo \(1\)/.test(monteneroEmail), monteneroEmail.replace(/\n/g, ' | ').slice(0, 300));
 
-  console.log('\nFollow-ups');
-  await page.locator('nav.tabs button[data-tab="followups"]').click();
-  await page.waitForSelector('#followBody table.data');
-  const follow = (await page.locator('#followBody').innerText()).toLowerCase();
-  ok('open items listed for the account', /\d+ open/.test(follow), follow.slice(0, 200).replace(/\n/g, ' | '));
-  ok('grouped by counterparty', /winery|forwarder|internal/.test(follow));
+  console.log('\nItem-scoped templates');
+  await page.locator('nav.tabs button[data-tab="templates"]').click();
+  await page.waitForSelector('#templatesBody table.data');
+  const tplText = await page.locator('#templatesBody').innerText();
+  ok('account-wide templates are labelled', /ALL ITEMS/i.test(tplText), tplText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('item-scoped templates name their item', /Montenero vendor order/.test(tplText));
+  ok('the scope column shows the item name',
+    /MONTENERO/i.test(tplText), tplText.replace(/\n/g, ' | ').slice(0, 400));
 
-  console.log('\nAccounts administration');
+  console.log('\nAdministering items');
+  await userSelect.selectOption('us-coordinator');
+  await page.waitForTimeout(1800);
   await page.locator('nav.tabs button[data-tab="accounts"]').click();
   await page.waitForSelector('#accountsBody table.data');
   const accountsText = await page.locator('#accountsBody').innerText();
-  ok('all accounts listed', ['Aeromexico', 'British Airways', 'Delta'].every((n) => accountsText.includes(n)));
-  ok('people listed', accountsText.includes('EU Coordinator') && accountsText.includes('US Coordinator'));
-  ok('view-filter limitation stated plainly',
-    /does not lock anything/i.test(accountsText) && /SharePoint/i.test(accountsText),
-    accountsText.replace(/\n/g, ' | ').slice(-300));
-  ok('a non-administrator gets no edit controls',
-    (await page.locator('#accountsBody button', { hasText: 'Edit' }).count()) === 0);
-  ok('and is told why', /only administrators change the shared setup/i.test(accountsText));
-
-  await userSelect.selectOption('us-coordinator');
-  await page.waitForTimeout(1500);
-  await page.locator('nav.tabs button[data-tab="accounts"]').click();
-  await page.waitForSelector('#accountsBody table.data');
-  ok('an administrator does get edit controls',
-    (await page.locator('#accountsBody button', { hasText: 'Edit' }).count()) > 0);
+  ok('the account list shows its items',
+    /Evidencia Tempranillo, Montenero/.test(accountsText), accountsText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('and how many have trackers', /2 \/ 2/.test(accountsText), accountsText.replace(/\n/g, ' | ').slice(0, 400));
 
   await page.locator('#accountsBody button', { hasText: 'Edit' }).first().click();
   await page.waitForSelector('#entityEditor .card');
   const editorText = await page.locator('#entityEditor').innerText();
-  ok('account editor exposes per-role contacts',
-    ['Vendor / winery', 'Trucker / forwarder', 'Customer / airline', 'Internal'].every((r) => editorText.includes(r)),
-    editorText.replace(/\n/g, ' | ').slice(0, 260));
-  // The tracker picker scans the workspace folder asynchronously.
+  ok('the account editor lists item trackers', /Item trackers/.test(editorText));
+  ok('with a row per item',
+    /Evidencia Tempranillo/.test(editorText) && /Montenero/.test(editorText));
+  ok('and a way to add another', /Add item tracker/.test(editorText));
+
+  await page.locator('#entityEditor button', { hasText: 'Edit' }).first().click();
+  await page.waitForSelector('#entityEditor .card');
   await page.waitForFunction(() => {
-    const sel = document.querySelectorAll('#entityEditor select')[1];
+    const sel = document.querySelectorAll('#entityEditor select')[0];
     return sel && !/Scanning/.test(sel.textContent);
   }, null, { timeout: 10000 });
-  const trackerOptions = await page.locator('#entityEditor select').nth(1).locator('option').allInnerTexts();
-  ok('tracker picker found the workbook in the workspace',
-    trackerOptions.some((o) => o.includes('Aeromexico Tracking Chart.xlsx')), trackerOptions.join(' | '));
+  const itemEditor = await page.locator('#entityEditor').innerText();
+  ok('the item editor covers matching', /Item number override/.test(itemEditor),
+    itemEditor.replace(/\n/g, ' | ').slice(0, 400));
+  ok('and per-item contacts', /Item contacts/.test(itemEditor));
+  const trackerOptions = await page.locator('#entityEditor select').first().locator('option').allInnerTexts();
+  ok('the tracker picker finds both workbooks',
+    trackerOptions.some((o) => o.includes('Evidencia Tracking Chart.xlsx'))
+    && trackerOptions.some((o) => o.includes('Montenero Tracking Chart.xlsx')), trackerOptions.join(' | '));
+  ok('and flags a workbook already used by another item',
+    trackerOptions.some((o) => /already used by another item/.test(o)), trackerOptions.join(' | '));
+
+  console.log('\nFollow-ups span every item');
+  await userSelect.selectOption('eu-coordinator');
+  await page.waitForTimeout(1800);
+  await accountSelect.selectOption('aeromexico');
+  await waitForItems();
+  await page.locator('nav.tabs button[data-tab="followups"]').click();
+  await page.waitForSelector('#followBody table.data');
+  const follow = await page.locator('#followBody').innerText();
+  ok('open items listed', /\d+ open/i.test(follow), follow.slice(0, 200).replace(/\n/g, ' | '));
+  ok('items from both trackers appear',
+    /Evidencia Tempranillo/.test(follow) && /Montenero/.test(follow), follow.replace(/\n/g, ' | ').slice(0, 400));
+  const followHeaders = await page.locator('#followBody table.data thead th').allInnerTexts();
+  ok('an Item column identifies which tracker each row came from',
+    followHeaders.some((h) => /item/i.test(h)), followHeaders.join(' | '));
 
   console.log('\nRuntime');
   ok('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' ; '));

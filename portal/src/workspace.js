@@ -78,17 +78,48 @@
       defaultCc: u.defaultCc || '',
       isAdmin: !!u.isAdmin,
     }));
-    ws.accounts = (ws.accounts || []).map((a) => ({
-      id: slug(a.id || a.name),
-      name: a.name || '',
-      divisionId: a.divisionId || '',
-      product: a.product || '',
-      trackerPath: a.trackerPath || '',
-      sheet: a.sheet || '',
-      defaultCc: a.defaultCc || '',
-      contacts: Object.assign({ vendor: {}, trucker: {}, customer: {}, internal: {} }, a.contacts || {}),
-      notes: a.notes || '',
-    }));
+    ws.accounts = (ws.accounts || []).map((a) => {
+      const account = {
+        id: slug(a.id || a.name),
+        name: a.name || '',
+        divisionId: a.divisionId || '',
+        defaultCc: a.defaultCc || '',
+        contacts: Object.assign({ vendor: {}, trucker: {}, customer: {}, internal: {} }, a.contacts || {}),
+        notes: a.notes || '',
+        items: [],
+      };
+
+      const takenIds = [];
+      account.items = (a.items || []).map((it) => {
+        const id = uniqueId(it.id || it.name || 'item', takenIds);
+        takenIds.push(id);
+        return {
+          id,
+          name: it.name || '',
+          product: it.product || '',
+          navCode: it.navCode || '',
+          trackerPath: it.trackerPath || '',
+          sheet: it.sheet || '',
+          contacts: Object.assign({ vendor: {}, trucker: {}, customer: {}, internal: {} }, it.contacts || {}),
+          notes: it.notes || '',
+        };
+      });
+
+      // An account written before items existed carried a single tracker.
+      if (!account.items.length && (a.trackerPath || a.product)) {
+        account.items.push({
+          id: 'item-1',
+          name: a.product || account.name,
+          product: a.product || '',
+          navCode: a.navCode || '',
+          trackerPath: a.trackerPath || '',
+          sheet: a.sheet || '',
+          contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+          notes: '',
+        });
+      }
+      return account;
+    });
     return ws;
   }
 
@@ -107,7 +138,26 @@
         issues.push({ level: 'error', message: 'Account "' + a.name + '" points at a division that no longer exists.' });
       }
       if (!a.divisionId) issues.push({ level: 'warn', message: 'Account "' + a.name + '" has no division.' });
-      if (!a.trackerPath) issues.push({ level: 'warn', message: 'Account "' + a.name + '" has no tracker file assigned.' });
+      if (!a.items.length) {
+        issues.push({ level: 'warn', message: 'Account "' + a.name + '" has no items yet.' });
+      }
+
+      const seenPath = new Map();
+      for (const it of a.items) {
+        const where = 'Item "' + (it.name || it.id) + '" on ' + a.name;
+        if (!it.name) issues.push({ level: 'error', message: 'An item on "' + a.name + '" has no name.' });
+        if (!it.trackerPath) issues.push({ level: 'warn', message: where + ' has no tracker file assigned.' });
+        else {
+          const key = it.trackerPath + '::' + (it.sheet || '');
+          if (seenPath.has(key)) {
+            issues.push({
+              level: 'error',
+              message: where + ' and "' + seenPath.get(key) + '" post to the same sheet of the same workbook.',
+            });
+          }
+          seenPath.set(key, it.name || it.id);
+        }
+      }
     }
 
     const seenUser = new Set();
@@ -166,6 +216,79 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Items
+   * ------------------------------------------------------------------ */
+
+  const accountItems = (account) => (account && account.items ? account.items : []);
+
+  function findItem(account, itemId) {
+    return accountItems(account).find((i) => i.id === itemId) || null;
+  }
+
+  function addItem(account, name) {
+    const item = {
+      id: uniqueId(name || 'item', accountItems(account).map((i) => i.id)),
+      name: name || '',
+      product: '', navCode: '', trackerPath: '', sheet: '',
+      contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+      notes: '',
+    };
+    account.items.push(item);
+    return item;
+  }
+
+  const norm = (s) => String(s || '').trim().toUpperCase();
+
+  /**
+   * Decide which of an account's items a purchase order belongs to.
+   *
+   * `configs` maps item id to the constants read from that item's tracker, so
+   * the NAV code is taken from the workbook itself rather than a stale copy.
+   * Returns the item and the reason, or a null item and why nothing matched —
+   * it never falls back to "the first one".
+   */
+  function matchItemForPo(items, configs, po) {
+    const cfgs = configs || {};
+    const code = norm(po && po.itemNo);
+
+    if (code) {
+      const byCode = items.filter((it) => {
+        const cfg = cfgs[it.id] || {};
+        return [cfg.navCode, it.navCode].filter(Boolean).map(norm).includes(code);
+      });
+      if (byCode.length === 1) {
+        return { item: byCode[0], reason: 'item number ' + code + ' matches this item\'s tracker', confident: true };
+      }
+      if (byCode.length > 1) {
+        return {
+          item: null, confident: false,
+          reason: 'item number ' + code + ' matches more than one item ('
+            + byCode.map((i) => i.name).join(', ') + ') — pick the right one',
+        };
+      }
+    }
+
+    const desc = String((po && po.description) || '').toLowerCase().trim();
+    if (desc) {
+      const byName = items.filter((it) => {
+        const cfg = cfgs[it.id] || {};
+        const name = String(cfg.productName || it.product || it.name || '').toLowerCase().trim();
+        return name && (name.includes(desc) || desc.includes(name));
+      });
+      if (byName.length === 1) {
+        return { item: byName[0], reason: 'product description matches this item', confident: true };
+      }
+    }
+
+    return {
+      item: null, confident: false,
+      reason: code
+        ? 'no item on this account has item number ' + code
+        : 'this PO carries no item number to match on',
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
    * Template files
    * ------------------------------------------------------------------ */
 
@@ -180,6 +303,7 @@
     const header = {
       label: meta.label || '',
       role: meta.role || '',
+      itemId: meta.itemId || '',
       subject: meta.subject || '',
       to: meta.to || '',
       cc: meta.cc || '',
@@ -192,14 +316,14 @@
   function parseTemplateFileText(text) {
     const s = String(text);
     if (!s.startsWith(META_OPEN)) {
-      return { label: '', role: '', subject: '', to: '', cc: '', source: '', updated: '', html: s.trim() };
+      return { label: '', role: '', itemId: '', subject: '', to: '', cc: '', source: '', updated: '', html: s.trim() };
     }
     const end = s.indexOf(META_CLOSE);
     if (end < 0) throw new Error('Template header is not closed.');
     const json = s.slice(META_OPEN.length, end).trim();
     let meta = {};
     try { meta = JSON.parse(json); } catch (e) { throw new Error('Template header is not valid JSON.'); }
-    return Object.assign({ label: '', role: '', subject: '', to: '', cc: '', source: '', updated: '' }, meta, {
+    return Object.assign({ label: '', role: '', itemId: '', subject: '', to: '', cc: '', source: '', updated: '' }, meta, {
       html: s.slice(end + META_CLOSE.length).replace(/^\r?\n/, ''),
     });
   }
@@ -268,7 +392,7 @@
       } catch (err) {
         out.push({
           id: e.name.replace(/\.html$/i, ''), path: dir + '/' + e.name, accountId,
-          label: e.name, role: '', subject: '', html: '', error: err.message,
+          label: e.name, role: '', itemId: '', subject: '', html: '', error: err.message,
         });
       }
     }
@@ -281,8 +405,9 @@
     const id = template.id || uniqueId(template.label || template.role || 'template', existing.map((t) => t.id));
     const path = templatePathFor(accountId, id);
     const text = templateFileText({
-      label: template.label, role: template.role, subject: template.subject,
-      to: template.to, cc: template.cc, source: template.source, updated: nowIso(),
+      label: template.label, role: template.role, itemId: template.itemId || '',
+      subject: template.subject, to: template.to, cc: template.cc,
+      source: template.source, updated: nowIso(),
     }, template.html);
     await store.write(path, ENC.encode(text));
     return Object.assign({}, template, { id, path, accountId, updated: nowIso() });
@@ -309,16 +434,20 @@
    * purchase order and falling back to the account's saved contact.
    * Every result reports which of the two it came from.
    */
-  function resolveRecipients(account, role, po, user) {
-    const contact = (account && account.contacts && account.contacts[role]) || {};
+  function resolveRecipients(account, item, role, po, user) {
+    const accountContact = (account && account.contacts && account.contacts[role]) || {};
+    const itemContact = (item && item.contacts && item.contacts[role]) || {};
     let to = '';
     let toSource = '';
 
     if (role === 'vendor' && po && po.vendorEmail) {
       to = po.vendorContact ? po.vendorContact + ' <' + po.vendorEmail + '>' : po.vendorEmail;
       toSource = 'vendor block on the PO';
-    } else if (formatAddress(contact)) {
-      to = formatAddress(contact);
+    } else if (formatAddress(itemContact)) {
+      to = formatAddress(itemContact);
+      toSource = 'item contact';
+    } else if (formatAddress(accountContact)) {
+      to = formatAddress(accountContact);
       toSource = 'account contact';
     }
 
@@ -326,7 +455,8 @@
     if (role === 'vendor' && po && po.docsTo) ccParts.push(po.docsTo);
     if (account && account.defaultCc) ccParts.push(account.defaultCc);
     if (user && user.defaultCc) ccParts.push(user.defaultCc);
-    if (contact.cc) ccParts.push(contact.cc);
+    if (accountContact.cc) ccParts.push(accountContact.cc);
+    if (itemContact.cc) ccParts.push(itemContact.cc);
 
     const seen = new Set();
     const cc = ccParts
@@ -380,6 +510,7 @@
     CONFIG_PATH, TEMPLATE_DIR, ROLES, SCHEMA_VERSION,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,
+    accountItems, findItem, addItem, matchItemForPo,
     templateFileText, parseTemplateFileText, templateDirFor, templatePathFor,
     loadWorkspace, saveWorkspace, listTemplates, saveTemplate, deleteTemplate,
     resolveRecipients, formatAddress, findWorkbooks, splitPath, slug, uniqueId,

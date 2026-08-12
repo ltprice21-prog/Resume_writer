@@ -173,13 +173,20 @@ async function makeDocx(paragraphs) {
   ok('substitution applied', swapped.includes('{{vendorContact}}') && swapped.includes('{{customer}}'), swapped);
   ok('nothing is changed without confirmation', literal.includes('Caroline Mounier-Duchamp'));
 
-  console.log('\nWorkspace schema');
+  console.log('\nWorkspace schema and items');
   const ws = AMI.normaliseWorkspace({
     divisions: [{ id: 'europe', name: 'Europe' }, { id: 'us', name: 'US' }],
     accounts: [
-      { id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe', trackerPath: 'trackers/a.xlsx' },
-      { id: 'delta', name: 'Delta', divisionId: 'us', trackerPath: 'trackers/d.xlsx' },
-      { id: 'ba', name: 'British Airways', divisionId: 'europe', trackerPath: 'trackers/b.xlsx' },
+      {
+        id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe',
+        items: [
+          { id: 'evidencia', name: 'Evidencia Tempranillo', trackerPath: 'trackers/evidencia.xlsx', sheet: '2026 Cycle' },
+          { id: 'montenero', name: 'Montenero', trackerPath: 'trackers/montenero.xlsx' },
+          { id: 'blanco', name: 'Blanco', trackerPath: 'trackers/blanco.xlsx' },
+        ],
+      },
+      { id: 'delta', name: 'Delta', divisionId: 'us', items: [{ id: 'd1', name: 'Delta Red', trackerPath: 'trackers/delta.xlsx' }] },
+      { id: 'ba', name: 'British Airways', divisionId: 'europe', items: [{ id: 'b1', name: 'BA White', trackerPath: 'trackers/ba.xlsx' }] },
     ],
     users: [
       { id: 'bo', name: 'Bo Price', divisionId: 'us', accountIds: ['delta'] },
@@ -188,6 +195,32 @@ async function makeDocx(paragraphs) {
     ],
   });
   check('no structural issues', AMI.validateWorkspace(ws).filter((i) => i.level === 'error'), []);
+  check('an account carries several items',
+    AMI.accountItems(ws.accounts[0]).map((i) => i.name),
+    ['Evidencia Tempranillo', 'Montenero', 'Blanco']);
+  check('items are addressable by id', AMI.findItem(ws.accounts[0], 'montenero').trackerPath, 'trackers/montenero.xlsx');
+  check('an unknown item id yields null', AMI.findItem(ws.accounts[0], 'nope'), null);
+
+  const added = AMI.addItem(ws.accounts[0], 'Montenero');
+  ok('adding an item with a clashing name gets its own id', added.id !== 'montenero', added.id);
+  check('the new item starts with no tracker', added.trackerPath, '');
+  ws.accounts[0].items = ws.accounts[0].items.filter((i) => i !== added);
+
+  console.log('\nLegacy single-tracker migration');
+  const legacy = AMI.normaliseWorkspace({
+    divisions: [{ id: 'europe', name: 'Europe' }],
+    accounts: [{
+      id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe',
+      product: 'Evidencia Tempranillo Spain',
+      trackerPath: 'trackers/Aeromexico.xlsx', sheet: '2026 Cycle',
+    }],
+  });
+  check('an old single-tracker account becomes one item', AMI.accountItems(legacy.accounts[0]).length, 1);
+  check('its tracker is preserved', AMI.accountItems(legacy.accounts[0])[0].trackerPath, 'trackers/Aeromexico.xlsx');
+  check('its sheet is preserved', AMI.accountItems(legacy.accounts[0])[0].sheet, '2026 Cycle');
+  check('the item is named after the product', AMI.accountItems(legacy.accounts[0])[0].name, 'Evidencia Tempranillo Spain');
+
+  console.log('\nVisibility');
   check('explicit assignment wins', AMI.accountsForUser(ws, 'bo').map((a) => a.id), ['delta']);
   check('unassigned user sees their whole division',
     AMI.accountsForUser(ws, 'eu1').map((a) => a.id), ['aeromexico', 'ba']);
@@ -197,9 +230,21 @@ async function makeDocx(paragraphs) {
     AMI.accountsByDivision(ws, AMI.accountsForUser(ws, 'admin')).map((g) => g.division.name + ':' + g.accounts.length),
     ['Europe:2', 'US:1']);
 
+  console.log('\nWorkspace validation');
   const broken = AMI.normaliseWorkspace({
     divisions: [{ id: 'europe', name: 'Europe' }],
-    accounts: [{ id: 'x', name: 'X', divisionId: 'ghost' }],
+    accounts: [
+      { id: 'x', name: 'X', divisionId: 'ghost', items: [{ id: 'i1', name: 'I1', trackerPath: 't.xlsx' }] },
+      {
+        id: 'y', name: 'Y', divisionId: 'europe',
+        items: [
+          { id: 'a', name: 'A', trackerPath: 'same.xlsx', sheet: '2026' },
+          { id: 'b', name: 'B', trackerPath: 'same.xlsx', sheet: '2026' },
+          { id: 'c', name: 'C', trackerPath: '' },
+        ],
+      },
+      { id: 'z', name: 'Z', divisionId: 'europe', items: [] },
+    ],
     users: [{ id: 'u', name: 'U', divisionId: 'europe', accountIds: ['missing'] }],
   });
   const brokenIssues = AMI.validateWorkspace(broken);
@@ -207,6 +252,53 @@ async function makeDocx(paragraphs) {
     brokenIssues.some((i) => i.level === 'error' && /division that no longer exists/.test(i.message)));
   ok('dangling account assignment is a warning',
     brokenIssues.some((i) => i.level === 'warn' && /account that no longer exists/.test(i.message)));
+  ok('two items pointing at the same sheet is an error',
+    brokenIssues.some((i) => i.level === 'error' && /post to the same sheet of the same workbook/.test(i.message)),
+    JSON.stringify(brokenIssues.filter((i) => i.level === 'error')));
+  ok('an item with no tracker is a warning',
+    brokenIssues.some((i) => i.level === 'warn' && /Item "C" on Y has no tracker/.test(i.message)));
+  ok('an account with no items is a warning',
+    brokenIssues.some((i) => i.level === 'warn' && /Account "Z" has no items/.test(i.message)));
+
+  console.log('\nRouting a PO to the right item tracker');
+  const routingItems = AMI.accountItems(ws.accounts[0]);
+  const configs = {
+    evidencia: { navCode: 'EVDTMPRNV', productName: 'Evidencia Tempranillo Spain (Vino Tinto Espanol Tempranillo Evidencia)' },
+    montenero: { navCode: 'MONTENERO', productName: 'Montenero Rosso' },
+    blanco: { navCode: 'BLANCONV', productName: 'Blanco' },
+  };
+
+  const byCode = AMI.matchItemForPo(routingItems, configs, { itemNo: 'EVDTMPRNV', description: 'Evidencia Tempranillo Spain' });
+  check('item number routes the PO', byCode.item.id, 'evidencia');
+  ok('and the match is confident', byCode.confident === true);
+  ok('and it says why', /item number EVDTMPRNV/.test(byCode.reason), byCode.reason);
+
+  const otherCode = AMI.matchItemForPo(routingItems, configs, { itemNo: 'MONTENERO', description: 'Montenero Rosso' });
+  check('a different item number routes elsewhere', otherCode.item.id, 'montenero');
+
+  const lowercase = AMI.matchItemForPo(routingItems, configs, { itemNo: ' evdtmprnv ', description: '' });
+  check('matching ignores case and padding', lowercase.item.id, 'evidencia');
+
+  const byName = AMI.matchItemForPo(routingItems, configs, { itemNo: '', description: 'Evidencia Tempranillo Spain' });
+  check('description routes when there is no item number', byName.item.id, 'evidencia');
+  ok('and says it fell back to the description', /description/.test(byName.reason), byName.reason);
+
+  const unknown = AMI.matchItemForPo(routingItems, configs, { itemNo: 'NOSUCHCODE', description: 'Something else' });
+  check('an unknown item number matches nothing', unknown.item, null);
+  ok('rather than guessing the first item', /no item on this account has item number NOSUCHCODE/.test(unknown.reason),
+    unknown.reason);
+
+  const ambiguousConfigs = { evidencia: { navCode: 'DUP' }, montenero: { navCode: 'DUP' }, blanco: {} };
+  const ambiguous = AMI.matchItemForPo(routingItems, ambiguousConfigs, { itemNo: 'DUP', description: '' });
+  check('an ambiguous code refuses to pick', ambiguous.item, null);
+  ok('and names the candidates', /Evidencia Tempranillo, Montenero/.test(ambiguous.reason), ambiguous.reason);
+
+  const noCode = AMI.matchItemForPo(routingItems, configs, { itemNo: '', description: '' });
+  check('a PO with nothing to match on is left unrouted', noCode.item, null);
+
+  const override = AMI.matchItemForPo(
+    [{ id: 'x', name: 'X', navCode: 'MANUAL1' }], {}, { itemNo: 'MANUAL1', description: '' });
+  check('a stored item-number override is honoured', override.item.id, 'x');
 
   console.log('\nTemplate storage');
   const store = memoryStore();
@@ -223,6 +315,15 @@ async function makeDocx(paragraphs) {
   check('body round-trips', listed[0].html, '<p>Dear {{vendorContact}}</p>');
   check('role round-trips', listed[0].role, 'vendor');
   check('source recorded', listed[0].source, 'vendor-order.msg');
+  check('an unscoped template applies to every item', listed[0].itemId, '');
+
+  await AMI.saveTemplate(store, 'aeromexico', {
+    label: 'Montenero vendor order', role: 'vendor', itemId: 'montenero',
+    subject: 'Montenero {{poGroups}}', html: '<p>Item only</p>',
+  });
+  const scoped = (await AMI.listTemplates(store, 'aeromexico')).find((t) => t.label === 'Montenero vendor order');
+  check('a template can be scoped to one item', scoped.itemId, 'montenero');
+  await AMI.deleteTemplate(store, 'aeromexico', scoped.id);
 
   const second = await AMI.saveTemplate(store, 'aeromexico', { label: 'Vendor order', role: 'vendor', html: '<p>x</p>' });
   ok('a clashing name gets its own id', second.id !== saved.id, saved.id + ' vs ' + second.id);
@@ -265,24 +366,41 @@ async function makeDocx(paragraphs) {
       internal: {},
     },
   };
+  const plainItem = { name: 'Evidencia', contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} } };
+  const ownContactItem = {
+    name: 'Montenero',
+    contacts: {
+      vendor: { name: 'Montenero Cellars', email: 'orders@montenero.example' },
+      trucker: { name: 'Alt Freight', email: 'ops@altfreight.example', cc: 'docs@altfreight.example' },
+      customer: {}, internal: {},
+    },
+  };
   const po = { vendorContact: 'Caroline Mounier-Duchamp', vendorEmail: 'caroline@vins-biecher.com', docsTo: 'euwineorders@amigrp.com' };
   const user = { defaultCc: '' };
 
-  const vendorTo = AMI.resolveRecipients(account, 'vendor', po, user);
+  const vendorTo = AMI.resolveRecipients(account, plainItem, 'vendor', po, user);
   check('vendor address comes from the PO', vendorTo.to, 'Caroline Mounier-Duchamp <caroline@vins-biecher.com>');
   check('and says so', vendorTo.toSource, 'vendor block on the PO');
   check('cc is deduplicated', vendorTo.cc, 'euwineorders@amigrp.com');
 
-  const truckerTo = AMI.resolveRecipients(account, 'trucker', po, user);
-  check('trucker address comes from the account', truckerTo.to, 'Steffy Demouchy <sdemouchy@stpicargo.com>');
+  const truckerTo = AMI.resolveRecipients(account, plainItem, 'trucker', po, user);
+  check('trucker address falls back to the account', truckerTo.to, 'Steffy Demouchy <sdemouchy@stpicargo.com>');
   check('and says so', truckerTo.toSource, 'account contact');
   check('per-role cc is included', truckerTo.cc, 'euwineorders@amigrp.com; comat@stpicargo.com');
 
-  const internalTo = AMI.resolveRecipients(account, 'internal', po, user);
-  check('an unset contact yields no address, not a guess', internalTo.to, '');
+  const itemTrucker = AMI.resolveRecipients(account, ownContactItem, 'trucker', po, user);
+  check('an item contact overrides the account', itemTrucker.to, 'Alt Freight <ops@altfreight.example>');
+  check('and says which it used', itemTrucker.toSource, 'item contact');
+  ok('both account and item ccs are carried',
+    itemTrucker.cc.includes('comat@stpicargo.com') && itemTrucker.cc.includes('docs@altfreight.example'),
+    itemTrucker.cc);
 
-  const noPo = AMI.resolveRecipients(account, 'vendor', null, user);
-  check('without a PO the vendor falls back to the account contact', noPo.to, 'Caroline <caroline@vins-biecher.com>');
+  const itemVendorNoPo = AMI.resolveRecipients(account, ownContactItem, 'vendor', null, user);
+  check('without a PO the item vendor wins over the account', itemVendorNoPo.to,
+    'Montenero Cellars <orders@montenero.example>');
+
+  const internalTo = AMI.resolveRecipients(account, plainItem, 'internal', po, user);
+  check('an unset contact yields no address, not a guess', internalTo.to, '');
 
   console.log('\nWorkbook discovery');
   const treeStore = memoryStore([
