@@ -33,6 +33,8 @@ const TARGETS = [
       ENGINE: 'engine.js',
       TEMPLATES: 'templates.js',
       WORKSPACE: 'workspace.js',
+      STATUS: 'status.js',
+      CHARTS: 'charts.js',
       APP: 'app-teams.js',
     },
   },

@@ -4,9 +4,11 @@ A single HTML file that turns a purchase order PDF into a tracker row and a vend
 email, without retyping anything.
 
 > **Working across several customer accounts?** See
-> [README-Teams.md](README-Teams.md) for `AMI-Order-Desk-Teams.html`, which adds
-> Europe/US divisions, per-user account lists and shared trucker / customer / vendor
-> templates stored in a SharePoint-synced folder. This file stays as it is.
+> [README-Teams.md](README-Teams.md) for `AMI-Order-Desk-Teams.html`, which adds an
+> Account Health dashboard, Europe/US divisions, per-user account lists, several item
+> trackers per account, and shared trucker / customer / vendor templates stored in a
+> SharePoint-synced folder. This file keeps the same single-account workflow; it shares
+> the same visual design.
 
 **Nothing is installed. Nothing is uploaded. No AI service is called.** Open
 `AMI-Order-Desk.html` in Edge or Chrome and it runs entirely inside the browser tab,

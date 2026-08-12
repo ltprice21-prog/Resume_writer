@@ -4,72 +4,144 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AMI Order Desk — Teams</title>
-<style>:root {
-  --bg: #f4f5f7;
+<style>/* AMI Order Desk — shared design system.
+ *
+ * A calm CRM surface: a light plane, white cards, one blue accent for chrome,
+ * and a separate validated ordinal ramp reserved for order-stage data so a
+ * status colour never impersonates a button.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces & ink */
+  --bg: #f3f3f3;
   --surface: #ffffff;
-  --surface-2: #fafbfc;
-  --border: #dfe3e8;
-  --border-strong: #c4cad2;
-  --text: #1c2430;
-  --muted: #64707f;
-  --faint: #8b95a3;
-  --accent: #1f5f8b;
-  --accent-soft: #e8f1f8;
-  --ok: #17694a;
-  --ok-soft: #e4f4ec;
-  --warn: #8a5a00;
-  --warn-soft: #fdf2dc;
-  --danger: #a32c22;
-  --danger-soft: #fdecea;
-  --info-soft: #eef0f4;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
+  --surface-2: #fafaf9;
+  --surface-3: #f4f6f9;
+  --border: #e5e5e5;
+  --border-strong: #c9c9c9;
+  --text: #181818;
+  --muted: #5c5c5c;
+  --faint: #8a8a8a;
+
+  /* chrome accent */
+  --accent: #0176d3;
+  --accent-hover: #014486;
+  --accent-soft: #eaf3fd;
+  --accent-ink: #05487f;
+
+  /* reserved status palette — never used for series */
+  --good: #0ca30c;
+  --good-soft: #e3f6e3;
+  --good-ink: #056605;
+  --warning: #fab219;
+  --warning-soft: #fdf3dd;
+  --warning-ink: #7a5300;
+  --critical: #d03b3b;
+  --critical-soft: #fdeaea;
+  --critical-ink: #94211f;
+  --info-soft: #eef1f6;
+
+  /* order-stage ordinal ramp (validated light→dark, single hue) */
+  --stage-1: #86b6ef;
+  --stage-2: #5598e7;
+  --stage-3: #2a78d6;
+  --stage-4: #1c5cab;
+  --stage-5: #104281;
+  /* Ink chosen per stage so an in-bar number always clears its fill. */
+  --stage-fg-1: #0d3a6e;
+  --stage-fg-2: #08243f;
+  --stage-fg-3: #ffffff;
+  --stage-fg-4: #ffffff;
+  --stage-fg-5: #ffffff;
+
+  --shadow-1: 0 1px 1px rgba(0, 0, 0, .05), 0 0 1px rgba(0, 0, 0, .08);
+  --shadow-2: 0 2px 6px rgba(16, 24, 40, .08), 0 0 1px rgba(0, 0, 0, .1);
+  --shadow-3: 0 8px 24px rgba(16, 24, 40, .16);
   --radius: 8px;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --radius-sm: 5px;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
   --sans: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #14181d;
-    --surface: #1b2027;
-    --surface-2: #21272f;
-    --border: #2e3641;
-    --border-strong: #414c5a;
-    --text: #e6eaef;
-    --muted: #9aa6b4;
-    --faint: #74808e;
-    --accent: #6cb2e0;
-    --accent-soft: #1a2c3a;
-    --ok: #6ed3a6;
-    --ok-soft: #16302479;
-    --warn: #e8b866;
-    --warn-soft: #33280f;
-    --danger: #f08b80;
-    --danger-soft: #3a1e1b;
-    --info-soft: #242b34;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+    --bg: #101317;
+    --surface: #16191d;
+    --surface-2: #1c2026;
+    --surface-3: #1a1e24;
+    --border: #2b3038;
+    --border-strong: #3d444f;
+    --text: #e8eaed;
+    --muted: #a4abb5;
+    --faint: #7c848f;
+    --accent: #57a8f0;
+    --accent-hover: #7bbdf6;
+    --accent-soft: #14283c;
+    --accent-ink: #9dccf7;
+    --good: #0ca30c;
+    --good-soft: #122a12;
+    --good-ink: #6fd36f;
+    --warning: #fab219;
+    --warning-soft: #322309;
+    --warning-ink: #f0c25c;
+    --critical: #d03b3b;
+    --critical-soft: #341616;
+    --critical-ink: #f08b80;
+    --info-soft: #1e242c;
+    --stage-1: #184f95;
+    --stage-2: #256abf;
+    --stage-3: #3987e5;
+    --stage-4: #6da7ec;
+    --stage-5: #9ec5f4;
+    --stage-fg-1: #ffffff;
+    --stage-fg-2: #ffffff;
+    --stage-fg-3: #08203c;
+    --stage-fg-4: #08203c;
+    --stage-fg-5: #08203c;
+    --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
+    --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #14181d;
-  --surface: #1b2027;
-  --surface-2: #21272f;
-  --border: #2e3641;
-  --border-strong: #414c5a;
-  --text: #e6eaef;
-  --muted: #9aa6b4;
-  --faint: #74808e;
-  --accent: #6cb2e0;
-  --accent-soft: #1a2c3a;
-  --ok: #6ed3a6;
-  --ok-soft: #163024;
-  --warn: #e8b866;
-  --warn-soft: #33280f;
-  --danger: #f08b80;
-  --danger-soft: #3a1e1b;
-  --info-soft: #242b34;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+  --bg: #101317;
+  --surface: #16191d;
+  --surface-2: #1c2026;
+  --surface-3: #1a1e24;
+  --border: #2b3038;
+  --border-strong: #3d444f;
+  --text: #e8eaed;
+  --muted: #a4abb5;
+  --faint: #7c848f;
+  --accent: #57a8f0;
+  --accent-hover: #7bbdf6;
+  --accent-soft: #14283c;
+  --accent-ink: #9dccf7;
+  --good-soft: #122a12;
+  --good-ink: #6fd36f;
+  --warning-soft: #322309;
+  --warning-ink: #f0c25c;
+  --critical-soft: #341616;
+  --critical-ink: #f08b80;
+  --info-soft: #1e242c;
+  --stage-1: #184f95;
+  --stage-2: #256abf;
+  --stage-3: #3987e5;
+  --stage-4: #6da7ec;
+  --stage-5: #9ec5f4;
+  --stage-fg-1: #ffffff;
+  --stage-fg-2: #ffffff;
+  --stage-fg-3: #08203c;
+  --stage-fg-4: #08203c;
+  --stage-fg-5: #08203c;
+  --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
+  --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
 }
 
 * { box-sizing: border-box; }
@@ -85,31 +157,50 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---------- shell ---------- */
+/* ---------- app chrome ---------- */
 
 header.app {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 14px 22px 0;
+  padding: 0 20px;
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 30;
+  box-shadow: var(--shadow-1);
 }
 
 .brandline {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  padding: 11px 0 10px;
 }
 
-.brand { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.brand::before {
+  content: "";
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: linear-gradient(150deg, var(--accent), var(--stage-5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
+  flex: none;
+}
+
 .brand span { color: var(--accent); }
-.tagline { color: var(--faint); font-size: 12.5px; }
+.tagline { color: var(--faint); font-size: 12px; }
 .brandline .spacer { flex: 1; }
 
-nav.tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+nav.tabs { display: flex; gap: 1px; flex-wrap: wrap; }
 
 nav.tabs button {
   appearance: none;
@@ -118,34 +209,93 @@ nav.tabs button {
   border-bottom: 2px solid transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13.5px;
-  padding: 9px 14px;
+  font-size: 13px;
+  padding: 9px 13px 8px;
   cursor: pointer;
-  border-radius: 6px 6px 0 0;
+  border-radius: 5px 5px 0 0;
   display: flex;
   align-items: center;
   gap: 7px;
+  white-space: nowrap;
 }
 
-nav.tabs button:hover { background: var(--surface-2); color: var(--text); }
-nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-nav.tabs button[disabled] { opacity: .4; cursor: not-allowed; }
+nav.tabs button:hover:not([disabled]) { background: var(--surface-3); color: var(--text); }
+nav.tabs button[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+  background: var(--surface);
+}
+nav.tabs button[disabled] { opacity: .38; cursor: not-allowed; }
 
 .step-no {
   display: inline-grid;
   place-items: center;
-  width: 18px; height: 18px;
+  width: 17px; height: 17px;
   border-radius: 50%;
   background: var(--info-soft);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
 }
 
 nav.tabs button[aria-selected="true"] .step-no { background: var(--accent); color: #fff; }
 
-main { max-width: 1200px; margin: 0 auto; padding: 22px; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 section.panel[hidden] { display: none; }
+
+/* ---------- context bar ---------- */
+
+#contextBar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 20px;
+  position: sticky;
+  top: 82px;
+  z-index: 25;
+}
+
+.context-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.context-row select { width: auto; min-width: 175px; max-width: 300px; }
+.context-row .spacer { flex: 1; }
+.context-label { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.context-note { font-size: 12px; color: var(--faint); }
+
+/* ---------- page header ---------- */
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.page-header .titles { flex: 1; min-width: 240px; }
+.page-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+.page-header .eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 2px;
+}
+.page-header p { margin: 5px 0 0; color: var(--muted); font-size: 13px; max-width: 78ch; }
+.page-header .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 /* ---------- cards ---------- */
 
@@ -153,30 +303,32 @@ section.panel[hidden] { display: none; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 18px;
+  box-shadow: var(--shadow-1);
+  margin-bottom: 16px;
   overflow: hidden;
 }
 
 .card > h2 {
   margin: 0;
-  padding: 13px 18px;
-  font-size: 14px;
-  font-weight: 650;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
+  flex-wrap: wrap;
 }
 
 .card > h2 .spacer { flex: 1; }
-.card .body { padding: 18px; }
+.card > h2 .context-note { font-weight: 400; }
+.card .body { padding: 16px; }
 .card .body > :first-child { margin-top: 0; }
 .card .body > :last-child { margin-bottom: 0; }
 
-h3 { font-size: 13px; font-weight: 650; margin: 20px 0 8px; letter-spacing: .01em; }
-p.help { color: var(--muted); font-size: 13px; margin: 6px 0 14px; max-width: 76ch; }
+h3 { font-size: 12.5px; font-weight: 700; margin: 20px 0 8px; letter-spacing: .01em; }
+p.help { color: var(--muted); font-size: 13px; margin: 6px 0 14px; max-width: 78ch; }
 
 /* ---------- controls ---------- */
 
@@ -184,25 +336,30 @@ button.btn {
   appearance: none;
   border: 1px solid var(--border-strong);
   background: var(--surface);
-  color: var(--text);
+  color: var(--accent);
   font: inherit;
   font-size: 13px;
-  padding: 7px 13px;
-  border-radius: 6px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  transition: background .12s, border-color .12s;
 }
 
-button.btn:hover:not([disabled]) { background: var(--surface-2); border-color: var(--faint); }
-button.btn[disabled] { opacity: .45; cursor: not-allowed; }
+button.btn:hover:not([disabled]) { background: var(--surface-3); border-color: var(--faint); }
+button.btn[disabled] { opacity: .45; cursor: not-allowed; color: var(--muted); }
 button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-button.btn.primary:hover:not([disabled]) { filter: brightness(1.08); background: var(--accent); }
-button.btn.danger { color: var(--danger); border-color: var(--danger); }
-button.btn.small { padding: 4px 9px; font-size: 12px; }
+button.btn.primary:hover:not([disabled]) { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.btn.danger { color: var(--critical); border-color: var(--border-strong); }
+button.btn.danger:hover:not([disabled]) { background: var(--critical-soft); border-color: var(--critical); }
+button.btn.small { padding: 3px 10px; font-size: 12px; }
+button.btn.ghost { border-color: transparent; background: transparent; }
+button.btn.ghost:hover:not([disabled]) { background: var(--surface-3); border-color: transparent; }
 
-.btn-row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin: 14px 0 0; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0 0; }
 .btn-row .spacer { flex: 1; }
 
 input[type="text"], input[type="date"], input[type="email"], input[type="number"], textarea, select {
@@ -211,25 +368,48 @@ input[type="text"], input[type="date"], input[type="email"], input[type="number"
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 9px;
   width: 100%;
   max-width: 100%;
 }
 
-input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
 textarea { resize: vertical; min-height: 90px; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
 label.field { display: block; margin-bottom: 12px; }
-label.field > span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+label.field > span { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 18px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0 16px; }
+
+/* ---------- filter bar ---------- */
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.filter-bar .field { margin: 0; }
+.filter-bar select { min-width: 168px; width: auto; }
+.filter-bar .spacer { flex: 1; }
 
 /* ---------- dropzone ---------- */
 
 .dropzone {
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
-  padding: 34px 20px;
+  padding: 30px 20px;
   text-align: center;
   color: var(--muted);
   background: var(--surface-2);
@@ -237,78 +417,320 @@ label.field > span { display: block; font-size: 12px; font-weight: 600; color: v
   transition: border-color .12s, background .12s;
 }
 
-.dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.dropzone strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
-.dropzone.over strong { color: var(--accent); }
+.dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.dropzone strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 3px; }
+.dropzone.over strong { color: var(--accent-ink); }
 
-/* ---------- chips & badges ---------- */
+/* ---------- chips, pills, health ---------- */
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 10.5px;
+  font-weight: 700;
   padding: 2px 7px;
   border-radius: 4px;
-  letter-spacing: .02em;
+  letter-spacing: .03em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.chip.pdf { background: var(--ok-soft); color: var(--ok); }
-.chip.computed { background: var(--accent-soft); color: var(--accent); }
-.chip.formula { background: var(--accent-soft); color: var(--accent); }
-.chip.carried { background: var(--warn-soft); color: var(--warn); }
-.chip.manual { background: var(--info-soft); color: var(--faint); }
-.chip.edited { background: var(--warn-soft); color: var(--warn); }
-.chip.ok { background: var(--ok-soft); color: var(--ok); }
-.chip.error { background: var(--danger-soft); color: var(--danger); }
+.chip.pdf { background: var(--good-soft); color: var(--good-ink); }
+.chip.computed, .chip.formula { background: var(--accent-soft); color: var(--accent-ink); }
+.chip.carried, .chip.edited { background: var(--warning-soft); color: var(--warning-ink); }
+.chip.manual { background: var(--info-soft); color: var(--muted); }
+.chip.ok { background: var(--good-soft); color: var(--good-ink); }
+.chip.error { background: var(--critical-soft); color: var(--critical-ink); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.pill-stage { background: var(--pill); color: #fff; }
+.pill-unset { background: var(--info-soft); color: var(--muted); border: 1px dashed var(--border-strong); }
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 2px 9px 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.health-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.health-good { background: var(--good-soft); color: var(--good-ink); }
+.health-good .health-icon { background: var(--good); }
+.health-warning { background: var(--warning-soft); color: var(--warning-ink); }
+.health-warning .health-icon { background: var(--warning); color: #3d2900; }
+.health-critical { background: var(--critical-soft); color: var(--critical-ink); }
+.health-critical .health-icon { background: var(--critical); }
 
 /* ---------- messages ---------- */
 
 .msg {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 10px 13px;
   font-size: 13px;
   margin: 10px 0;
   border: 1px solid transparent;
+  border-left-width: 3px;
   display: flex;
   gap: 9px;
   align-items: flex-start;
 }
 
-.msg .icon { font-weight: 700; line-height: 1.4; }
-.msg.error { background: var(--danger-soft); color: var(--danger); border-color: currentColor; }
-.msg.warn { background: var(--warn-soft); color: var(--warn); border-color: currentColor; }
-.msg.info { background: var(--info-soft); color: var(--muted); }
-.msg.ok { background: var(--ok-soft); color: var(--ok); border-color: currentColor; }
-.msg .detail { display: block; opacity: .85; margin-top: 3px; font-size: 12.5px; }
+.msg .icon { font-weight: 800; line-height: 1.4; }
+.msg.error { background: var(--critical-soft); color: var(--critical-ink); border-left-color: var(--critical); }
+.msg.warn { background: var(--warning-soft); color: var(--warning-ink); border-left-color: var(--warning); }
+.msg.info { background: var(--info-soft); color: var(--muted); border-left-color: var(--border-strong); }
+.msg.ok { background: var(--good-soft); color: var(--good-ink); border-left-color: var(--good); }
+.msg .detail { display: block; opacity: .9; margin-top: 3px; font-size: 12.5px; }
 .msg strong { font-weight: 650; }
 
 /* ---------- tables ---------- */
 
-.table-scroll { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+.table-scroll { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
 
 table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
 
 table.data th {
   text-align: left;
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .05em;
   color: var(--faint);
   font-weight: 700;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-strong);
   white-space: nowrap;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
 }
 
-table.data td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.data td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 table.data tr:last-child td { border-bottom: 0; }
-table.data tbody tr:hover { background: var(--surface-2); }
+table.data tbody tr:hover { background: var(--surface-3); }
 table.data td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.data td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+table.data td.mono { white-space: nowrap; }
+
+/* ---------- stat tiles ---------- */
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  box-shadow: var(--shadow-1);
+  border-top: 3px solid var(--accent);
+}
+
+.stat-tile.tone-good { border-top-color: var(--good); }
+.stat-tile.tone-warning { border-top-color: var(--warning); }
+.stat-tile.tone-critical { border-top-color: var(--critical); }
+.stat-tile.tone-neutral { border-top-color: var(--border-strong); }
+
+.stat-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--faint);
+}
+
+.stat-value {
+  font-size: 27px;
+  font-weight: 300;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-sub { font-size: 11.5px; color: var(--muted); }
+
+/* ---------- bars ---------- */
+
+.bar-track {
+  display: flex;
+  gap: 2px;
+  height: 26px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.bar-track.empty { align-items: center; justify-content: center; }
+.bar-empty { font-size: 11.5px; color: var(--faint); }
+
+.bar-seg {
+  display: grid;
+  place-items: center;
+  min-width: 3px;
+  border-radius: 3px;
+  transition: filter .12s;
+}
+
+.bar-seg:first-child { border-radius: 4px 3px 3px 4px; }
+.bar-seg:last-child { border-radius: 3px 4px 4px 3px; }
+.bar-seg:hover { filter: brightness(1.12); }
+.bar-inline { font-size: 11px; font-weight: 700; color: var(--ink, #fff); }
+
+.bar-list { display: flex; flex-direction: column; gap: 8px; }
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.bar-label { font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.bar-sub { display: block; font-size: 11px; color: var(--faint); font-weight: 400; }
+.bar-plot { min-width: 0; }
+.bar-plot .bar-track { width: var(--fill, 100%); min-width: 3px; }
+.bar-total { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 46px; text-align: right; }
+
+/* ---------- legend ---------- */
+
+ul.legend {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+ul.legend li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.legend-label { color: var(--muted); }
+.legend-value { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ---------- svg charts ---------- */
+
+svg.chart { width: 100%; height: auto; display: block; }
+svg.chart .grid { stroke: var(--border); stroke-width: 1; }
+svg.chart .axis { fill: var(--faint); font-size: 10px; font-family: var(--sans); }
+svg.chart .col { fill: var(--stage-3); transition: filter .12s; }
+svg.chart .col:hover { filter: brightness(1.15); }
+svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; font-family: var(--sans); }
+.chart-empty { font-size: 12.5px; color: var(--faint); text-align: center; padding: 26px 0; margin: 0; }
+
+/* ---------- kanban ---------- */
+
+.kanban {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(212px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  align-items: start;
+}
+
+.kan-col {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.kan-col.drop-target { border-color: var(--accent); background: var(--accent-soft); }
+
+.kan-head {
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border);
+  border-top: 3px solid var(--stage);
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.kan-title { font-size: 11.5px; font-weight: 700; letter-spacing: .01em; }
+.kan-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kan-cards {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 44px;
+  /* A busy stage must not stretch the page; the column scrolls instead. */
+  max-height: 430px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.kan-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--stage);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-1);
+  cursor: grab;
+  font-size: 12px;
+}
+
+.kan-card:hover { box-shadow: var(--shadow-2); }
+.kan-card.dragging { opacity: .45; }
+.kan-po { font-weight: 700; font-family: var(--mono); font-size: 12px; }
+.kan-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.kan-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.kan-age { font-size: 10.5px; color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+.kan-empty { font-size: 11.5px; color: var(--faint); text-align: center; padding: 12px 4px; }
+
+/* ---------- dashboard layout ---------- */
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(352px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.dash-grid > .card { margin-bottom: 0; }
+.card.span-2 { grid-column: 1 / -1; }
 
 /* ---------- field rows (review) ---------- */
 
@@ -333,27 +755,36 @@ table.data td.mono, .mono { font-family: var(--mono); font-size: 12px; }
 
 /* ---------- po cards ---------- */
 
-.po-card { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; background: var(--surface); }
+.po-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
 .po-card > header {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 11px 15px;
+  gap: 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
+  border-radius: var(--radius) var(--radius) 0 0;
   flex-wrap: wrap;
 }
-.po-card > header .po-id { font-weight: 700; font-size: 14px; font-family: var(--mono); }
-.po-card > header .file { color: var(--faint); font-size: 12px; }
+
+.po-card > header .po-id { font-weight: 700; font-size: 13.5px; font-family: var(--mono); }
+.po-card > header .file { color: var(--faint); font-size: 11.5px; }
 .po-card > header .spacer { flex: 1; }
-.po-card .body { padding: 15px; }
+.po-card .body { padding: 14px; }
 .po-card.excluded { opacity: .5; }
 
-details.raw > summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 0; }
+details.raw > summary { cursor: pointer; font-size: 12px; color: var(--accent); padding: 6px 0; }
 details.raw pre {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 11px;
   overflow: auto;
   max-height: 320px;
@@ -363,11 +794,11 @@ details.raw pre {
   white-space: pre-wrap;
 }
 
-/* ---------- preview ---------- */
+/* ---------- preview & strips ---------- */
 
 .email-preview {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 18px;
   background: #fff;
   color: #1a1a1a;
@@ -383,32 +814,50 @@ details.raw pre {
   flex-wrap: wrap;
   font-size: 12.5px;
   color: var(--muted);
-  padding: 9px 18px;
+  padding: 9px 16px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
 
-.status-strip b { color: var(--text); font-weight: 600; }
+.status-strip b { color: var(--text); font-weight: 650; }
 
-.empty { text-align: center; color: var(--faint); padding: 40px 20px; font-size: 13.5px; }
+.empty { text-align: center; color: var(--faint); padding: 38px 20px; font-size: 13.5px; }
+
+/* ---------- toast & tooltip ---------- */
 
 .toast {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 18px;
+  bottom: 18px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-left: 3px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 11px 16px;
-  box-shadow: 0 8px 24px rgba(16, 24, 40, .16);
+  box-shadow: var(--shadow-3);
   font-size: 13px;
   z-index: 100;
   max-width: 380px;
 }
 
-.toast.ok { border-left-color: var(--ok); }
-.toast.error { border-left-color: var(--danger); }
+.toast.ok { border-left-color: var(--good); }
+.toast.error { border-left-color: var(--critical); }
+
+#tooltip {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  background: #1c2026;
+  color: #f5f6f7;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 6px 9px;
+  border-radius: 5px;
+  box-shadow: var(--shadow-3);
+  max-width: 280px;
+}
+
+#tooltip[hidden] { display: none !important; }
 
 code.inline {
   font-family: var(--mono);
@@ -421,27 +870,7 @@ code.inline {
 ul.tight { margin: 8px 0; padding-left: 20px; }
 ul.tight li { margin: 3px 0; }
 
-/* ---------- teams: context bar, contacts, checkbox grids ---------- */
-
-#contextBar {
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  padding: 8px 22px;
-}
-
-.context-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-wrap: wrap;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.context-row select { width: auto; min-width: 190px; max-width: 320px; }
-.context-row .spacer { flex: 1; }
-.context-label { font-size: 12px; font-weight: 600; color: var(--muted); }
-.context-note { font-size: 12px; color: var(--faint); }
+/* ---------- contacts, checkboxes ---------- */
 
 .contact-row {
   display: grid;
@@ -456,14 +885,7 @@ ul.tight li { margin: 3px 0; }
 .contact-role b { font-size: 12.5px; }
 .contact-role .note { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 
-.check-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin: 6px 0;
-}
-
+.check-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
 .check-inline input { width: auto; }
 
 .check-grid {
@@ -473,11 +895,24 @@ ul.tight li { margin: 3px 0; }
   margin-bottom: 8px;
 }
 
-button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
+button.btn.small.danger { color: var(--critical); border-color: var(--border-strong); }
+
+@media (max-width: 860px) {
+  #contextBar { position: static; }
+  .bar-row { grid-template-columns: 1fr; gap: 4px; }
+  .bar-total { text-align: left; }
+}
 
 @media (max-width: 720px) {
   .contact-row { grid-template-columns: 1fr; }
   .context-row select { min-width: 0; flex: 1; }
+  main { padding: 14px; }
+}
+
+@media print {
+  header.app, #contextBar, .btn-row, nav.tabs { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; break-inside: avoid; }
 }
 </style>
 </head>
@@ -486,18 +921,20 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
 <header class="app">
   <div class="brandline">
     <div class="brand">AMI <span>Order Desk</span></div>
-    <div class="tagline">Multi-account &middot; shared templates &middot; Europe and US divisions</div>
+    <div class="tagline">Accounts &middot; item trackers &middot; shared templates</div>
     <span class="spacer"></span>
     <div class="tagline">Runs entirely on this computer &middot; no internet, no accounts, no AI service</div>
   </div>
   <nav class="tabs" role="tablist">
-    <button data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
+    <button data-tab="dashboard" role="tab" aria-selected="false" disabled>Account Health</button>
     <button data-tab="orders" role="tab" aria-selected="false" disabled><span class="step-no">1</span>Orders</button>
     <button data-tab="review" role="tab" aria-selected="false" disabled><span class="step-no">2</span>Review &amp; post</button>
     <button data-tab="email" role="tab" aria-selected="false" disabled><span class="step-no">3</span>Emails</button>
-    <button data-tab="followups" role="tab" aria-selected="false" disabled><span class="step-no">4</span>Follow-ups</button>
+    <button data-tab="orderstatus" role="tab" aria-selected="false" disabled>Order status</button>
+    <button data-tab="followups" role="tab" aria-selected="false" disabled>Follow-ups</button>
     <button data-tab="templates" role="tab" aria-selected="false" disabled>Templates</button>
     <button data-tab="accounts" role="tab" aria-selected="false" disabled>Accounts</button>
+    <button data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
   </nav>
 </header>
 
@@ -505,21 +942,8 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
 
 <main>
 
-  <section class="panel" data-panel="workspace">
-    <div class="card">
-      <h2>Workspace</h2>
-      <div class="body">
-        <div class="msg info" id="noFolderNote" hidden>
-          <span class="icon">i</span>
-          <div>
-            <strong>This browser cannot open folders.</strong>
-            <span class="detail">Use Microsoft Edge or Chrome for the shared-folder setup. Anywhere else,
-            load a workspace bundle instead &mdash; you will need to export a new bundle to share changes.</span>
-          </div>
-        </div>
-        <div id="workspaceBody"></div>
-      </div>
-    </div>
+  <section class="panel" data-panel="dashboard" hidden>
+    <div id="dashboardBody"></div>
   </section>
 
   <section class="panel" data-panel="orders" hidden>
@@ -553,6 +977,10 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
     </div>
   </section>
 
+  <section class="panel" data-panel="orderstatus" hidden>
+    <div id="orderStatusBody"></div>
+  </section>
+
   <section class="panel" data-panel="followups" hidden>
     <div class="card">
       <h2>Outstanding items</h2>
@@ -569,12 +997,31 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
 
   <section class="panel" data-panel="accounts" hidden>
     <div class="card">
-      <h2>Accounts, divisions and people</h2>
+      <h2>Accounts, items and people</h2>
       <div class="body" id="accountsBody"></div>
     </div>
   </section>
 
+  <section class="panel" data-panel="workspace">
+    <div class="card">
+      <h2>Workspace</h2>
+      <div class="body">
+        <div class="msg info" id="noFolderNote" hidden>
+          <span class="icon">i</span>
+          <div>
+            <strong>This browser cannot open folders.</strong>
+            <span class="detail">Use Microsoft Edge or Chrome for the shared-folder setup. Anywhere else,
+            load a workspace bundle instead &mdash; you will need to export a new bundle to share changes.</span>
+          </div>
+        </div>
+        <div id="workspaceBody"></div>
+      </div>
+    </div>
+  </section>
+
 </main>
+
+<div id="tooltip" hidden></div>
 
 <script>/* AMI Order Desk — core engine.
  *
@@ -3360,6 +3807,663 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 </script>
+<script>/* Order status model: the five pipeline stages, where a status is stored,
+ * what the tracker itself already implies, and the roll-ups the dashboard needs.
+ *
+ * A status is either SET by a person or DERIVED from dated columns already in the
+ * tracker. Nothing is invented: an order with neither reads "not set".
+ *
+ * Extends the global `AMI` namespace.
+ */
+(function (global) {
+  'use strict';
+
+  const AMI = global.AMI || (global.AMI = {});
+  const DEC = new TextDecoder('utf-8');
+  const ENC = new TextEncoder();
+
+  const STATUS_PATH = 'order-status.json';
+
+  /**
+   * The pipeline, in order. `step` drives the ordinal colour ramp and the
+   * kanban column order; `open` marks the stages that still need work.
+   */
+  const ORDER_STATUSES = [
+    {
+      id: 'placed', step: 1, open: true,
+      label: 'Order placed – awaiting shipment', short: 'Awaiting shipment',
+      hint: 'Sent to the winery; nothing has been collected yet.',
+    },
+    {
+      id: 'transit', step: 2, open: true,
+      label: 'In transit', short: 'In transit',
+      hint: 'Collected from the cellars, not yet delivered.',
+    },
+    {
+      id: 'delivered', step: 3, open: true,
+      label: 'Delivered', short: 'Delivered',
+      hint: 'Arrived at the delivery point; paperwork may still be open.',
+    },
+    {
+      id: 'closed', step: 4, open: false,
+      label: 'Closed', short: 'Closed',
+      hint: 'Everything received and reconciled. Not derivable from the tracker — set it here.',
+    },
+    {
+      id: 'invoiced', step: 5, open: false,
+      label: 'Invoiced', short: 'Invoiced',
+      hint: 'Billed out.',
+    },
+  ];
+
+  const statusById = (id) => ORDER_STATUSES.find((s) => s.id === id) || null;
+  const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
+
+  /* ------------------------------------------------------------------ *
+   * Store
+   * ------------------------------------------------------------------ */
+
+  const statusKey = (accountId, itemId, po) => accountId + '/' + itemId + '/' + String(po).trim();
+
+  function emptyStatusDoc() {
+    return { version: 1, updated: new Date().toISOString(), entries: {} };
+  }
+
+  async function loadStatuses(store) {
+    const bytes = await store.read(STATUS_PATH);
+    if (!bytes) return emptyStatusDoc();
+    try {
+      const parsed = JSON.parse(DEC.decode(bytes));
+      return { version: 1, updated: parsed.updated || '', entries: parsed.entries || {} };
+    } catch (e) {
+      throw new Error('order-status.json could not be read: ' + e.message);
+    }
+  }
+
+  /**
+   * Merge two status documents entry by entry, newest wins.
+   * Statuses change often and independently, so a whole-file conflict would be
+   * the wrong unit — two people updating different orders must both survive.
+   */
+  function mergeStatusDocs(mine, theirs) {
+    const out = { version: 1, updated: new Date().toISOString(), entries: {} };
+    const keys = new Set([...Object.keys(mine.entries || {}), ...Object.keys(theirs.entries || {})]);
+    for (const k of keys) {
+      const a = (mine.entries || {})[k];
+      const b = (theirs.entries || {})[k];
+      if (!a) { out.entries[k] = b; continue; }
+      if (!b) { out.entries[k] = a; continue; }
+      out.entries[k] = (String(b.updated || '') > String(a.updated || '')) ? b : a;
+    }
+    return out;
+  }
+
+  async function saveStatuses(store, doc, opts) {
+    const options = opts || {};
+    let merged = doc;
+    const existing = await store.read(STATUS_PATH);
+    if (existing) {
+      try {
+        const onDisk = JSON.parse(DEC.decode(existing));
+        merged = mergeStatusDocs(doc, { entries: onDisk.entries || {} });
+      } catch (e) { /* unreadable on disk: our copy wins */ }
+    }
+    merged.updated = new Date().toISOString();
+    merged.updatedBy = options.by || '';
+    await store.write(STATUS_PATH, ENC.encode(JSON.stringify(merged, null, 2)));
+    return merged;
+  }
+
+  function setStatus(doc, key, statusId, by, note) {
+    if (!statusById(statusId)) throw new Error('Unknown status "' + statusId + '".');
+    doc.entries[key] = {
+      status: statusId,
+      updated: new Date().toISOString(),
+      updatedBy: by || '',
+      note: note || '',
+    };
+    return doc;
+  }
+
+  function clearStatus(doc, key) {
+    delete doc.entries[key];
+    return doc;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Reading orders out of a tracker
+   * ------------------------------------------------------------------ */
+
+  /* Tracker columns the status model reads, most advanced stage first. */
+  const STAGE_COLUMNS = [
+    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded' },
+    { statusId: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, reason: 'a delivery date is recorded' },
+    { statusId: 'transit', re: /^Actual Collection Date/i, reason: 'a collection date is recorded' },
+    { statusId: 'placed', re: /^PO date sent to winery/i, reason: 'the PO has been sent to the winery' },
+  ];
+
+  const DATE_COLUMNS = [
+    { key: 'poReceived', re: /^PO Received Date/i, label: 'PO received' },
+    { key: 'poSent', re: /^PO date sent to winery/i, label: 'PO sent to winery' },
+    { key: 'requestedCollection', re: /^AMI Requested\s+Collection Date/i, label: 'requested collection' },
+    { key: 'wineryConfirmed', re: /^Winery Confirmed Available Date/i, label: 'winery confirmed' },
+    { key: 'actualCollection', re: /^Actual Collection Date/i, label: 'collected' },
+    { key: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, label: 'delivered' },
+    { key: 'requiredDelivery', re: /^Customer Required Delivery Date/i, label: 'customer required delivery' },
+  ];
+
+  const VALUE_COLUMNS = [
+    { key: 'bottles', re: /^Quantity \(bt\)/i },
+    { key: 'cases', re: /^Quantity \(cs\)/i },
+    { key: 'pallets', re: /^Quantity \(pallets\)/i },
+    { key: 'lot', re: /^Lot Number/i },
+    { key: 'navInvoice', re: /^NAV INV/i },
+    { key: 'balanceBt', re: /^Balance on Contract\s*\(bt\)/i },
+    { key: 'notes', re: /^Notes/i },
+  ];
+
+  /* A date outside this window is a typo in the tracker, not history. */
+  const MIN_PLAUSIBLE = new Date(2000, 0, 1);
+  function plausibleWindow(today) {
+    const t = today || new Date();
+    return { min: MIN_PLAUSIBLE, max: new Date(t.getFullYear() + 3, t.getMonth(), t.getDate()) };
+  }
+
+  const colFor = (header, re) => {
+    const c = header.columns.find((x) => re.test(x.header));
+    return c ? c.col : null;
+  };
+
+  /** What the tracker's own dated columns already say about an order. */
+  function deriveStatus(sheet, header, row) {
+    for (const stage of STAGE_COLUMNS) {
+      const col = colFor(header, stage.re);
+      if (!col) continue;
+      const cell = sheet.cell(row, col);
+      if (!cell) continue;
+      const text = String(cell.text || '').trim();
+      if (!text || /^to fill$/i.test(text)) continue;
+      return { statusId: stage.statusId, reason: stage.reason };
+    }
+    return null;
+  }
+
+  /** Every order on one item's tracker, with the values the dashboard needs. */
+  function readOrders(sheet, header, context) {
+    const ctx = context || {};
+    const poCol = colFor(header, /^PO\s*#/i);
+    if (!poCol) return [];
+
+    const dateCols = DATE_COLUMNS.map((d) => ({ ...d, col: colFor(header, d.re) })).filter((d) => d.col);
+    const valueCols = VALUE_COLUMNS.map((v) => ({ ...v, col: colFor(header, v.re) })).filter((v) => v.col);
+
+    const win = plausibleWindow(ctx.today);
+    const out = [];
+    for (const row of AMI.dataRows(sheet, header)) {
+      const po = String(sheet.cellText(row, poCol) || '').trim();
+      if (!po) continue;
+
+      const dates = {};
+      const dateIssues = [];
+      let lastEvent = null;
+      let lastEventLabel = '';
+      for (const d of dateCols) {
+        const cell = sheet.cell(row, d.col);
+        if (!cell || cell.num == null || !Number.isFinite(cell.num) || cell.num < 1) continue;
+        const date = AMI.serialToDate(cell.num);
+        // A mistyped serial would otherwise dominate every ranking it touches.
+        if (date < win.min || date > win.max) {
+          dateIssues.push({ key: d.key, label: d.label, date, serial: cell.num });
+          continue;
+        }
+        dates[d.key] = date;
+        // The most recent thing that actually happened, ignoring planned dates.
+        if (d.key === 'requiredDelivery' || d.key === 'requestedCollection') continue;
+        if (!lastEvent || date > lastEvent) { lastEvent = date; lastEventLabel = d.label; }
+      }
+
+      const values = {};
+      for (const v of valueCols) {
+        const cell = sheet.cell(row, v.col);
+        if (!cell) continue;
+        values[v.key] = cell.num != null && Number.isFinite(cell.num) ? cell.num : String(cell.text || '').trim();
+      }
+
+      out.push({
+        key: statusKey(ctx.accountId || '', ctx.itemId || '', po),
+        po, row,
+        accountId: ctx.accountId || '', accountName: ctx.accountName || '',
+        divisionId: ctx.divisionId || '',
+        itemId: ctx.itemId || '', itemName: ctx.itemName || '',
+        dates, values, dateIssues,
+        lastEvent, lastEventLabel,
+        derived: deriveStatus(sheet, header, row),
+      });
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Effective status
+   * ------------------------------------------------------------------ */
+
+  /**
+   * What an order's status is right now.
+   * A person's selection always beats the tracker's implication, and the source
+   * is reported so the interface can show which of the two it is.
+   */
+  function effectiveStatus(order, statusDoc) {
+    const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
+    if (entry && statusById(entry.status)) {
+      return {
+        statusId: entry.status, source: 'set',
+        updated: entry.updated || '', updatedBy: entry.updatedBy || '', note: entry.note || '',
+        reason: 'set by ' + (entry.updatedBy || 'someone') + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : ''),
+      };
+    }
+    if (order.derived) {
+      return {
+        statusId: order.derived.statusId, source: 'derived',
+        updated: '', updatedBy: '', note: '',
+        reason: 'From the tracker: ' + order.derived.reason + '.',
+      };
+    }
+    return { statusId: '', source: 'none', updated: '', updatedBy: '', note: '', reason: 'nothing in the tracker indicates a stage' };
+  }
+
+  function daysSince(date, today) {
+    if (!date) return null;
+    return AMI.daysBetween(date, today || new Date());
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Roll-ups
+   * ------------------------------------------------------------------ */
+
+  function emptyCounts() {
+    const c = {};
+    for (const s of ORDER_STATUSES) c[s.id] = 0;
+    c.unset = 0;
+    return c;
+  }
+
+  /** Attach the effective status and aging to each order. */
+  function decorate(orders, statusDoc, today) {
+    const now = today || new Date();
+    return orders.map((o) => {
+      const status = effectiveStatus(o, statusDoc);
+      return Object.assign({}, o, {
+        status,
+        isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
+        ageDays: daysSince(o.lastEvent, now),
+      });
+    });
+  }
+
+  function countByStatus(orders) {
+    const counts = emptyCounts();
+    for (const o of orders) {
+      if (!o.status.statusId) counts.unset++;
+      else counts[o.status.statusId]++;
+    }
+    return counts;
+  }
+
+  /* Thresholds are stated in the interface, so "attention" is never a black box. */
+  const HEALTH_THRESHOLDS = { warningDays: 21, criticalDays: 45, warningFollowUps: 1, criticalFollowUps: 5 };
+
+  /**
+   * A per-account roll-up. `health` is a plain reading of two explicit signals —
+   * how long an open order has sat without a dated event, and how many follow-up
+   * items are outstanding — never a score.
+   */
+  function summariseAccount(account, divisionName, orders, followUpCount, thresholds) {
+    const t = Object.assign({}, HEALTH_THRESHOLDS, thresholds || {});
+    const open = orders.filter((o) => o.isOpen);
+    const counts = countByStatus(orders);
+    const stalest = open.reduce((worst, o) => (
+      o.ageDays != null && (!worst || o.ageDays > worst.ageDays) ? o : worst), null);
+
+    const reasons = [];
+    let level = 'good';
+    const stalestDays = stalest && stalest.ageDays != null ? stalest.ageDays : 0;
+    if (stalestDays >= t.criticalDays) {
+      level = 'critical';
+      reasons.push('PO ' + stalest.po + ' has had no dated activity for ' + stalestDays + ' days');
+    } else if (stalestDays >= t.warningDays) {
+      level = 'warning';
+      reasons.push('PO ' + stalest.po + ' has had no dated activity for ' + stalestDays + ' days');
+    }
+    if ((followUpCount || 0) >= t.criticalFollowUps) {
+      level = 'critical';
+      reasons.push(followUpCount + ' outstanding follow-up items');
+    } else if ((followUpCount || 0) >= t.warningFollowUps && level === 'good') {
+      level = 'warning';
+      reasons.push(followUpCount + ' outstanding follow-up item(s)');
+    }
+    const unset = counts.unset;
+    if (unset && level === 'good') reasons.push(unset + ' order(s) with no status yet');
+
+    return {
+      accountId: account.id, accountName: account.name, divisionId: account.divisionId,
+      divisionName: divisionName || '',
+      total: orders.length, open: open.length, counts,
+      followUps: followUpCount || 0,
+      stalest, stalestDays,
+      health: { level, reasons },
+      thresholds: t,
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Account summary document
+   * ------------------------------------------------------------------ */
+
+  const esc = (s) => AMI.escapeXml(s == null ? '' : String(s));
+
+  const TD = 'border:1px solid #d8d8d8;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:10.5pt;';
+  const TH = TD + 'background:#f3f3f3;text-align:left;font-weight:600;';
+
+  /**
+   * A plain-HTML summary of an account's open orders and where each stands.
+   * Every column is read from the tracker or from the stored status; there is no
+   * narrative text beyond the headings.
+   */
+  function buildAccountSummary(options) {
+    const o = options || {};
+    const orders = (o.orders || []).slice();
+    const open = orders.filter((x) => x.isOpen);
+    const counts = countByStatus(orders);
+    const today = o.today || new Date();
+
+    orders.sort((a, b) => (a.itemName || '').localeCompare(b.itemName || '') || a.po.localeCompare(b.po));
+    const shown = o.openOnly === false ? orders : open.slice().sort(
+      (a, b) => (a.itemName || '').localeCompare(b.itemName || '') || a.po.localeCompare(b.po));
+
+    const countRows = ORDER_STATUSES.map((s) =>
+      '<tr><td style="' + TD + '">' + esc(s.label) + '</td>'
+      + '<td style="' + TD + 'text-align:right;">' + counts[s.id] + '</td></tr>').join('')
+      + (counts.unset ? '<tr><td style="' + TD + '">No status set</td><td style="' + TD
+        + 'text-align:right;">' + counts.unset + '</td></tr>' : '');
+
+    const headers = ['PO #', 'Item', 'Cases', 'Status', 'Status source', 'Last dated activity', 'Days'];
+    const rows = shown.map((x) => {
+      const st = statusById(x.status.statusId);
+      return '<tr>'
+        + '<td style="' + TD + '">' + esc(x.po) + '</td>'
+        + '<td style="' + TD + '">' + esc(x.itemName) + '</td>'
+        + '<td style="' + TD + 'text-align:right;">' + esc(x.values.cases != null ? x.values.cases : '') + '</td>'
+        + '<td style="' + TD + '">' + esc(st ? st.label : 'Not set') + '</td>'
+        + '<td style="' + TD + '">' + esc(x.status.reason) + '</td>'
+        + '<td style="' + TD + '">' + esc(x.lastEvent ? AMI.formatShort(x.lastEvent) + ' (' + x.lastEventLabel + ')' : '—') + '</td>'
+        + '<td style="' + TD + 'text-align:right;">' + esc(x.ageDays == null ? '—' : x.ageDays) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    const html = [
+      '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#181818;">',
+      '<h2 style="margin:0 0 2px;font-size:15pt;">' + esc(o.accountName) + ' — account summary</h2>',
+      '<p style="margin:0 0 14px;color:#5c5c5c;font-size:10pt;">'
+      + esc(o.divisionName ? o.divisionName + ' division · ' : '')
+      + 'as at ' + esc(AMI.formatEmailDate(today))
+      + (o.preparedBy ? ' · prepared by ' + esc(o.preparedBy) : '') + '</p>',
+      '<p style="margin:0 0 10px;"><strong>' + open.length + '</strong> open order(s) of <strong>'
+      + orders.length + '</strong> on the tracker'
+      + (o.itemNames && o.itemNames.length ? ', across ' + esc(o.itemNames.join(', ')) : '') + '.</p>',
+      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">Orders by status</h3>',
+      '<table style="border-collapse:collapse;"><tbody>' + countRows + '</tbody></table>',
+      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">'
+      + (o.openOnly === false ? 'All orders' : 'Open orders') + '</h3>',
+      shown.length
+        ? '<table style="border-collapse:collapse;"><thead><tr>'
+          + headers.map((h) => '<th style="' + TH + '">' + esc(h) + '</th>').join('')
+          + '</tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<p style="margin:0;">Nothing open.</p>',
+      '<p style="margin:16px 0 0;color:#5c5c5c;font-size:9.5pt;">'
+      + 'Status source shows whether a person set the stage or it was read from the tracker’s dated columns. '
+      + 'Days counts from the last dated activity on the row.</p>',
+      '</div>',
+    ].join('\n');
+
+    return { html, open: open.length, total: orders.length, counts };
+  }
+
+  Object.assign(AMI, {
+    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS,
+    statusById, isOpenStatus, statusKey,
+    emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
+    deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
+    summariseAccount, buildAccountSummary, daysSince,
+  });
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>/* Chart builders for the Account Health dashboard.
+ *
+ * Plain HTML and inline SVG — no libraries, no network. Colour comes from CSS
+ * custom properties so light and dark are separate, deliberate palettes rather
+ * than an automatic flip. Series colour never carries meaning alone: every chart
+ * ships a legend, direct labels, or both, and each mark exposes `data-tip` for
+ * the shared tooltip.
+ *
+ * Extends the global `AMI` namespace.
+ */
+(function (global) {
+  'use strict';
+
+  const AMI = global.AMI || (global.AMI = {});
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const fmt = (n) => (n == null || !Number.isFinite(n) ? '—' : n.toLocaleString());
+
+  /* ------------------------------------------------------------------ *
+   * Stat tiles
+   * ------------------------------------------------------------------ */
+
+  /**
+   * A row of headline figures. Each tile states what it counts; `tone` maps to
+   * the reserved status palette and always ships with its label, never colour alone.
+   */
+  function statTiles(tiles) {
+    return '<div class="stat-row">' + tiles.map((t) => {
+      const tone = t.tone ? ' tone-' + t.tone : '';
+      return '<div class="stat-tile' + tone + '"'
+        + (t.tip ? ' data-tip="' + esc(t.tip) + '"' : '') + '>'
+        + '<div class="stat-label">' + esc(t.label) + '</div>'
+        + '<div class="stat-value">' + esc(t.value) + '</div>'
+        + (t.sub ? '<div class="stat-sub">' + esc(t.sub) + '</div>' : '')
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Stacked bar (ordinal pipeline)
+   * ------------------------------------------------------------------ */
+
+  /**
+   * One stacked bar. Segments carry a 2px surface gap so adjacent stages stay
+   * separable without relying on hue contrast alone.
+   */
+  function stackedBar(segments, opts) {
+    const o = opts || {};
+    const total = segments.reduce((a, s) => a + (s.value || 0), 0);
+    if (!total) {
+      return '<div class="bar-track empty"><span class="bar-empty">' + esc(o.emptyText || 'Nothing to show') + '</span></div>';
+    }
+    const parts = segments.filter((s) => s.value > 0).map((s) => {
+      const pct = (s.value / total) * 100;
+      const label = pct >= (o.labelThreshold || 11)
+        ? '<span class="bar-inline"' + (s.ink ? ' style="--ink:' + s.ink + '"' : '') + '>'
+          + esc(s.value) + '</span>'
+        : '';
+      return '<span class="bar-seg" style="flex:' + s.value + ';background:' + s.color + ';"'
+        + ' data-tip="' + esc(s.label + ': ' + fmt(s.value) + ' of ' + fmt(total)
+          + ' (' + Math.round(pct) + '%)') + '">' + label + '</span>';
+    }).join('');
+    return '<div class="bar-track">' + parts + '</div>';
+  }
+
+  /** Shared key for anything drawn with the status ramp. */
+  function statusLegend(statuses, counts) {
+    return '<ul class="legend">' + statuses.map((s) => {
+      const n = counts ? counts[s.id] : null;
+      return '<li data-tip="' + esc(s.hint) + '">'
+        + '<span class="swatch" style="background:var(--stage-' + s.step + ');"></span>'
+        + '<span class="legend-label">' + esc(s.short) + '</span>'
+        + (n != null ? '<span class="legend-value">' + fmt(n) + '</span>' : '')
+        + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Bar list (one labelled bar per row)
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Rows of `{ label, sub, segments | value, meta }`. Used for orders-by-account
+   * and for the aging list; the row label is always present, so the bars add
+   * proportion rather than carrying identity.
+   */
+  function barList(rows, opts) {
+    const o = opts || {};
+    if (!rows.length) return '<p class="chart-empty">' + esc(o.emptyText || 'Nothing to show') + '</p>';
+    const max = o.max != null ? o.max : Math.max(1, ...rows.map((r) => (
+      r.segments ? r.segments.reduce((a, s) => a + s.value, 0) : (r.value || 0))));
+
+    return '<div class="bar-list">' + rows.map((r) => {
+      const total = r.segments ? r.segments.reduce((a, s) => a + s.value, 0) : (r.value || 0);
+      const scale = max ? (total / max) * 100 : 0;
+      const inner = r.segments
+        ? stackedBar(r.segments, { labelThreshold: 14 })
+        : '<div class="bar-track"><span class="bar-seg" style="flex:1;background:'
+          + (r.color || 'var(--stage-3)') + ';" data-tip="' + esc(r.tip || (r.label + ': ' + fmt(total))) + '"></span></div>';
+      return '<div class="bar-row"' + (r.onclickKey ? ' data-row-key="' + esc(r.onclickKey) + '"' : '') + '>'
+        + '<div class="bar-label">' + esc(r.label)
+        + (r.sub ? '<span class="bar-sub">' + esc(r.sub) + '</span>' : '') + '</div>'
+        + '<div class="bar-plot" style="--fill:' + scale.toFixed(2) + '%">' + inner + '</div>'
+        + '<div class="bar-total">' + esc(r.meta != null ? r.meta : fmt(total)) + '</div>'
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Column chart (volume over time)
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Monthly columns. A single series, so no legend — the title names it. Value
+   * labels are selective: the peak and the final column only.
+   */
+  function columnChart(points, opts) {
+    const o = opts || {};
+    const width = o.width || 640;
+    const height = o.height || 168;
+    const padL = 34;
+    const padB = 26;
+    const padT = 12;
+    if (!points.length) return '<p class="chart-empty">' + esc(o.emptyText || 'No dated activity yet') + '</p>';
+
+    const max = Math.max(1, ...points.map((p) => p.value));
+    const plotW = width - padL - 8;
+    const plotH = height - padT - padB;
+    const slot = plotW / points.length;
+    const barW = Math.max(6, Math.min(30, slot - 8));
+    const peakIdx = points.reduce((bi, p, i) => (p.value > points[bi].value ? i : bi), 0);
+
+    const gridVals = [0, max / 2, max];
+    const grid = gridVals.map((v) => {
+      const y = padT + plotH - (v / max) * plotH;
+      return '<line x1="' + padL + '" x2="' + (width - 8) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1)
+        + '" class="grid"/>'
+        + '<text x="' + (padL - 7) + '" y="' + (y + 3.5).toFixed(1) + '" class="axis" text-anchor="end">'
+        + esc(Math.round(v)) + '</text>';
+    }).join('');
+
+    const bars = points.map((p, i) => {
+      const h = (p.value / max) * plotH;
+      const x = padL + i * slot + (slot - barW) / 2;
+      const y = padT + plotH - h;
+      const showLabel = i === peakIdx || i === points.length - 1;
+      const r = Math.min(4, barW / 2);
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1)
+        + '" height="' + Math.max(h, p.value ? 2 : 0).toFixed(1) + '" rx="' + r + '" class="col"'
+        + ' data-tip="' + esc(p.label + ': ' + fmt(p.value) + (o.unit ? ' ' + o.unit : '')) + '"/>'
+        + (showLabel && p.value
+          ? '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (y - 5).toFixed(1)
+            + '" class="col-label" text-anchor="middle">' + esc(fmt(p.value)) + '</text>'
+          : '')
+        + (i % (points.length > 8 ? 2 : 1) === 0
+          ? '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 8)
+            + '" class="axis" text-anchor="middle">' + esc(p.short || p.label) + '</text>'
+          : '');
+    }).join('');
+
+    return '<svg class="chart" viewBox="0 0 ' + width + ' ' + height + '" role="img" '
+      + 'aria-label="' + esc(o.ariaLabel || 'Monthly volume') + '" preserveAspectRatio="xMidYMid meet">'
+      + grid + bars + '</svg>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Health pill
+   * ------------------------------------------------------------------ */
+
+  const HEALTH_ICON = { good: '✓', warning: '!', critical: '!' };
+  const HEALTH_WORD = { good: 'On track', warning: 'Needs attention', critical: 'At risk' };
+
+  /** Status colour is never alone: an icon and a word ship with it. */
+  function healthPill(level, tip) {
+    return '<span class="health health-' + esc(level) + '"'
+      + (tip ? ' data-tip="' + esc(tip) + '"' : '') + '>'
+      + '<span class="health-icon" aria-hidden="true">' + (HEALTH_ICON[level] || '') + '</span>'
+      + esc(HEALTH_WORD[level] || level) + '</span>';
+  }
+
+  function statusPill(status, opts) {
+    const o = opts || {};
+    if (!status || !status.id) {
+      return '<span class="pill pill-unset"' + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>Not set</span>';
+    }
+    return '<span class="pill pill-stage" style="--pill:var(--stage-' + status.step + ');"'
+      + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>' + esc(o.short ? status.short : status.label) + '</span>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Monthly buckets
+   * ------------------------------------------------------------------ */
+
+  const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /** Bucket a set of dated values into the trailing `months` calendar months. */
+  function monthlySeries(entries, months, today) {
+    const now = today || new Date();
+    const n = months || 12;
+    const buckets = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        year: d.getFullYear(), month: d.getMonth(), value: 0,
+        short: MONTH_SHORT[d.getMonth()],
+        label: MONTH_SHORT[d.getMonth()] + ' ' + d.getFullYear(),
+      });
+    }
+    for (const e of entries) {
+      if (!e.date) continue;
+      const b = buckets.find((x) => x.year === e.date.getFullYear() && x.month === e.date.getMonth());
+      if (b) b.value += (e.value == null ? 1 : e.value);
+    }
+    return buckets;
+  }
+
+  Object.assign(AMI, {
+    statTiles, stackedBar, statusLegend, barList, columnChart,
+    healthPill, statusPill, monthlySeries, MONTH_SHORT,
+  });
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
 <script>/* AMI Order Desk (Teams) — multi-account, multi-item interface.
  * Depends on engine.js, templates.js and workspace.js (global `AMI`).
  * No network access of any kind.
@@ -3542,6 +4646,12 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
     openItems: [],
     selectedItems: new Set(),
     loading: false,
+    // Account Health
+    statusDoc: null,
+    portfolio: null,          // [{ account, item, sheet, header, config, orders, followUps }]
+    portfolioLoading: false,
+    filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
+    summaryHtml: '',
   };
 
   let nextId = 1;
@@ -3577,6 +4687,8 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
    * ------------------------------------------------------------------ */
 
   const RENDERERS = {
+    dashboard: renderDashboard,
+    orderstatus: renderOrderStatus,
     workspace: renderWorkspace,
     orders: renderIntake,
     review: renderReview,
@@ -3602,6 +4714,7 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
+      else if (t === 'dashboard' || t === 'orderstatus') b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -3706,6 +4819,13 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
     const { workspace, created } = await AMI.loadWorkspace(store);
     state.workspace = workspace;
     state.loadedAt = workspace.updated;
+    state.portfolio = null;
+    try {
+      state.statusDoc = await AMI.loadStatuses(store);
+    } catch (e) {
+      state.statusDoc = AMI.emptyStatusDoc();
+      toast(e.message, 'error');
+    }
 
     const saved = loadLocal();
     if (saved.userId && workspace.users.some((u) => u.id === saved.userId)) state.userId = saved.userId;
@@ -3718,6 +4838,7 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
     renderHeaderBar();
     if (preferred) await selectAccount(preferred, saved.itemId);
     else { renderWorkspace(); refreshTabs(); }
+    if (!created && currentUser()) showTab('dashboard');
 
     if (created) {
       toast('New workspace created. Add divisions, accounts and items under Accounts.', 'ok');
@@ -4362,6 +5483,7 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
 
       st.trackerBytes = out;
       st.posted = true;
+      state.portfolio = null;
       await rebuildPlans();
       renderWorkspace();
       if (!quiet) { renderReview(); showTab('email'); }
@@ -5438,6 +6560,789 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
   }
 
   /* ------------------------------------------------------------------ *
+   * Tooltip
+   * ------------------------------------------------------------------ */
+
+  function initTooltip() {
+    const tip = $('#tooltip');
+    if (!tip) return;
+    let current = null;
+
+    document.addEventListener('mouseover', (e) => {
+      const host = e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (!host || host === current) return;
+      current = host;
+      tip.textContent = host.getAttribute('data-tip');
+      tip.hidden = false;
+      position(e);
+    });
+    document.addEventListener('mousemove', (e) => { if (current) position(e); });
+    document.addEventListener('mouseout', (e) => {
+      if (!current) return;
+      const to = e.relatedTarget;
+      if (to && current.contains(to)) return;
+      current = null;
+      tip.hidden = true;
+    });
+
+    function position(e) {
+      const pad = 12;
+      const r = tip.getBoundingClientRect();
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+      tip.style.left = Math.max(6, x) + 'px';
+      tip.style.top = Math.max(6, y) + 'px';
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Portfolio: every tracker the signed-in person can see
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Read every item tracker across the user's accounts once, so the dashboard
+   * can span accounts and divisions. Cached until something is posted.
+   */
+  async function ensurePortfolio(force) {
+    if (state.portfolio && !force) return state.portfolio;
+    if (!state.store || !state.workspace) return [];
+
+    state.portfolioLoading = true;
+    const out = [];
+    const problems = [];
+
+    for (const account of visibleAccounts()) {
+      const divisionName = AMI.divisionName(state.workspace, account.divisionId);
+      for (const item of AMI.accountItems(account)) {
+        if (!item.trackerPath) continue;
+        try {
+          const bytes = await state.store.read(item.trackerPath);
+          if (!bytes) { problems.push(item.name + ': tracker not found'); continue; }
+          const wb = await AMI.Workbook.load(bytes);
+          let sheetName = '';
+          if (item.sheet && wb.sheet(item.sheet) && AMI.findHeaderRow(wb.sheet(item.sheet))) sheetName = item.sheet;
+          else for (const sh of wb.sheets) if (AMI.findHeaderRow(sh)) sheetName = sh.name;
+          if (!sheetName) { problems.push(item.name + ': no sheet with a PO# header'); continue; }
+
+          const sheet = wb.sheet(sheetName);
+          const header = AMI.findHeaderRow(sheet);
+          out.push({
+            account, item, sheet, header,
+            config: AMI.readSheetConfig(sheet),
+            orders: AMI.readOrders(sheet, header, {
+              accountId: account.id, accountName: account.name, divisionId: account.divisionId,
+              divisionName, itemId: item.id, itemName: item.name,
+            }),
+            followUps: AMI.findOpenItems(sheet, header, new Date()),
+          });
+        } catch (e) {
+          problems.push(item.name + ': ' + e.message);
+        }
+      }
+    }
+
+    state.portfolio = out;
+    state.portfolioProblems = problems;
+    state.portfolioLoading = false;
+    return out;
+  }
+
+  /** Apply the division/account/item filters to the portfolio. */
+  function filteredPortfolio() {
+    const f = state.filters;
+    return (state.portfolio || []).filter((p) => {
+      if (f.divisionId && p.account.divisionId !== f.divisionId) return false;
+      if (f.accountId && p.account.id !== f.accountId) return false;
+      if (f.itemId && p.item.id !== f.itemId) return false;
+      return true;
+    });
+  }
+
+  /** Decorated orders for the current filters. */
+  function filteredOrders() {
+    const all = [];
+    for (const p of filteredPortfolio()) all.push(...p.orders);
+    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date());
+  }
+
+  async function applyStatus(key, statusId, note) {
+    const user = currentUser();
+    const by = user ? user.name : '';
+    if (!state.statusDoc) state.statusDoc = AMI.emptyStatusDoc();
+    if (statusId) AMI.setStatus(state.statusDoc, key, statusId, by, note);
+    else AMI.clearStatus(state.statusDoc, key);
+    try {
+      state.statusDoc = await AMI.saveStatuses(state.store, state.statusDoc, { by });
+      return true;
+    } catch (e) {
+      toast('Status not saved: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Shared filter bar
+   * ------------------------------------------------------------------ */
+
+  function filterBar(onChange, opts) {
+    const o = opts || {};
+    const ws = state.workspace;
+    const accounts = visibleAccounts();
+    const f = state.filters;
+
+    const divisions = ws.divisions.filter((d) => accounts.some((a) => a.divisionId === d.id));
+    const divisionSel = el('select', {
+      onchange: (e) => {
+        f.divisionId = e.target.value;
+        const stillVisible = accounts.some((a) => a.id === f.accountId && (!f.divisionId || a.divisionId === f.divisionId));
+        if (!stillVisible) { f.accountId = ''; f.itemId = ''; }
+        onChange();
+      },
+    }, [
+      el('option', { value: '', text: 'All divisions', selected: !f.divisionId }),
+      ...divisions.map((d) => el('option', { value: d.id, selected: d.id === f.divisionId, text: d.name })),
+    ]);
+
+    const inDivision = accounts.filter((a) => !f.divisionId || a.divisionId === f.divisionId);
+    const accountSel = el('select', {
+      onchange: (e) => { f.accountId = e.target.value; f.itemId = ''; onChange(); },
+    }, [
+      el('option', { value: '', text: 'All my accounts', selected: !f.accountId }),
+      ...inDivision.map((a) => el('option', { value: a.id, selected: a.id === f.accountId, text: a.name })),
+    ]);
+
+    const controls = [
+      el('label', { class: 'field' }, [el('span', { text: 'Division' }), divisionSel]),
+      el('label', { class: 'field' }, [el('span', { text: 'Account' }), accountSel]),
+    ];
+
+    if (o.withItem) {
+      const chosenAccount = accounts.find((a) => a.id === f.accountId);
+      const items = chosenAccount ? AMI.accountItems(chosenAccount)
+        : inDivision.flatMap((a) => AMI.accountItems(a));
+      controls.push(el('label', { class: 'field' }, [
+        el('span', { text: 'Item' }),
+        el('select', {
+          onchange: (e) => { f.itemId = e.target.value; onChange(); },
+        }, [
+          el('option', { value: '', text: 'All items', selected: !f.itemId }),
+          ...items.map((i) => el('option', { value: i.id, selected: i.id === f.itemId, text: i.name })),
+        ]),
+      ]));
+    }
+
+    if (o.withStatus) {
+      controls.push(el('label', { class: 'field' }, [
+        el('span', { text: 'Status' }),
+        el('select', {
+          onchange: (e) => { f.statusId = e.target.value; onChange(); },
+        }, [
+          el('option', { value: '', text: 'Any status', selected: !f.statusId }),
+          el('option', { value: '__open', text: 'Open only', selected: f.statusId === '__open' }),
+          el('option', { value: '__unset', text: 'No status set', selected: f.statusId === '__unset' }),
+          ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, selected: s.id === f.statusId, text: s.label })),
+        ]),
+      ]));
+    }
+
+    if (o.withSearch) {
+      const search = el('input', { type: 'text', value: f.query, placeholder: 'PO number…' });
+      search.addEventListener('input', () => { f.query = search.value; onChange(); });
+      controls.push(el('label', { class: 'field' }, [el('span', { text: 'Find' }), search]));
+    }
+
+    controls.push(el('span', { class: 'spacer' }));
+    controls.push(el('button', {
+      class: 'btn small ghost', text: 'Reset filters',
+      onclick: () => {
+        state.filters = { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' };
+        onChange();
+      },
+    }));
+    if (o.extra) controls.push(...[].concat(o.extra));
+
+    return el('div', { class: 'filter-bar' }, controls);
+  }
+
+  function pageHeader(eyebrow, title, description, actions) {
+    return el('div', { class: 'page-header' }, [
+      el('div', { class: 'titles' }, [
+        el('div', { class: 'eyebrow', text: eyebrow }),
+        el('h1', { text: title }),
+        description ? el('p', { text: description }) : null,
+      ]),
+      actions && actions.length ? el('div', { class: 'actions' }, actions) : null,
+    ]);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Account Health dashboard
+   * ------------------------------------------------------------------ */
+
+  async function renderDashboard() {
+    const host = $('#dashboardBody');
+    clear(host);
+    if (!state.workspace || !currentUser()) {
+      host.appendChild(el('div', { class: 'empty', text: 'Open the workspace and choose your name to see your accounts.' }));
+      return;
+    }
+
+    if (!state.portfolio) {
+      host.appendChild(el('div', { class: 'empty', text: 'Reading the trackers for your accounts…' }));
+      await ensurePortfolio();
+      renderDashboard();
+      return;
+    }
+
+    const orders = filteredOrders();
+    const scope = filteredPortfolio();
+    const counts = AMI.countByStatus(orders);
+    const open = orders.filter((o) => o.isOpen);
+    const unset = orders.filter((o) => !o.status.statusId);
+    const followUps = scope.reduce((n, p) => n + p.followUps.length, 0);
+    const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
+
+    host.appendChild(pageHeader(
+      'Account Health',
+      state.filters.accountId
+        ? (visibleAccounts().find((a) => a.id === state.filters.accountId) || {}).name || 'Account'
+        : 'All my accounts',
+      'Where every order stands right now, read from the item trackers and the statuses your team has set.',
+      [
+        el('button', {
+          class: 'btn', text: 'Refresh',
+          onclick: async () => { await ensurePortfolio(true); renderDashboard(); toast('Trackers re-read.', 'ok'); },
+        }),
+        el('button', {
+          class: 'btn primary', text: 'Generate account summary',
+          onclick: () => { showTab('orderstatus'); setTimeout(() => generateSummary(), 0); },
+        }),
+      ],
+    ));
+
+    host.appendChild(filterBar(() => renderDashboard(), { withItem: true }));
+
+    if (state.portfolioProblems && state.portfolioProblems.length) {
+      host.appendChild(el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', { text: state.portfolioProblems.length + ' tracker(s) could not be read.' }),
+          el('span', { class: 'detail', text: state.portfolioProblems.join(' · ') }),
+        ]),
+      ]));
+    }
+
+    if (!orders.length) {
+      host.appendChild(el('div', { class: 'empty', text: 'No orders on the trackers in scope.' }));
+      return;
+    }
+
+    // A mistyped date serial reads as a year in the far future. Surface it: it
+    // would otherwise skew every age on the board, and it is a real error to fix.
+    const dateIssues = orders.filter((o) => o.dateIssues && o.dateIssues.length);
+    if (dateIssues.length) {
+      const lines = [];
+      for (const o of dateIssues) {
+        for (const issue of o.dateIssues) {
+          lines.push('PO ' + o.po + ' (' + o.itemName + ') — ' + issue.label + ' reads '
+            + AMI.formatShort(issue.date) + ', from the value ' + issue.serial + '.');
+        }
+      }
+      const list = el('ul', { class: 'tight' });
+      for (const line of lines.slice(0, 6)) list.appendChild(el('li', { text: line }));
+      if (lines.length > 6) {
+        list.appendChild(el('li', { text: 'and ' + (lines.length - 6) + ' more.' }));
+      }
+      host.appendChild(el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', { text: dateIssues.length + ' order(s) have a date the tracker cannot mean.' }),
+          el('span', { class: 'detail', text: 'These are excluded from the ages and rankings below so they do not skew anything. Correct them in the workbook.' }),
+          list,
+        ]),
+      ]));
+    }
+
+    /* Headline figures */
+    const tilesHtml = AMI.statTiles([
+      { label: 'Open orders', value: open.length, sub: 'of ' + orders.length + ' on the trackers', tone: 'neutral' },
+      { label: 'Awaiting shipment', value: counts.placed, sub: 'sent, not collected', tone: 'neutral' },
+      { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
+      { label: 'Delivered, not closed', value: counts.delivered, sub: 'paperwork outstanding', tone: counts.delivered ? 'warning' : 'neutral' },
+      {
+        label: 'Follow-ups overdue', value: followUps,
+        sub: followUps ? 'across ' + scope.length + ' tracker(s)' : 'nothing outstanding',
+        tone: followUps ? (followUps >= 5 ? 'critical' : 'warning') : 'good',
+      },
+      {
+        label: 'Longest without movement',
+        value: stalest && stalest.ageDays != null ? stalest.ageDays + ' d' : '—',
+        sub: stalest ? 'PO ' + stalest.po : 'no open orders',
+        tone: stalest && stalest.ageDays >= 45 ? 'critical' : (stalest && stalest.ageDays >= 21 ? 'warning' : 'good'),
+      },
+    ]);
+    host.appendChild(el('div', { html: tilesHtml }).firstChild);
+
+    if (unset.length) {
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: unset.length + ' order(s) have no status set.' }),
+          el('span', { class: 'detail', text: 'Where the tracker has a dated collection, delivery or invoice, the stage shown is read from it. Set them explicitly on the Order status page.' }),
+        ]),
+      ]));
+    }
+
+    /* Pipeline + per-account bars */
+    const segments = AMI.ORDER_STATUSES.map((s) => ({
+      label: s.label, value: counts[s.id],
+      color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
+    }));
+
+    const grid = el('div', { class: 'dash-grid' });
+
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Order pipeline'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: orders.length + ' order(s) in scope' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.stackedBar(segments, { emptyText: 'No orders' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
+      ]),
+    ]));
+
+    const accountRows = [];
+    const byAccount = new Map();
+    for (const o of orders) {
+      if (!byAccount.has(o.accountId)) byAccount.set(o.accountId, []);
+      byAccount.get(o.accountId).push(o);
+    }
+    for (const [accountId, list] of byAccount) {
+      const account = state.workspace.accounts.find((a) => a.id === accountId);
+      if (!account) continue;
+      const c = AMI.countByStatus(list);
+      accountRows.push({
+        label: account.name,
+        sub: AMI.divisionName(state.workspace, account.divisionId),
+        segments: AMI.ORDER_STATUSES.map((s) => ({
+          label: account.name + ' — ' + s.label, value: c[s.id],
+          color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
+        })),
+        meta: list.filter((x) => x.isOpen).length + ' open',
+      });
+    }
+    accountRows.sort((a, b) => a.label.localeCompare(b.label));
+
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: 'Orders by account' }),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
+      ]),
+    ]));
+
+    /* Throughput */
+    const collected = orders
+      .filter((o) => o.dates.actualCollection)
+      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0 }));
+    const series = AMI.monthlySeries(collected, 12, new Date());
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Cases collected per month'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'last 12 months' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.columnChart(series, { unit: 'cases', ariaLabel: 'Cases collected per month' }) }).firstChild,
+      ]),
+    ]));
+
+    /* Attention list */
+    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays).slice(0, 8);
+    const staleRows = stale.map((o) => ({
+      label: 'PO ' + o.po,
+      sub: o.accountName + ' · ' + o.itemName,
+      value: o.ageDays,
+      color: o.ageDays >= 45 ? 'var(--critical)' : (o.ageDays >= 21 ? 'var(--warning)' : 'var(--stage-2)'),
+      meta: o.ageDays + ' d',
+      tip: 'PO ' + o.po + ' — last dated activity '
+        + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+    }));
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Longest without movement'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'open orders, days since the last dated activity' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.barList(staleRows, { emptyText: 'No open orders' }) }).firstChild,
+        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' }),
+      ]),
+    ]));
+
+    /* Account health table */
+    const healthTable = el('table', { class: 'data' });
+    healthTable.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Account' }), el('th', { text: 'Division' }), el('th', { text: 'Health' }),
+      el('th', { text: 'Open' }), el('th', { text: 'Total' }), el('th', { text: 'Follow-ups' }),
+      el('th', { text: 'Stalest' }), el('th', {}),
+    ])]));
+    const healthBody = el('tbody');
+    const accountsInScope = [...new Set(scope.map((p) => p.account.id))];
+    for (const accountId of accountsInScope) {
+      const account = state.workspace.accounts.find((a) => a.id === accountId);
+      const list = orders.filter((o) => o.accountId === accountId);
+      const fu = scope.filter((p) => p.account.id === accountId).reduce((n, p) => n + p.followUps.length, 0);
+      const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId), list, fu);
+      healthBody.appendChild(el('tr', {}, [
+        el('td', {}, [el('b', { text: account.name })]),
+        el('td', { text: s.divisionName || '—' }),
+        el('td', { html: AMI.healthPill(s.health.level, s.health.reasons.join(' · ') || 'Nothing outstanding') }),
+        el('td', { class: 'num', text: String(s.open) }),
+        el('td', { class: 'num', text: String(s.total) }),
+        el('td', { class: 'num', text: String(s.followUps) }),
+        el('td', { text: s.stalest ? 'PO ' + s.stalest.po + ' · ' + s.stalestDays + ' d' : '—' }),
+        el('td', {}, [el('button', {
+          class: 'btn small', text: 'Summary',
+          onclick: () => {
+            state.filters.accountId = accountId;
+            showTab('orderstatus');
+            setTimeout(() => generateSummary(), 0);
+          },
+        })]),
+      ]));
+    }
+    healthTable.appendChild(healthBody);
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Account health'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'attention set by days without movement and outstanding follow-ups' })]),
+      el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [healthTable])]),
+    ]));
+
+    /* Kanban */
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
+      el('div', { class: 'body' }, [buildKanban(orders)]),
+    ]));
+
+    host.appendChild(grid);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Kanban
+   * ------------------------------------------------------------------ */
+
+  function buildKanban(orders) {
+    const board = el('div', { class: 'kanban' });
+
+    const columns = AMI.ORDER_STATUSES.map((s) => ({ status: s, orders: [] }));
+    const unset = [];
+    for (const o of orders) {
+      const col = columns.find((c) => c.status.id === o.status.statusId);
+      if (col) col.orders.push(o);
+      else unset.push(o);
+    }
+
+    const makeColumn = (title, stageVar, list, statusId, hint) => {
+      const cards = el('div', { class: 'kan-cards' });
+      if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
+      for (const o of list) cards.appendChild(makeCard(o));
+
+      const col = el('div', { class: 'kan-col' }, [
+        el('div', {
+          class: 'kan-head',
+          style: '--stage:' + stageVar,
+          'data-tip': hint,
+        }, [
+          el('span', { class: 'kan-title', text: title }),
+          el('span', { class: 'kan-count', text: String(list.length) }),
+        ]),
+        cards,
+      ]);
+
+      if (statusId) {
+        col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
+        col.addEventListener('dragleave', () => col.classList.remove('drop-target'));
+        col.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          col.classList.remove('drop-target');
+          const key = e.dataTransfer.getData('text/plain');
+          if (!key) return;
+          if (await applyStatus(key, statusId)) {
+            toast('Moved to ' + title + '.', 'ok');
+            renderDashboard();
+          }
+        });
+      }
+      return col;
+    };
+
+    for (const c of columns) {
+      board.appendChild(makeColumn(c.status.short, 'var(--stage-' + c.status.step + ')', c.orders, c.status.id, c.status.hint));
+    }
+    if (unset.length) {
+      board.appendChild(makeColumn('No status', 'var(--border-strong)', unset, '',
+        'Nothing in the tracker indicates a stage, and nobody has set one.'));
+    }
+    return board;
+  }
+
+  function makeCard(order) {
+    const st = AMI.statusById(order.status.statusId);
+    const card = el('div', {
+      class: 'kan-card',
+      draggable: 'true',
+      style: '--stage:' + (st ? 'var(--stage-' + st.step + ')' : 'var(--border-strong)'),
+      'data-tip': order.status.reason,
+      'data-po': order.po,
+    }, [
+      el('div', { class: 'kan-po', text: order.po }),
+      el('div', { class: 'kan-meta', text: order.accountName + ' · ' + order.itemName }),
+      el('div', { class: 'kan-meta', text: (order.values.cases != null ? order.values.cases + ' cs' : '') }),
+      el('div', { class: 'kan-foot' }, [
+        el('span', {
+          class: 'chip ' + (order.status.source === 'set' ? 'ok' : (order.status.source === 'derived' ? 'computed' : 'manual')),
+          text: order.status.source === 'set' ? 'set' : (order.status.source === 'derived' ? 'from tracker' : 'none'),
+        }),
+        el('span', { class: 'kan-age', text: order.ageDays == null ? '' : order.ageDays + ' d' }),
+      ]),
+    ]);
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', order.key);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    return card;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Order status page
+   * ------------------------------------------------------------------ */
+
+  async function renderOrderStatus() {
+    const host = $('#orderStatusBody');
+    clear(host);
+    if (!state.workspace || !currentUser()) {
+      host.appendChild(el('div', { class: 'empty', text: 'Open the workspace and choose your name first.' }));
+      return;
+    }
+    if (!state.portfolio) {
+      host.appendChild(el('div', { class: 'empty', text: 'Reading the trackers for your accounts…' }));
+      await ensurePortfolio();
+      renderOrderStatus();
+      return;
+    }
+
+    host.appendChild(pageHeader(
+      'Orders',
+      'Order status',
+      'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
+      [
+        el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
+        el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
+      ],
+    ));
+
+    host.appendChild(filterBar(() => renderOrderStatus(), { withItem: true, withStatus: true, withSearch: true }));
+
+    const f = state.filters;
+    let orders = filteredOrders();
+    if (f.statusId === '__open') orders = orders.filter((o) => o.isOpen);
+    else if (f.statusId === '__unset') orders = orders.filter((o) => !o.status.statusId);
+    else if (f.statusId) orders = orders.filter((o) => o.status.statusId === f.statusId);
+    if (f.query) {
+      const q = f.query.trim().toLowerCase();
+      orders = orders.filter((o) => o.po.toLowerCase().includes(q));
+    }
+    orders.sort((a, b) => a.accountName.localeCompare(b.accountName)
+      || a.itemName.localeCompare(b.itemName) || a.po.localeCompare(b.po));
+
+    if (!orders.length) {
+      host.appendChild(el('div', { class: 'empty', text: 'No orders match these filters.' }));
+      return;
+    }
+
+    /* Bulk action */
+    const bulkSel = el('select', {}, [
+      el('option', { value: '', text: 'Set selected to…' }),
+      ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, text: s.label })),
+      el('option', { value: '__clear', text: 'Clear status (fall back to the tracker)' }),
+    ]);
+    const selected = new Set();
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', {}), el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
+      el('th', { text: 'Cases' }), el('th', { text: 'Status' }), el('th', { text: 'Where it comes from' }),
+      el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
+    ])]));
+    const tbody = el('tbody');
+
+    for (const o of orders) {
+      const st = AMI.statusById(o.status.statusId);
+      const sel = el('select', {
+        onchange: async (e) => {
+          const v = e.target.value;
+          if (await applyStatus(o.key, v === '__none' ? '' : v)) {
+            toast('PO ' + o.po + ' → ' + (v === '__none' ? 'no status' : AMI.statusById(v).label), 'ok');
+            renderOrderStatus();
+          }
+        },
+      }, [
+        el('option', { value: '__none', text: '— not set —', selected: o.status.source !== 'set' }),
+        ...AMI.ORDER_STATUSES.map((s) => el('option', {
+          value: s.id, selected: o.status.source === 'set' && s.id === o.status.statusId, text: s.label,
+        })),
+      ]);
+
+      const box = el('input', {
+        type: 'checkbox',
+        onchange: (e) => { if (e.target.checked) selected.add(o.key); else selected.delete(o.key); },
+      });
+
+      tbody.appendChild(el('tr', {}, [
+        el('td', {}, [box]),
+        el('td', { class: 'mono', text: o.po }),
+        el('td', { text: o.accountName }),
+        el('td', { text: o.itemName }),
+        el('td', { class: 'num', text: o.values.cases != null ? String(o.values.cases) : '—' }),
+        el('td', {}, [
+          el('div', { html: AMI.statusPill(st, { short: true, tip: o.status.reason }) }).firstChild,
+          sel,
+        ]),
+        el('td', {}, [el('span', {
+          class: 'chip ' + (o.status.source === 'set' ? 'ok' : (o.status.source === 'derived' ? 'computed' : 'manual')),
+          text: o.status.source === 'set' ? 'set by a person' : (o.status.source === 'derived' ? 'from tracker' : 'not set'),
+        }), el('div', { class: 'bar-sub', text: o.status.reason })]),
+        el('td', { text: o.lastEvent ? AMI.formatShort(o.lastEvent) + ' · ' + o.lastEventLabel : '—' }),
+        el('td', { class: 'num', text: o.ageDays == null ? '—' : String(o.ageDays) }),
+      ]));
+    }
+    table.appendChild(tbody);
+
+    host.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Orders'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: orders.length + ' shown' })]),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'btn-row', style: 'margin:0 0 12px' }, [
+          el('button', {
+            class: 'btn small', text: 'Select all shown',
+            onclick: () => {
+              for (const o of orders) selected.add(o.key);
+              $$('#orderStatusBody tbody input[type="checkbox"]').forEach((b) => { b.checked = true; });
+            },
+          }),
+          bulkSel,
+          el('button', {
+            class: 'btn small primary', text: 'Apply',
+            onclick: async () => {
+              const v = bulkSel.value;
+              if (!v) { toast('Choose a status first.', 'error'); return; }
+              if (!selected.size) { toast('Nothing selected.', 'error'); return; }
+              for (const key of selected) await applyStatus(key, v === '__clear' ? '' : v);
+              toast(selected.size + ' order(s) updated.', 'ok');
+              renderOrderStatus();
+            },
+          }),
+        ]),
+        el('div', { class: 'table-scroll' }, [table]),
+      ]),
+    ]));
+
+    host.appendChild(el('div', { id: 'summaryHost' }));
+    if (state.summaryHtml) renderSummaryCard();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Account summary
+   * ------------------------------------------------------------------ */
+
+  function generateSummary() {
+    const f = state.filters;
+    const accounts = visibleAccounts();
+    const account = accounts.find((a) => a.id === f.accountId);
+    if (!account) {
+      toast('Choose a single account first — a summary covers one account.', 'error');
+      return;
+    }
+    const scope = filteredPortfolio().filter((p) => p.account.id === account.id);
+    const orders = AMI.decorate(scope.flatMap((p) => p.orders), state.statusDoc || AMI.emptyStatusDoc(), new Date());
+    const user = currentUser() || {};
+
+    const built = AMI.buildAccountSummary({
+      accountName: account.name,
+      divisionName: AMI.divisionName(state.workspace, account.divisionId),
+      itemNames: [...new Set(scope.map((p) => p.item.name))],
+      orders,
+      preparedBy: user.name || '',
+      today: new Date(),
+      openOnly: true,
+    });
+    state.summaryHtml = built.html;
+    state.summaryMeta = { account, built };
+    renderSummaryCard();
+    const holder = $('#summaryHost');
+    if (holder) holder.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderSummaryCard() {
+    const holder = $('#summaryHost');
+    if (!holder) return;
+    clear(holder);
+    const meta = state.summaryMeta;
+    if (!state.summaryHtml || !meta) return;
+    const account = meta.account;
+    const user = currentUser() || {};
+
+    holder.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Account summary — ' + account.name),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: meta.built.open + ' open of ' + meta.built.total }),
+        el('button', { class: 'btn small ghost', text: 'Close', onclick: () => { state.summaryHtml = ''; clear(holder); } }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'email-preview', html: state.summaryHtml }),
+        el('div', { class: 'btn-row' }, [
+          el('button', {
+            class: 'btn', text: 'Copy',
+            onclick: async () => {
+              try {
+                await navigator.clipboard.write([new ClipboardItem({
+                  'text/html': new Blob([state.summaryHtml], { type: 'text/html' }),
+                })]);
+                toast('Summary copied.', 'ok');
+              } catch (e) { toast('Clipboard blocked here; use a download instead.', 'error'); }
+            },
+          }),
+          el('button', {
+            class: 'btn', text: 'Download as HTML',
+            onclick: () => download(
+              new Blob(['<!doctype html><meta charset="utf-8"><title>'
+                + account.name + ' summary</title>' + state.summaryHtml], { type: 'text/html' }),
+              safeName(account.name + ' account summary ' + stamp()) + '.html'),
+          }),
+          el('span', { class: 'spacer' }),
+          el('button', {
+            class: 'btn primary', text: 'Email it (.eml draft)',
+            onclick: () => {
+              const recipients = AMI.resolveRecipients(account, null, 'customer', null, user);
+              const eml = AMI.buildEml({
+                from: user.email ? (user.name ? user.name + ' <' + user.email + '>' : user.email) : '',
+                to: recipients.to, cc: recipients.cc,
+                subject: account.name + ' — open order summary, ' + AMI.formatEmailDate(new Date()),
+                html: '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;">'
+                  + state.summaryHtml + (user.signature || '') + '</body></html>',
+              });
+              download(new Blob([eml], { type: 'message/rfc822' }),
+                safeName(account.name + ' summary ' + stamp()) + '.eml');
+              toast('Draft saved. Double-click it to open in Outlook.', 'ok');
+            },
+          }),
+        ]),
+      ]),
+    ]));
+  }
+
+  /* ------------------------------------------------------------------ *
    * Init
    * ------------------------------------------------------------------ */
 
@@ -5447,6 +7352,7 @@ button.btn.small.danger { color: var(--danger); border-color: var(--danger); }
       const note = $('#noFolderNote');
       if (note) note.hidden = false;
     }
+    initTooltip();
     renderWorkspace();
     refreshTabs();
     showTab('workspace');

@@ -1,8 +1,9 @@
 # AMI Order Desk — Teams edition
 
 `AMI-Order-Desk-Teams.html` is the multi-account version of the portal. Same engine, same
-guarantees; adds divisions, per-user account lists, several item trackers per account, and
-templates that live with the account instead of in one person's browser.
+guarantees; adds an Account Health dashboard, divisions, per-user account lists, several item
+trackers per account, and templates that live with the account instead of in one person's
+browser.
 
 The single-account version (`AMI-Order-Desk.html`) is unchanged and still works on its own.
 
@@ -15,7 +16,8 @@ There is no server and no sign-in. Everything shared lives as ordinary files in 
 ```
 AMI Order Desk/                       <- a SharePoint library, synced through OneDrive
   AMI-Order-Desk-Teams.html           the app
-  workspace.json                      divisions, accounts, people, contacts
+  workspace.json                      divisions, accounts, items, people, contacts
+  order-status.json                   the stage each order is at
   templates/
     aeromexico/
       vendor-order.html               a template, with a small JSON header
@@ -96,6 +98,74 @@ and they see everything and can edit the shared setup.
 > that is the only place they can be enforced. The app is honest about this on screen.
 
 Your choice of name is remembered in your browser; nothing else is stored locally.
+
+---
+
+## Account Health
+
+The landing page. It reads every item tracker across the accounts you can see, and shows where
+the work actually is:
+
+- **Headline figures** — open orders, how many sit at each stage, follow-ups overdue, and the
+  longest an open order has gone without a dated event.
+- **Order pipeline** — one stacked bar across the five stages, with a legend carrying the counts.
+- **Orders by account** and **cases collected per month** — proportion and throughput.
+- **Longest without movement** — the eight open orders that have sat still longest.
+- **Account health** — one row per account, marked *On track*, *Needs attention* or *At risk*.
+- **Pipeline board** — a kanban of every order; drag a card between columns to change its stage.
+
+Filter by **division**, **account** and **item**. The division list only offers divisions you
+actually have accounts in, so the filter can never show you an empty world by accident.
+
+### The five stages
+
+`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Closed` → `Invoiced`
+
+Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
+to…", and filters including *Open only* and *No status set*. Anything you set there is what the
+dashboard shows.
+
+### Where a status comes from
+
+Every order's stage is one of two things, and the interface always says which:
+
+| | |
+| --- | --- |
+| **Set by a person** | Chosen on the Order status page or by dragging a kanban card. Records who and when. |
+| **From the tracker** | Read from the dated columns already in the workbook — a NAV invoice number means *Invoiced*, a delivery date means *Delivered*, a collection date means *In transit*, a PO sent to the winery means *Awaiting shipment*. |
+
+Nothing is guessed. An order with neither reads **Not set** rather than being filed under a
+stage nobody chose. *Closed* has no equivalent column in the tracker, so it only ever comes from
+a person — the app says so.
+
+A status you set always wins over what the tracker implies, and clearing it falls back to the
+tracker again.
+
+Statuses live in `order-status.json` beside the trackers, so the whole team sees the same board.
+Two people editing different orders both survive: the file merges entry by entry, newest wins
+per order, rather than one save overwriting the other's work.
+
+### Health, stated plainly
+
+*Needs attention* and *At risk* come from two explicit signals, printed next to the verdict:
+days an open order has gone without a dated event (amber past 21, red past 45), and outstanding
+follow-up items (amber at 1, red at 5). There is no score and no weighting to reverse-engineer;
+the thresholds are one edit in `HEALTH_THRESHOLDS`.
+
+### Dates the tracker cannot mean
+
+While reading the trackers the dashboard checks every date it finds. A mistyped serial — the
+sample chart has a delivery date reading **30 March 3036** — would otherwise dominate every
+age and ranking it touches. Those rows are listed at the top of the dashboard with the PO, the
+column and the raw value, and excluded from the ages below until you fix the workbook.
+
+### Account summary
+
+**Generate account summary** produces a document of the account's open orders: totals by stage,
+then a row per order with its stage, where that stage came from, the last dated activity and how
+long ago. Copy it, download it as HTML, or send it as an Outlook draft addressed from the
+account's customer contact. Every column is read from the tracker or the stored status — there
+is no narrative text beyond the headings.
 
 ---
 
@@ -193,16 +263,28 @@ portal/
     engine.test.js       118 assertions   PO extraction, tracker maths, write-back
     ui.test.js            58 assertions   single-account app in Chromium
     teams.test.js        100 assertions   template ingestion, workspace model, PO routing
-    teams-ui.test.js      50 assertions   multi-account, multi-item app in Chromium
+    status.test.js        94 assertions   status model, roll-ups, summary, chart builders
+    teams-ui.test.js      84 assertions   multi-account app and dashboard in Chromium
 ```
 
 ```bash
 node portal/build.js
 node portal/tests/engine.test.js <fixturesDir>
 node portal/tests/teams.test.js <fixturesDir>
+node portal/tests/status.test.js <fixturesDir>
 node portal/tests/ui.test.js <fixturesDir>          # needs playwright
 node portal/tests/teams-ui.test.js <fixturesDir>    # needs playwright
 ```
+
+### Colour
+
+Chrome uses one blue accent. Order stages use a **separate single-hue ordinal ramp**, so a stage
+colour can never be mistaken for a button, and *further along the pipeline* always reads as
+*stronger* — darker on the light theme, lighter on the dark one. Both ramps were checked with
+the data-visualisation validator for monotone lightness, visible step gaps and contrast against
+their own surface; dark mode is its own set of steps, not an automatic inversion. The reserved
+good/warning/critical colours are used only for health and never for a series, and always ship
+with an icon and a word so colour never carries meaning alone.
 
 Fixtures (a sample PO PDF, a tracking chart, a saved `.msg`) are **not** committed — they hold
 customer data. Point the tests at a local folder containing them. The multi-item browser test

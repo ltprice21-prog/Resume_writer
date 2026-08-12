@@ -180,6 +180,12 @@
     openItems: [],
     selectedItems: new Set(),
     loading: false,
+    // Account Health
+    statusDoc: null,
+    portfolio: null,          // [{ account, item, sheet, header, config, orders, followUps }]
+    portfolioLoading: false,
+    filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
+    summaryHtml: '',
   };
 
   let nextId = 1;
@@ -215,6 +221,8 @@
    * ------------------------------------------------------------------ */
 
   const RENDERERS = {
+    dashboard: renderDashboard,
+    orderstatus: renderOrderStatus,
     workspace: renderWorkspace,
     orders: renderIntake,
     review: renderReview,
@@ -240,6 +248,7 @@
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
+      else if (t === 'dashboard' || t === 'orderstatus') b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -344,6 +353,13 @@
     const { workspace, created } = await AMI.loadWorkspace(store);
     state.workspace = workspace;
     state.loadedAt = workspace.updated;
+    state.portfolio = null;
+    try {
+      state.statusDoc = await AMI.loadStatuses(store);
+    } catch (e) {
+      state.statusDoc = AMI.emptyStatusDoc();
+      toast(e.message, 'error');
+    }
 
     const saved = loadLocal();
     if (saved.userId && workspace.users.some((u) => u.id === saved.userId)) state.userId = saved.userId;
@@ -356,6 +372,7 @@
     renderHeaderBar();
     if (preferred) await selectAccount(preferred, saved.itemId);
     else { renderWorkspace(); refreshTabs(); }
+    if (!created && currentUser()) showTab('dashboard');
 
     if (created) {
       toast('New workspace created. Add divisions, accounts and items under Accounts.', 'ok');
@@ -1000,6 +1017,7 @@
 
       st.trackerBytes = out;
       st.posted = true;
+      state.portfolio = null;
       await rebuildPlans();
       renderWorkspace();
       if (!quiet) { renderReview(); showTab('email'); }
@@ -2076,6 +2094,789 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Tooltip
+   * ------------------------------------------------------------------ */
+
+  function initTooltip() {
+    const tip = $('#tooltip');
+    if (!tip) return;
+    let current = null;
+
+    document.addEventListener('mouseover', (e) => {
+      const host = e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (!host || host === current) return;
+      current = host;
+      tip.textContent = host.getAttribute('data-tip');
+      tip.hidden = false;
+      position(e);
+    });
+    document.addEventListener('mousemove', (e) => { if (current) position(e); });
+    document.addEventListener('mouseout', (e) => {
+      if (!current) return;
+      const to = e.relatedTarget;
+      if (to && current.contains(to)) return;
+      current = null;
+      tip.hidden = true;
+    });
+
+    function position(e) {
+      const pad = 12;
+      const r = tip.getBoundingClientRect();
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+      tip.style.left = Math.max(6, x) + 'px';
+      tip.style.top = Math.max(6, y) + 'px';
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Portfolio: every tracker the signed-in person can see
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Read every item tracker across the user's accounts once, so the dashboard
+   * can span accounts and divisions. Cached until something is posted.
+   */
+  async function ensurePortfolio(force) {
+    if (state.portfolio && !force) return state.portfolio;
+    if (!state.store || !state.workspace) return [];
+
+    state.portfolioLoading = true;
+    const out = [];
+    const problems = [];
+
+    for (const account of visibleAccounts()) {
+      const divisionName = AMI.divisionName(state.workspace, account.divisionId);
+      for (const item of AMI.accountItems(account)) {
+        if (!item.trackerPath) continue;
+        try {
+          const bytes = await state.store.read(item.trackerPath);
+          if (!bytes) { problems.push(item.name + ': tracker not found'); continue; }
+          const wb = await AMI.Workbook.load(bytes);
+          let sheetName = '';
+          if (item.sheet && wb.sheet(item.sheet) && AMI.findHeaderRow(wb.sheet(item.sheet))) sheetName = item.sheet;
+          else for (const sh of wb.sheets) if (AMI.findHeaderRow(sh)) sheetName = sh.name;
+          if (!sheetName) { problems.push(item.name + ': no sheet with a PO# header'); continue; }
+
+          const sheet = wb.sheet(sheetName);
+          const header = AMI.findHeaderRow(sheet);
+          out.push({
+            account, item, sheet, header,
+            config: AMI.readSheetConfig(sheet),
+            orders: AMI.readOrders(sheet, header, {
+              accountId: account.id, accountName: account.name, divisionId: account.divisionId,
+              divisionName, itemId: item.id, itemName: item.name,
+            }),
+            followUps: AMI.findOpenItems(sheet, header, new Date()),
+          });
+        } catch (e) {
+          problems.push(item.name + ': ' + e.message);
+        }
+      }
+    }
+
+    state.portfolio = out;
+    state.portfolioProblems = problems;
+    state.portfolioLoading = false;
+    return out;
+  }
+
+  /** Apply the division/account/item filters to the portfolio. */
+  function filteredPortfolio() {
+    const f = state.filters;
+    return (state.portfolio || []).filter((p) => {
+      if (f.divisionId && p.account.divisionId !== f.divisionId) return false;
+      if (f.accountId && p.account.id !== f.accountId) return false;
+      if (f.itemId && p.item.id !== f.itemId) return false;
+      return true;
+    });
+  }
+
+  /** Decorated orders for the current filters. */
+  function filteredOrders() {
+    const all = [];
+    for (const p of filteredPortfolio()) all.push(...p.orders);
+    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date());
+  }
+
+  async function applyStatus(key, statusId, note) {
+    const user = currentUser();
+    const by = user ? user.name : '';
+    if (!state.statusDoc) state.statusDoc = AMI.emptyStatusDoc();
+    if (statusId) AMI.setStatus(state.statusDoc, key, statusId, by, note);
+    else AMI.clearStatus(state.statusDoc, key);
+    try {
+      state.statusDoc = await AMI.saveStatuses(state.store, state.statusDoc, { by });
+      return true;
+    } catch (e) {
+      toast('Status not saved: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Shared filter bar
+   * ------------------------------------------------------------------ */
+
+  function filterBar(onChange, opts) {
+    const o = opts || {};
+    const ws = state.workspace;
+    const accounts = visibleAccounts();
+    const f = state.filters;
+
+    const divisions = ws.divisions.filter((d) => accounts.some((a) => a.divisionId === d.id));
+    const divisionSel = el('select', {
+      onchange: (e) => {
+        f.divisionId = e.target.value;
+        const stillVisible = accounts.some((a) => a.id === f.accountId && (!f.divisionId || a.divisionId === f.divisionId));
+        if (!stillVisible) { f.accountId = ''; f.itemId = ''; }
+        onChange();
+      },
+    }, [
+      el('option', { value: '', text: 'All divisions', selected: !f.divisionId }),
+      ...divisions.map((d) => el('option', { value: d.id, selected: d.id === f.divisionId, text: d.name })),
+    ]);
+
+    const inDivision = accounts.filter((a) => !f.divisionId || a.divisionId === f.divisionId);
+    const accountSel = el('select', {
+      onchange: (e) => { f.accountId = e.target.value; f.itemId = ''; onChange(); },
+    }, [
+      el('option', { value: '', text: 'All my accounts', selected: !f.accountId }),
+      ...inDivision.map((a) => el('option', { value: a.id, selected: a.id === f.accountId, text: a.name })),
+    ]);
+
+    const controls = [
+      el('label', { class: 'field' }, [el('span', { text: 'Division' }), divisionSel]),
+      el('label', { class: 'field' }, [el('span', { text: 'Account' }), accountSel]),
+    ];
+
+    if (o.withItem) {
+      const chosenAccount = accounts.find((a) => a.id === f.accountId);
+      const items = chosenAccount ? AMI.accountItems(chosenAccount)
+        : inDivision.flatMap((a) => AMI.accountItems(a));
+      controls.push(el('label', { class: 'field' }, [
+        el('span', { text: 'Item' }),
+        el('select', {
+          onchange: (e) => { f.itemId = e.target.value; onChange(); },
+        }, [
+          el('option', { value: '', text: 'All items', selected: !f.itemId }),
+          ...items.map((i) => el('option', { value: i.id, selected: i.id === f.itemId, text: i.name })),
+        ]),
+      ]));
+    }
+
+    if (o.withStatus) {
+      controls.push(el('label', { class: 'field' }, [
+        el('span', { text: 'Status' }),
+        el('select', {
+          onchange: (e) => { f.statusId = e.target.value; onChange(); },
+        }, [
+          el('option', { value: '', text: 'Any status', selected: !f.statusId }),
+          el('option', { value: '__open', text: 'Open only', selected: f.statusId === '__open' }),
+          el('option', { value: '__unset', text: 'No status set', selected: f.statusId === '__unset' }),
+          ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, selected: s.id === f.statusId, text: s.label })),
+        ]),
+      ]));
+    }
+
+    if (o.withSearch) {
+      const search = el('input', { type: 'text', value: f.query, placeholder: 'PO number…' });
+      search.addEventListener('input', () => { f.query = search.value; onChange(); });
+      controls.push(el('label', { class: 'field' }, [el('span', { text: 'Find' }), search]));
+    }
+
+    controls.push(el('span', { class: 'spacer' }));
+    controls.push(el('button', {
+      class: 'btn small ghost', text: 'Reset filters',
+      onclick: () => {
+        state.filters = { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' };
+        onChange();
+      },
+    }));
+    if (o.extra) controls.push(...[].concat(o.extra));
+
+    return el('div', { class: 'filter-bar' }, controls);
+  }
+
+  function pageHeader(eyebrow, title, description, actions) {
+    return el('div', { class: 'page-header' }, [
+      el('div', { class: 'titles' }, [
+        el('div', { class: 'eyebrow', text: eyebrow }),
+        el('h1', { text: title }),
+        description ? el('p', { text: description }) : null,
+      ]),
+      actions && actions.length ? el('div', { class: 'actions' }, actions) : null,
+    ]);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Account Health dashboard
+   * ------------------------------------------------------------------ */
+
+  async function renderDashboard() {
+    const host = $('#dashboardBody');
+    clear(host);
+    if (!state.workspace || !currentUser()) {
+      host.appendChild(el('div', { class: 'empty', text: 'Open the workspace and choose your name to see your accounts.' }));
+      return;
+    }
+
+    if (!state.portfolio) {
+      host.appendChild(el('div', { class: 'empty', text: 'Reading the trackers for your accounts…' }));
+      await ensurePortfolio();
+      renderDashboard();
+      return;
+    }
+
+    const orders = filteredOrders();
+    const scope = filteredPortfolio();
+    const counts = AMI.countByStatus(orders);
+    const open = orders.filter((o) => o.isOpen);
+    const unset = orders.filter((o) => !o.status.statusId);
+    const followUps = scope.reduce((n, p) => n + p.followUps.length, 0);
+    const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
+
+    host.appendChild(pageHeader(
+      'Account Health',
+      state.filters.accountId
+        ? (visibleAccounts().find((a) => a.id === state.filters.accountId) || {}).name || 'Account'
+        : 'All my accounts',
+      'Where every order stands right now, read from the item trackers and the statuses your team has set.',
+      [
+        el('button', {
+          class: 'btn', text: 'Refresh',
+          onclick: async () => { await ensurePortfolio(true); renderDashboard(); toast('Trackers re-read.', 'ok'); },
+        }),
+        el('button', {
+          class: 'btn primary', text: 'Generate account summary',
+          onclick: () => { showTab('orderstatus'); setTimeout(() => generateSummary(), 0); },
+        }),
+      ],
+    ));
+
+    host.appendChild(filterBar(() => renderDashboard(), { withItem: true }));
+
+    if (state.portfolioProblems && state.portfolioProblems.length) {
+      host.appendChild(el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', { text: state.portfolioProblems.length + ' tracker(s) could not be read.' }),
+          el('span', { class: 'detail', text: state.portfolioProblems.join(' · ') }),
+        ]),
+      ]));
+    }
+
+    if (!orders.length) {
+      host.appendChild(el('div', { class: 'empty', text: 'No orders on the trackers in scope.' }));
+      return;
+    }
+
+    // A mistyped date serial reads as a year in the far future. Surface it: it
+    // would otherwise skew every age on the board, and it is a real error to fix.
+    const dateIssues = orders.filter((o) => o.dateIssues && o.dateIssues.length);
+    if (dateIssues.length) {
+      const lines = [];
+      for (const o of dateIssues) {
+        for (const issue of o.dateIssues) {
+          lines.push('PO ' + o.po + ' (' + o.itemName + ') — ' + issue.label + ' reads '
+            + AMI.formatShort(issue.date) + ', from the value ' + issue.serial + '.');
+        }
+      }
+      const list = el('ul', { class: 'tight' });
+      for (const line of lines.slice(0, 6)) list.appendChild(el('li', { text: line }));
+      if (lines.length > 6) {
+        list.appendChild(el('li', { text: 'and ' + (lines.length - 6) + ' more.' }));
+      }
+      host.appendChild(el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', { text: dateIssues.length + ' order(s) have a date the tracker cannot mean.' }),
+          el('span', { class: 'detail', text: 'These are excluded from the ages and rankings below so they do not skew anything. Correct them in the workbook.' }),
+          list,
+        ]),
+      ]));
+    }
+
+    /* Headline figures */
+    const tilesHtml = AMI.statTiles([
+      { label: 'Open orders', value: open.length, sub: 'of ' + orders.length + ' on the trackers', tone: 'neutral' },
+      { label: 'Awaiting shipment', value: counts.placed, sub: 'sent, not collected', tone: 'neutral' },
+      { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
+      { label: 'Delivered, not closed', value: counts.delivered, sub: 'paperwork outstanding', tone: counts.delivered ? 'warning' : 'neutral' },
+      {
+        label: 'Follow-ups overdue', value: followUps,
+        sub: followUps ? 'across ' + scope.length + ' tracker(s)' : 'nothing outstanding',
+        tone: followUps ? (followUps >= 5 ? 'critical' : 'warning') : 'good',
+      },
+      {
+        label: 'Longest without movement',
+        value: stalest && stalest.ageDays != null ? stalest.ageDays + ' d' : '—',
+        sub: stalest ? 'PO ' + stalest.po : 'no open orders',
+        tone: stalest && stalest.ageDays >= 45 ? 'critical' : (stalest && stalest.ageDays >= 21 ? 'warning' : 'good'),
+      },
+    ]);
+    host.appendChild(el('div', { html: tilesHtml }).firstChild);
+
+    if (unset.length) {
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: unset.length + ' order(s) have no status set.' }),
+          el('span', { class: 'detail', text: 'Where the tracker has a dated collection, delivery or invoice, the stage shown is read from it. Set them explicitly on the Order status page.' }),
+        ]),
+      ]));
+    }
+
+    /* Pipeline + per-account bars */
+    const segments = AMI.ORDER_STATUSES.map((s) => ({
+      label: s.label, value: counts[s.id],
+      color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
+    }));
+
+    const grid = el('div', { class: 'dash-grid' });
+
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Order pipeline'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: orders.length + ' order(s) in scope' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.stackedBar(segments, { emptyText: 'No orders' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
+      ]),
+    ]));
+
+    const accountRows = [];
+    const byAccount = new Map();
+    for (const o of orders) {
+      if (!byAccount.has(o.accountId)) byAccount.set(o.accountId, []);
+      byAccount.get(o.accountId).push(o);
+    }
+    for (const [accountId, list] of byAccount) {
+      const account = state.workspace.accounts.find((a) => a.id === accountId);
+      if (!account) continue;
+      const c = AMI.countByStatus(list);
+      accountRows.push({
+        label: account.name,
+        sub: AMI.divisionName(state.workspace, account.divisionId),
+        segments: AMI.ORDER_STATUSES.map((s) => ({
+          label: account.name + ' — ' + s.label, value: c[s.id],
+          color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
+        })),
+        meta: list.filter((x) => x.isOpen).length + ' open',
+      });
+    }
+    accountRows.sort((a, b) => a.label.localeCompare(b.label));
+
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', { text: 'Orders by account' }),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
+      ]),
+    ]));
+
+    /* Throughput */
+    const collected = orders
+      .filter((o) => o.dates.actualCollection)
+      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0 }));
+    const series = AMI.monthlySeries(collected, 12, new Date());
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Cases collected per month'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'last 12 months' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.columnChart(series, { unit: 'cases', ariaLabel: 'Cases collected per month' }) }).firstChild,
+      ]),
+    ]));
+
+    /* Attention list */
+    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays).slice(0, 8);
+    const staleRows = stale.map((o) => ({
+      label: 'PO ' + o.po,
+      sub: o.accountName + ' · ' + o.itemName,
+      value: o.ageDays,
+      color: o.ageDays >= 45 ? 'var(--critical)' : (o.ageDays >= 21 ? 'var(--warning)' : 'var(--stage-2)'),
+      meta: o.ageDays + ' d',
+      tip: 'PO ' + o.po + ' — last dated activity '
+        + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+    }));
+    grid.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Longest without movement'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'open orders, days since the last dated activity' })]),
+      el('div', { class: 'body' }, [
+        el('div', { html: AMI.barList(staleRows, { emptyText: 'No open orders' }) }).firstChild,
+        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' }),
+      ]),
+    ]));
+
+    /* Account health table */
+    const healthTable = el('table', { class: 'data' });
+    healthTable.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Account' }), el('th', { text: 'Division' }), el('th', { text: 'Health' }),
+      el('th', { text: 'Open' }), el('th', { text: 'Total' }), el('th', { text: 'Follow-ups' }),
+      el('th', { text: 'Stalest' }), el('th', {}),
+    ])]));
+    const healthBody = el('tbody');
+    const accountsInScope = [...new Set(scope.map((p) => p.account.id))];
+    for (const accountId of accountsInScope) {
+      const account = state.workspace.accounts.find((a) => a.id === accountId);
+      const list = orders.filter((o) => o.accountId === accountId);
+      const fu = scope.filter((p) => p.account.id === accountId).reduce((n, p) => n + p.followUps.length, 0);
+      const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId), list, fu);
+      healthBody.appendChild(el('tr', {}, [
+        el('td', {}, [el('b', { text: account.name })]),
+        el('td', { text: s.divisionName || '—' }),
+        el('td', { html: AMI.healthPill(s.health.level, s.health.reasons.join(' · ') || 'Nothing outstanding') }),
+        el('td', { class: 'num', text: String(s.open) }),
+        el('td', { class: 'num', text: String(s.total) }),
+        el('td', { class: 'num', text: String(s.followUps) }),
+        el('td', { text: s.stalest ? 'PO ' + s.stalest.po + ' · ' + s.stalestDays + ' d' : '—' }),
+        el('td', {}, [el('button', {
+          class: 'btn small', text: 'Summary',
+          onclick: () => {
+            state.filters.accountId = accountId;
+            showTab('orderstatus');
+            setTimeout(() => generateSummary(), 0);
+          },
+        })]),
+      ]));
+    }
+    healthTable.appendChild(healthBody);
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Account health'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'attention set by days without movement and outstanding follow-ups' })]),
+      el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [healthTable])]),
+    ]));
+
+    /* Kanban */
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
+      el('div', { class: 'body' }, [buildKanban(orders)]),
+    ]));
+
+    host.appendChild(grid);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Kanban
+   * ------------------------------------------------------------------ */
+
+  function buildKanban(orders) {
+    const board = el('div', { class: 'kanban' });
+
+    const columns = AMI.ORDER_STATUSES.map((s) => ({ status: s, orders: [] }));
+    const unset = [];
+    for (const o of orders) {
+      const col = columns.find((c) => c.status.id === o.status.statusId);
+      if (col) col.orders.push(o);
+      else unset.push(o);
+    }
+
+    const makeColumn = (title, stageVar, list, statusId, hint) => {
+      const cards = el('div', { class: 'kan-cards' });
+      if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
+      for (const o of list) cards.appendChild(makeCard(o));
+
+      const col = el('div', { class: 'kan-col' }, [
+        el('div', {
+          class: 'kan-head',
+          style: '--stage:' + stageVar,
+          'data-tip': hint,
+        }, [
+          el('span', { class: 'kan-title', text: title }),
+          el('span', { class: 'kan-count', text: String(list.length) }),
+        ]),
+        cards,
+      ]);
+
+      if (statusId) {
+        col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
+        col.addEventListener('dragleave', () => col.classList.remove('drop-target'));
+        col.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          col.classList.remove('drop-target');
+          const key = e.dataTransfer.getData('text/plain');
+          if (!key) return;
+          if (await applyStatus(key, statusId)) {
+            toast('Moved to ' + title + '.', 'ok');
+            renderDashboard();
+          }
+        });
+      }
+      return col;
+    };
+
+    for (const c of columns) {
+      board.appendChild(makeColumn(c.status.short, 'var(--stage-' + c.status.step + ')', c.orders, c.status.id, c.status.hint));
+    }
+    if (unset.length) {
+      board.appendChild(makeColumn('No status', 'var(--border-strong)', unset, '',
+        'Nothing in the tracker indicates a stage, and nobody has set one.'));
+    }
+    return board;
+  }
+
+  function makeCard(order) {
+    const st = AMI.statusById(order.status.statusId);
+    const card = el('div', {
+      class: 'kan-card',
+      draggable: 'true',
+      style: '--stage:' + (st ? 'var(--stage-' + st.step + ')' : 'var(--border-strong)'),
+      'data-tip': order.status.reason,
+      'data-po': order.po,
+    }, [
+      el('div', { class: 'kan-po', text: order.po }),
+      el('div', { class: 'kan-meta', text: order.accountName + ' · ' + order.itemName }),
+      el('div', { class: 'kan-meta', text: (order.values.cases != null ? order.values.cases + ' cs' : '') }),
+      el('div', { class: 'kan-foot' }, [
+        el('span', {
+          class: 'chip ' + (order.status.source === 'set' ? 'ok' : (order.status.source === 'derived' ? 'computed' : 'manual')),
+          text: order.status.source === 'set' ? 'set' : (order.status.source === 'derived' ? 'from tracker' : 'none'),
+        }),
+        el('span', { class: 'kan-age', text: order.ageDays == null ? '' : order.ageDays + ' d' }),
+      ]),
+    ]);
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', order.key);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    return card;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Order status page
+   * ------------------------------------------------------------------ */
+
+  async function renderOrderStatus() {
+    const host = $('#orderStatusBody');
+    clear(host);
+    if (!state.workspace || !currentUser()) {
+      host.appendChild(el('div', { class: 'empty', text: 'Open the workspace and choose your name first.' }));
+      return;
+    }
+    if (!state.portfolio) {
+      host.appendChild(el('div', { class: 'empty', text: 'Reading the trackers for your accounts…' }));
+      await ensurePortfolio();
+      renderOrderStatus();
+      return;
+    }
+
+    host.appendChild(pageHeader(
+      'Orders',
+      'Order status',
+      'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
+      [
+        el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
+        el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
+      ],
+    ));
+
+    host.appendChild(filterBar(() => renderOrderStatus(), { withItem: true, withStatus: true, withSearch: true }));
+
+    const f = state.filters;
+    let orders = filteredOrders();
+    if (f.statusId === '__open') orders = orders.filter((o) => o.isOpen);
+    else if (f.statusId === '__unset') orders = orders.filter((o) => !o.status.statusId);
+    else if (f.statusId) orders = orders.filter((o) => o.status.statusId === f.statusId);
+    if (f.query) {
+      const q = f.query.trim().toLowerCase();
+      orders = orders.filter((o) => o.po.toLowerCase().includes(q));
+    }
+    orders.sort((a, b) => a.accountName.localeCompare(b.accountName)
+      || a.itemName.localeCompare(b.itemName) || a.po.localeCompare(b.po));
+
+    if (!orders.length) {
+      host.appendChild(el('div', { class: 'empty', text: 'No orders match these filters.' }));
+      return;
+    }
+
+    /* Bulk action */
+    const bulkSel = el('select', {}, [
+      el('option', { value: '', text: 'Set selected to…' }),
+      ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, text: s.label })),
+      el('option', { value: '__clear', text: 'Clear status (fall back to the tracker)' }),
+    ]);
+    const selected = new Set();
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', {}), el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
+      el('th', { text: 'Cases' }), el('th', { text: 'Status' }), el('th', { text: 'Where it comes from' }),
+      el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
+    ])]));
+    const tbody = el('tbody');
+
+    for (const o of orders) {
+      const st = AMI.statusById(o.status.statusId);
+      const sel = el('select', {
+        onchange: async (e) => {
+          const v = e.target.value;
+          if (await applyStatus(o.key, v === '__none' ? '' : v)) {
+            toast('PO ' + o.po + ' → ' + (v === '__none' ? 'no status' : AMI.statusById(v).label), 'ok');
+            renderOrderStatus();
+          }
+        },
+      }, [
+        el('option', { value: '__none', text: '— not set —', selected: o.status.source !== 'set' }),
+        ...AMI.ORDER_STATUSES.map((s) => el('option', {
+          value: s.id, selected: o.status.source === 'set' && s.id === o.status.statusId, text: s.label,
+        })),
+      ]);
+
+      const box = el('input', {
+        type: 'checkbox',
+        onchange: (e) => { if (e.target.checked) selected.add(o.key); else selected.delete(o.key); },
+      });
+
+      tbody.appendChild(el('tr', {}, [
+        el('td', {}, [box]),
+        el('td', { class: 'mono', text: o.po }),
+        el('td', { text: o.accountName }),
+        el('td', { text: o.itemName }),
+        el('td', { class: 'num', text: o.values.cases != null ? String(o.values.cases) : '—' }),
+        el('td', {}, [
+          el('div', { html: AMI.statusPill(st, { short: true, tip: o.status.reason }) }).firstChild,
+          sel,
+        ]),
+        el('td', {}, [el('span', {
+          class: 'chip ' + (o.status.source === 'set' ? 'ok' : (o.status.source === 'derived' ? 'computed' : 'manual')),
+          text: o.status.source === 'set' ? 'set by a person' : (o.status.source === 'derived' ? 'from tracker' : 'not set'),
+        }), el('div', { class: 'bar-sub', text: o.status.reason })]),
+        el('td', { text: o.lastEvent ? AMI.formatShort(o.lastEvent) + ' · ' + o.lastEventLabel : '—' }),
+        el('td', { class: 'num', text: o.ageDays == null ? '—' : String(o.ageDays) }),
+      ]));
+    }
+    table.appendChild(tbody);
+
+    host.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Orders'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: orders.length + ' shown' })]),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'btn-row', style: 'margin:0 0 12px' }, [
+          el('button', {
+            class: 'btn small', text: 'Select all shown',
+            onclick: () => {
+              for (const o of orders) selected.add(o.key);
+              $$('#orderStatusBody tbody input[type="checkbox"]').forEach((b) => { b.checked = true; });
+            },
+          }),
+          bulkSel,
+          el('button', {
+            class: 'btn small primary', text: 'Apply',
+            onclick: async () => {
+              const v = bulkSel.value;
+              if (!v) { toast('Choose a status first.', 'error'); return; }
+              if (!selected.size) { toast('Nothing selected.', 'error'); return; }
+              for (const key of selected) await applyStatus(key, v === '__clear' ? '' : v);
+              toast(selected.size + ' order(s) updated.', 'ok');
+              renderOrderStatus();
+            },
+          }),
+        ]),
+        el('div', { class: 'table-scroll' }, [table]),
+      ]),
+    ]));
+
+    host.appendChild(el('div', { id: 'summaryHost' }));
+    if (state.summaryHtml) renderSummaryCard();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Account summary
+   * ------------------------------------------------------------------ */
+
+  function generateSummary() {
+    const f = state.filters;
+    const accounts = visibleAccounts();
+    const account = accounts.find((a) => a.id === f.accountId);
+    if (!account) {
+      toast('Choose a single account first — a summary covers one account.', 'error');
+      return;
+    }
+    const scope = filteredPortfolio().filter((p) => p.account.id === account.id);
+    const orders = AMI.decorate(scope.flatMap((p) => p.orders), state.statusDoc || AMI.emptyStatusDoc(), new Date());
+    const user = currentUser() || {};
+
+    const built = AMI.buildAccountSummary({
+      accountName: account.name,
+      divisionName: AMI.divisionName(state.workspace, account.divisionId),
+      itemNames: [...new Set(scope.map((p) => p.item.name))],
+      orders,
+      preparedBy: user.name || '',
+      today: new Date(),
+      openOnly: true,
+    });
+    state.summaryHtml = built.html;
+    state.summaryMeta = { account, built };
+    renderSummaryCard();
+    const holder = $('#summaryHost');
+    if (holder) holder.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderSummaryCard() {
+    const holder = $('#summaryHost');
+    if (!holder) return;
+    clear(holder);
+    const meta = state.summaryMeta;
+    if (!state.summaryHtml || !meta) return;
+    const account = meta.account;
+    const user = currentUser() || {};
+
+    holder.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Account summary — ' + account.name),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: meta.built.open + ' open of ' + meta.built.total }),
+        el('button', { class: 'btn small ghost', text: 'Close', onclick: () => { state.summaryHtml = ''; clear(holder); } }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'email-preview', html: state.summaryHtml }),
+        el('div', { class: 'btn-row' }, [
+          el('button', {
+            class: 'btn', text: 'Copy',
+            onclick: async () => {
+              try {
+                await navigator.clipboard.write([new ClipboardItem({
+                  'text/html': new Blob([state.summaryHtml], { type: 'text/html' }),
+                })]);
+                toast('Summary copied.', 'ok');
+              } catch (e) { toast('Clipboard blocked here; use a download instead.', 'error'); }
+            },
+          }),
+          el('button', {
+            class: 'btn', text: 'Download as HTML',
+            onclick: () => download(
+              new Blob(['<!doctype html><meta charset="utf-8"><title>'
+                + account.name + ' summary</title>' + state.summaryHtml], { type: 'text/html' }),
+              safeName(account.name + ' account summary ' + stamp()) + '.html'),
+          }),
+          el('span', { class: 'spacer' }),
+          el('button', {
+            class: 'btn primary', text: 'Email it (.eml draft)',
+            onclick: () => {
+              const recipients = AMI.resolveRecipients(account, null, 'customer', null, user);
+              const eml = AMI.buildEml({
+                from: user.email ? (user.name ? user.name + ' <' + user.email + '>' : user.email) : '',
+                to: recipients.to, cc: recipients.cc,
+                subject: account.name + ' — open order summary, ' + AMI.formatEmailDate(new Date()),
+                html: '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;">'
+                  + state.summaryHtml + (user.signature || '') + '</body></html>',
+              });
+              download(new Blob([eml], { type: 'message/rfc822' }),
+                safeName(account.name + ' summary ' + stamp()) + '.eml');
+              toast('Draft saved. Double-click it to open in Outlook.', 'ok');
+            },
+          }),
+        ]),
+      ]),
+    ]));
+  }
+
+  /* ------------------------------------------------------------------ *
    * Init
    * ------------------------------------------------------------------ */
 
@@ -2085,6 +2886,7 @@
       const note = $('#noFolderNote');
       if (note) note.hidden = false;
     }
+    initTooltip();
     renderWorkspace();
     refreshTabs();
     showTab('workspace');

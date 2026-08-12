@@ -11,18 +11,20 @@
 <header class="app">
   <div class="brandline">
     <div class="brand">AMI <span>Order Desk</span></div>
-    <div class="tagline">Multi-account &middot; shared templates &middot; Europe and US divisions</div>
+    <div class="tagline">Accounts &middot; item trackers &middot; shared templates</div>
     <span class="spacer"></span>
     <div class="tagline">Runs entirely on this computer &middot; no internet, no accounts, no AI service</div>
   </div>
   <nav class="tabs" role="tablist">
-    <button data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
+    <button data-tab="dashboard" role="tab" aria-selected="false" disabled>Account Health</button>
     <button data-tab="orders" role="tab" aria-selected="false" disabled><span class="step-no">1</span>Orders</button>
     <button data-tab="review" role="tab" aria-selected="false" disabled><span class="step-no">2</span>Review &amp; post</button>
     <button data-tab="email" role="tab" aria-selected="false" disabled><span class="step-no">3</span>Emails</button>
-    <button data-tab="followups" role="tab" aria-selected="false" disabled><span class="step-no">4</span>Follow-ups</button>
+    <button data-tab="orderstatus" role="tab" aria-selected="false" disabled>Order status</button>
+    <button data-tab="followups" role="tab" aria-selected="false" disabled>Follow-ups</button>
     <button data-tab="templates" role="tab" aria-selected="false" disabled>Templates</button>
     <button data-tab="accounts" role="tab" aria-selected="false" disabled>Accounts</button>
+    <button data-tab="workspace" role="tab" aria-selected="true">Workspace</button>
   </nav>
 </header>
 
@@ -30,21 +32,8 @@
 
 <main>
 
-  <section class="panel" data-panel="workspace">
-    <div class="card">
-      <h2>Workspace</h2>
-      <div class="body">
-        <div class="msg info" id="noFolderNote" hidden>
-          <span class="icon">i</span>
-          <div>
-            <strong>This browser cannot open folders.</strong>
-            <span class="detail">Use Microsoft Edge or Chrome for the shared-folder setup. Anywhere else,
-            load a workspace bundle instead &mdash; you will need to export a new bundle to share changes.</span>
-          </div>
-        </div>
-        <div id="workspaceBody"></div>
-      </div>
-    </div>
+  <section class="panel" data-panel="dashboard" hidden>
+    <div id="dashboardBody"></div>
   </section>
 
   <section class="panel" data-panel="orders" hidden>
@@ -78,6 +67,10 @@
     </div>
   </section>
 
+  <section class="panel" data-panel="orderstatus" hidden>
+    <div id="orderStatusBody"></div>
+  </section>
+
   <section class="panel" data-panel="followups" hidden>
     <div class="card">
       <h2>Outstanding items</h2>
@@ -94,16 +87,37 @@
 
   <section class="panel" data-panel="accounts" hidden>
     <div class="card">
-      <h2>Accounts, divisions and people</h2>
+      <h2>Accounts, items and people</h2>
       <div class="body" id="accountsBody"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="workspace">
+    <div class="card">
+      <h2>Workspace</h2>
+      <div class="body">
+        <div class="msg info" id="noFolderNote" hidden>
+          <span class="icon">i</span>
+          <div>
+            <strong>This browser cannot open folders.</strong>
+            <span class="detail">Use Microsoft Edge or Chrome for the shared-folder setup. Anywhere else,
+            load a workspace bundle instead &mdash; you will need to export a new bundle to share changes.</span>
+          </div>
+        </div>
+        <div id="workspaceBody"></div>
+      </div>
     </div>
   </section>
 
 </main>
 
+<div id="tooltip" hidden></div>
+
 <script>/*ENGINE*/</script>
 <script>/*TEMPLATES*/</script>
 <script>/*WORKSPACE*/</script>
+<script>/*STATUS*/</script>
+<script>/*CHARTS*/</script>
 <script>/*APP*/</script>
 </body>
 </html>

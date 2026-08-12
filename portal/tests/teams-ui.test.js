@@ -159,7 +159,7 @@ async function buildBundle() {
   await page.goto('file://' + PORTAL);
   console.log('\nShell');
   ok('page title', await page.title() === 'AMI Order Desk — Teams');
-  ok('seven tabs', (await page.locator('nav.tabs button').count()) === 7);
+  ok('nine tabs', (await page.locator('nav.tabs button').count()) === 9);
 
   console.log('\nWorkspace load');
   const [chooser] = await Promise.all([
@@ -376,6 +376,118 @@ async function buildBundle() {
   const followHeaders = await page.locator('#followBody table.data thead th').allInnerTexts();
   ok('an Item column identifies which tracker each row came from',
     followHeaders.some((h) => /item/i.test(h)), followHeaders.join(' | '));
+
+  console.log('\nAccount Health dashboard');
+  await page.locator('nav.tabs button[data-tab="dashboard"]').click();
+  await page.waitForSelector('#dashboardBody .stat-row', { timeout: 30000 });
+
+  const dashText = await page.locator('#dashboardBody').innerText();
+  ok('the page is titled Account Health', /Account Health/i.test(dashText), dashText.slice(0, 120));
+  ok('headline figures are shown',
+    /OPEN ORDERS/i.test(dashText) && /IN TRANSIT/i.test(dashText), dashText.slice(0, 400));
+  ok('the pipeline card is present', /Order pipeline/i.test(dashText));
+  ok('orders are broken down by account', /Orders by account/i.test(dashText));
+  ok('throughput over time is charted', /Cases collected per month/i.test(dashText));
+  ok('an attention list is present', /Longest without movement/i.test(dashText));
+  ok('an account health table is present', /Account health/i.test(dashText));
+  ok('a kanban board is present', /Pipeline board/i.test(dashText));
+
+  ok('the mistyped tracker date is surfaced',
+    /date the tracker cannot mean/i.test(dashText), dashText.slice(0, 600));
+  ok('and names the PO and the value read', /319844-2/.test(dashText) && /415006/.test(dashText));
+
+  const stageBars = await page.locator('#dashboardBody .bar-seg').count();
+  ok('the pipeline draws stacked segments', stageBars > 0, stageBars + ' segments');
+  const legendItems = await page.locator('#dashboardBody ul.legend li').count();
+  ok('a legend is always present for the stage ramp', legendItems >= 5, legendItems + ' legend items');
+  const cols = await page.locator('#dashboardBody svg.chart rect.col').count();
+  ok('the monthly chart draws columns', cols > 0, cols + ' columns');
+  ok('the chart is labelled for screen readers',
+    (await page.locator('#dashboardBody svg.chart').first().getAttribute('aria-label')) !== null);
+
+  const kanCols = await page.locator('#dashboardBody .kan-col').count();
+  ok('the board has a column per stage', kanCols >= 5, kanCols + ' columns');
+  const kanCards = await page.locator('#dashboardBody .kan-card').count();
+  ok('orders appear as cards', kanCards > 0, kanCards + ' cards');
+  ok('cards say where their status came from',
+    /from tracker|set/i.test(await page.locator('#dashboardBody .kan-card').first().innerText()));
+
+  console.log('\nDashboard filters');
+  const divisionFilter = page.locator('#dashboardBody .filter-bar select').first();
+  const divisionOptions = await divisionFilter.locator('option').allInnerTexts();
+  check('only divisions the signed-in person has accounts in are offered',
+    divisionOptions, ['All divisions', 'Europe']);
+
+  const accountFilter = page.locator('#dashboardBody .filter-bar select').nth(1);
+  const accountOptions = await accountFilter.locator('option').allInnerTexts();
+  check('and only their accounts', accountOptions.slice().sort(),
+    ['All my accounts', 'Aeromexico', 'British Airways'].sort());
+
+  await accountFilter.selectOption('british-airways');
+  await page.waitForTimeout(900);
+  const emptyText = await page.locator('#dashboardBody').innerText();
+  ok('an account with no trackers empties the board rather than showing stale figures',
+    /No orders on the trackers in scope/i.test(emptyText), emptyText.slice(0, 300));
+
+  await page.locator('#dashboardBody .filter-bar button', { hasText: 'Reset filters' }).click();
+  await page.waitForSelector('#dashboardBody .stat-row');
+  ok('resetting restores the full picture',
+    /Order pipeline/i.test(await page.locator('#dashboardBody').innerText()));
+
+  const dashItemFilter = page.locator('#dashboardBody .filter-bar select').nth(2);
+  const dashItemOptions = await dashItemFilter.locator('option').allInnerTexts();
+  ok('items across the visible accounts can be filtered too',
+    dashItemOptions.some((o) => /Evidencia/.test(o)) && dashItemOptions.some((o) => /Montenero/.test(o)),
+    dashItemOptions.join(' | '));
+
+  console.log('\nSetting a status');
+  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
+  const beforeText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
+  ok('orders list with a derived status', /from tracker/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+
+  const firstRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
+  await firstRowSelect.selectOption('closed');
+  await page.waitForTimeout(1200);
+  const afterText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
+  ok('the chosen status is recorded as set by a person',
+    /set by a person/i.test(afterText), afterText.replace(/\n/g, ' | '));
+  ok('and names who set it', /EU Coordinator/.test(afterText), afterText.replace(/\n/g, ' | '));
+
+  await page.locator('nav.tabs button[data-tab="dashboard"]').click();
+  await page.waitForSelector('#dashboardBody .stat-row');
+  const dashAfter = await page.locator('#dashboardBody').innerText();
+  ok('the dashboard reflects the change', /Closed/.test(dashAfter));
+
+  console.log('\nAccount summary');
+  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.waitForSelector('#orderStatusBody .filter-bar');
+  await page.locator('#orderStatusBody .filter-bar select').nth(1).selectOption('aeromexico');
+  await page.waitForTimeout(700);
+  await page.locator('#orderStatusBody button', { hasText: 'Generate account summary' }).click();
+  await page.waitForSelector('#summaryHost .card', { timeout: 15000 });
+  const summary = await page.locator('#summaryHost').innerText();
+  ok('the summary names the account', /Aeromexico — account summary/.test(summary), summary.slice(0, 160));
+  ok('it counts open orders', /open order\(s\) of/.test(summary));
+  ok('it breaks down by status', /Orders by status/.test(summary));
+  ok('it lists the open orders', /Open orders/.test(summary));
+  ok('and states where each status came from', /Status source/.test(summary));
+
+  const summaryDownloads = [];
+  page.on('download', (d) => summaryDownloads.push(d));
+  await page.locator('#summaryHost button', { hasText: 'Email it' }).click();
+  await page.waitForTimeout(1500);
+  ok('the summary can be sent as an Outlook draft', summaryDownloads.length === 1,
+    summaryDownloads.length + ' downloads');
+  if (summaryDownloads.length) {
+    const p2 = path.join(os.tmpdir(), 'ami-summary.eml');
+    await summaryDownloads[0].saveAs(p2);
+    const body = fs.readFileSync(p2, 'utf8');
+    ok('the draft opens unsent in Outlook', /X-Unsent: 1/.test(body));
+    ok('and carries the summary table', Buffer.from(
+      body.split('Content-Transfer-Encoding: base64')[1].split('\r\n\r\n')[1].split('\r\n--')[0].replace(/\r\n/g, ''),
+      'base64').toString('utf8').includes('account summary'));
+  }
 
   console.log('\nRuntime');
   ok('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' ; '));
