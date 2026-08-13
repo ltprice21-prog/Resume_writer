@@ -62,11 +62,13 @@
       ],
       users: [],
       accounts: [],
+      settings: { autoCloseInvoiced: true },
     };
   }
 
   function normaliseWorkspace(raw) {
     const ws = Object.assign(defaultWorkspace(), raw || {});
+    ws.settings = Object.assign({ autoCloseInvoiced: true }, ws.settings || {});
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => ({
       id: slug(u.id || u.name),

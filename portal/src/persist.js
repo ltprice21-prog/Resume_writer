@@ -44,10 +44,15 @@
     return dbPromise;
   }
 
-  /** Whether anything can be remembered at all in this browser. */
+  let lastError = '';
+
+  /** Whether anything can be remembered at all in this browser, and why not. */
   async function available() {
-    try { await openDb(); return true; } catch (e) { return false; }
+    try { await openDb(); lastError = ''; return true; }
+    catch (e) { lastError = (e && (e.name ? e.name + ': ' : '') + (e.message || String(e))) || 'unknown'; return false; }
   }
+
+  const lastPersistError = () => lastError;
 
   function tx(db, mode) {
     return db.transaction(STORE, mode).objectStore(STORE);
@@ -173,7 +178,7 @@
   }
 
   Object.assign(AMI, {
-    persistAvailable: available,
+    persistAvailable: available, lastPersistError,
     idbGet, idbSet, idbDel,
     rememberFolder, recallFolder, forgetFolder, handlePermission,
     saveSession, loadSession, forgetSession,

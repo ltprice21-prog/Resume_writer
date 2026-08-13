@@ -121,6 +121,38 @@ function memoryStore(seed) {
   try { AMI.setStatus(doc, 'a/b/c', 'shipped-ish', 'X'); } catch (e) { threw = e; }
   ok('an unknown status is refused', threw && /Unknown status/.test(threw.message), String(threw));
 
+  console.log('\nThe rule that closes invoiced orders');
+  const ruleDoc = AMI.emptyStatusDoc();
+  const invoicedOrder = orders[0];
+  check('without the rule, the tracker says invoiced',
+    AMI.effectiveStatus(invoicedOrder, ruleDoc, {}).statusId, 'invoiced');
+  const ruled = AMI.effectiveStatus(invoicedOrder, ruleDoc, { autoCloseInvoiced: true });
+  check('with the rule, it reads as closed', ruled.statusId, 'closed');
+  check('and is marked as neither set nor plainly derived', ruled.source, 'auto');
+  ok('the reason names the rule and the evidence',
+    /NAV invoice number/.test(ruled.reason) && /treats invoiced orders as closed/.test(ruled.reason),
+    ruled.reason);
+
+  const earlier = AMI.effectiveStatus(orders[orders.length - 1], ruleDoc, { autoCloseInvoiced: true });
+  check('an order short of invoiced is untouched by the rule', earlier.statusId, 'placed');
+  check('and keeps its ordinary source', earlier.source, 'derived');
+
+  const heldDoc = AMI.emptyStatusDoc();
+  AMI.setStatus(heldDoc, invoicedOrder.key, 'invoiced', 'Bo Price');
+  const held = AMI.effectiveStatus(invoicedOrder, heldDoc, { autoCloseInvoiced: true });
+  check('choosing Invoiced by hand overrides the rule', held.statusId, 'invoiced');
+  check('and stays attributed to the person', held.source, 'set');
+
+  const ruleDay = new Date(2026, 7, 12);
+  const ruledCounts = AMI.countByStatus(AMI.decorate(orders, ruleDoc, ruleDay, { autoCloseInvoiced: true }));
+  const plainCounts = AMI.countByStatus(AMI.decorate(orders, ruleDoc, ruleDay, {}));
+  ok('the rule moves the whole invoiced column into closed',
+    ruledCounts.invoiced === 0 && ruledCounts.closed === plainCounts.invoiced,
+    JSON.stringify({ ruledCounts, plainCounts }));
+  ok('and takes them out of the open count',
+    AMI.decorate(orders, ruleDoc, ruleDay, { autoCloseInvoiced: true }).filter((o) => o.isOpen).length
+      < AMI.decorate(orders, ruleDoc, ruleDay, {}).filter((o) => o.isOpen).length);
+
   console.log('\nImplausible dates in the tracker');
   const badRow = orders.find((o) => o.dateIssues.length);
   ok('a mistyped date is caught rather than used', !!badRow, 'none flagged');

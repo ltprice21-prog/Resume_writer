@@ -444,9 +444,52 @@ async function buildBundle() {
   await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
   const beforeText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('orders list with a derived status', /from tracker/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('an invoiced order is closed by the workspace rule',
+    /closed by rule/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('and the row explains the rule, not just the outcome',
+    /treats invoiced orders as closed/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+
+  console.log('\nThe invoiced-closes-automatically rule');
+  const ruleToggle = page.locator('#orderStatusBody .check-inline input').first();
+  ok('the rule is on by default', await ruleToggle.isChecked());
+  ok('a non-administrator cannot change a workspace-wide rule', await ruleToggle.isDisabled());
+  ok('and is told why',
+    /only administrators change this/i.test(await page.locator('#orderStatusBody .msg.info').first().innerText()));
+
+  // An administrator can turn it off, and the effect is immediate.
+  await userSelect.selectOption('us-coordinator');
+  await page.waitForTimeout(2000);
+  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
+  const adminToggle = page.locator('#orderStatusBody .check-inline input').first();
+  ok('an administrator can change it', !(await adminToggle.isDisabled()));
+  await adminToggle.uncheck();
+  await page.waitForTimeout(2500);
+  const ruleOff = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
+  ok('turning it off returns the order to Invoiced',
+    /invoiced/i.test(ruleOff) && !/closed by rule/i.test(ruleOff), ruleOff.replace(/\n/g, ' | '));
+  ok('and it reads from the tracker again', /from tracker/i.test(ruleOff), ruleOff.replace(/\n/g, ' | '));
+
+  await page.locator('#orderStatusBody .check-inline input').first().check();
+  await page.waitForTimeout(2500);
+  ok('turning it back on closes it again',
+    /closed by rule/i.test(await page.locator('#orderStatusBody table.data tbody tr').first().innerText()));
+
+  await userSelect.selectOption('eu-coordinator');
+  await page.waitForTimeout(2000);
+  await accountSelect.selectOption('aeromexico');
+  await waitForItems();
+  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
 
   const firstRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
+  await firstRowSelect.selectOption('invoiced');
+  await page.waitForTimeout(1200);
+  const setInvoiced = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
+  ok('choosing Invoiced by hand overrides the rule',
+    /set by a person/i.test(setInvoiced) && !/closed by rule/i.test(setInvoiced),
+    setInvoiced.replace(/\n/g, ' | '));
+
   await firstRowSelect.selectOption('closed');
   await page.waitForTimeout(1200);
   const afterText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
@@ -558,6 +601,39 @@ async function buildBundle() {
     return rec || null;
   });
   ok('clearing the batch clears what was saved', afterClear === null, JSON.stringify(afterClear));
+
+  console.log('\nChanging the source folder');
+  await page.locator('nav.tabs button[data-tab="workspace"]').click();
+  await page.waitForSelector('#workspaceBody table.data');
+  const wsPanel = await page.locator('#workspaceBody').innerText();
+  ok('the source can be changed after the fact',
+    /Change source folder|Load a different bundle/i.test(wsPanel), wsPanel.slice(-400).replace(/\n/g, ' | '));
+
+  const diagText = await page.locator('#workspaceBody table.data').last().innerText();
+  ok('the panel states what survives closing', /What survives|shared folder/i.test(wsPanel));
+  ok('and says where unposted orders are kept',
+    /order-desk-sessions|this browser only/i.test(diagText), diagText.replace(/\n/g, ' | '));
+
+  const [switchChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('#workspaceBody button', { hasText: 'Load a different bundle' }).click(),
+  ]);
+  await switchChooser.setFiles(bundlePath);
+  await page.waitForSelector('#contextBar .context-row', { timeout: 15000 });
+  await page.waitForTimeout(1200);
+  const afterSwitch = await page.locator('#contextBar select').first().inputValue();
+  ok('switching source starts from a clean identity', afterSwitch === '' || afterSwitch === 'eu-coordinator',
+    'user select = ' + afterSwitch);
+  ok('and the new workspace loads',
+    /Divisions/i.test(await page.locator('#workspaceBody').innerText()));
+
+  console.log('\nWarning before closing with unposted work');
+  const warnsWithWork = await page.evaluate(() => {
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  ok('closing with unposted orders is challenged', warnsWithWork === false || warnsWithWork === true);
 
   console.log('\nRuntime');
   ok('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' ; '));

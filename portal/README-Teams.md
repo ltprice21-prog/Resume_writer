@@ -16,8 +16,9 @@ There is no server and no sign-in. Everything shared lives as ordinary files in 
 ```
 AMI Order Desk/                       <- a SharePoint library, synced through OneDrive
   AMI-Order-Desk-Teams.html           the app
-  workspace.json                      divisions, accounts, items, people, contacts
+  workspace.json                      divisions, accounts, items, people, contacts, rules
   order-status.json                   the stage each order is at
+  order-desk-sessions/                unposted work, one file per person
   templates/
     aeromexico/
       vendor-order.html               a template, with a small JSON header
@@ -122,9 +123,19 @@ actually have accounts in, so the filter can never show you an empty world by ac
 `Order placed – awaiting shipment` → `In transit` → `Delivered` → `Invoiced` → `Closed`
 
 **Closed is the end of the line, so everything short of it counts as open** — including
-*Invoiced*. An invoiced order is billed but not yet reconciled, and the dashboard keeps it in
-view until someone closes it. That is why the open count is larger than the number of orders
-still moving physically.
+*Invoiced*, unless the rule below closes it for you.
+
+### Invoiced orders close themselves
+
+On by default: **an order the tracker shows as invoiced reads as Closed.** The rule applies
+only where the stage came from the tracker, so an explicit choice always stands — pick
+*Invoiced* on an order by hand and it stays invoiced. Rows closed this way say so, quoting both
+the evidence and the rule: *"a NAV invoice number is recorded. Closed automatically, because
+this workspace treats invoiced orders as closed."*
+
+Turn it off with the checkbox on the Order status page and invoiced orders stay open until
+someone closes them. It is a workspace-wide setting, so only administrators change it; everyone
+else sees its state and why they cannot.
 
 Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
 to…", and filters including *Open only* and *No status set*. Anything you set there is what the
@@ -178,24 +189,36 @@ is no narrative text beyond the headings.
 
 ## What survives closing the app
 
-Everything shared — statuses, templates, workspace configuration, tracker rows — is written to
-the shared folder the moment you change it, so it is never waiting on you to save.
+The Workspace page shows a table of exactly this, live, for the browser you are actually in.
 
-Two more things are remembered **in this browser, on this machine**:
+**Everything shared** — statuses, templates, workspace configuration, tracker rows — is written
+to the shared folder the moment you change it. Never waiting on a save, in any browser.
 
-- **The folder you picked.** Reopen the file and it reconnects. Depending on how the browser
-  remembers the grant, that is either automatic or one click on *Reconnect to <folder>* — you
-  never have to find the folder again.
-- **Purchase orders you loaded but have not posted**, with their item routing and any edits.
-  Reopen and the Orders tab offers them back: *Restore them* or *Discard*. Restored PDFs are
-  re-read from scratch, so they go through exactly the same extraction and validation as one
-  dropped in fresh — a restored order is never trusted more than a new one.
+**Unposted purchase orders**, with their item routing and edits, are written to
+`order-desk-sessions/<your-name>.json` in the same folder. That needs no browser storage at
+all, so it works everywhere and even follows you to another machine. Reopen and the Orders tab
+offers them back: *Restore them* or *Discard*. Restored PDFs are re-read from scratch, so they
+go through exactly the same extraction and validation as one dropped in fresh — a restored
+order is never trusted more than a new one. Posting clears what it wrote.
 
-Posting clears what it has written, so a finished batch does not linger.
+**The folder itself, and who you are** are kept in the browser's local storage, purely so you
+do not have to find the folder again. This is the only part that depends on the browser, and
+some configurations block it. When that happens the Workspace page says so, quotes the reason
+the browser gave, and everything else carries on — you just pick the folder each time.
 
-None of this leaves the machine, and none of it is required: if the browser blocks local
-storage the app says so on the Workspace page and behaves as it always did, asking for the
-folder each time.
+> Browsers do not, by default, keep file-access permission across a restart. Reconnecting is
+> therefore one click on *Reconnect to <folder>*, not a trip through the picker. If even that
+> does not appear, the Workspace table will show *not available here* against the folder row,
+> with the browser's own explanation.
+
+**Closing with unposted orders is challenged** — the browser asks whether you really mean to
+leave. Saved is not the same as posted.
+
+### Changing the source folder
+
+**Workspace → Change source folder** points the app somewhere else if you picked the wrong one.
+Unposted work stays in the old folder, and is offered back if you return to it; the app warns
+before switching if you have any. In bundle mode the same button loads a different bundle.
 
 The single-account build remembers its tracker the same way.
 
@@ -294,9 +317,9 @@ portal/
   tests/
     engine.test.js       118 assertions   PO extraction, tracker maths, write-back
     ui.test.js            58 assertions   single-account app in Chromium
-    teams.test.js        100 assertions   template ingestion, workspace model, PO routing
-    status.test.js        94 assertions   status model, roll-ups, summary, chart builders
-    teams-ui.test.js      84 assertions   multi-account app and dashboard in Chromium
+    teams.test.js        103 assertions   template ingestion, workspace model, PO routing
+    status.test.js       107 assertions   status model, the invoiced rule, roll-ups, charts
+    teams-ui.test.js     110 assertions   multi-account app, dashboard and persistence
 ```
 
 ```bash

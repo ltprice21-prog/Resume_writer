@@ -62,6 +62,13 @@
     pdf: 'from PO', computed: 'computed', formula: 'formula',
     carried: 'carried', manual: 'blank', edited: 'edited',
   };
+
+  /* How an order's stage was arrived at. */
+  const SOURCE_CHIP = { set: 'ok', derived: 'computed', auto: 'carried', none: 'manual' };
+  const SOURCE_SHORT = { set: 'set', derived: 'from tracker', auto: 'auto-closed', none: 'none' };
+  const SOURCE_LONG = {
+    set: 'set by a person', derived: 'from tracker', auto: 'closed by rule', none: 'not set',
+  };
   const sourceChip = (s) => el('span', { class: 'chip ' + s, text: SOURCE_LABEL[s] || s });
 
   /* ------------------------------------------------------------------ *
@@ -149,7 +156,8 @@
       }
     }
     await walk('');
-    return AMI.zip(entries.filter((e) => /\.(json|html)$/i.test(e.name)));
+    return AMI.zip(entries.filter((e) => /\.(json|html)$/i.test(e.name)
+      && !e.name.startsWith(SESSION_DIR + '/')));
   }
 
   async function importWorkspaceZip(bytes) {
@@ -205,6 +213,12 @@
   const visibleAccounts = () => (state.workspace && state.userId ? AMI.accountsForUser(state.workspace, state.userId) : []);
   const itemState = (id) => state.itemStates.get(id) || null;
 
+  /** Workspace-wide rules that change how a stage is resolved. */
+  const statusOptions = () => ({
+    autoCloseInvoiced: !!(state.workspace && state.workspace.settings
+      && state.workspace.settings.autoCloseInvoiced),
+  });
+
   function poColumn(header) {
     const c = header.columns.find((x) => /^PO\s*#/i.test(x.header));
     return c ? c.col : 'A';
@@ -218,6 +232,8 @@
   }
 
   const posForItem = (itemId) => state.pos.filter((p) => p.include && p.po && p.itemId === itemId);
+  const unpostedCount = () =>
+    state.pos.filter((p) => p.include && p.po && !(itemState(p.itemId) || {}).posted).length;
   const unroutedPos = () => state.pos.filter((p) => p.include && p.po && !p.itemId);
 
   /* ------------------------------------------------------------------ *
@@ -377,7 +393,7 @@
     const preferred = saved.accountId && accounts.some((a) => a.id === saved.accountId)
       ? saved.accountId : (accounts.length ? accounts[0].id : '');
 
-    state.pendingSession = await AMI.loadSession();
+    state.pendingSession = (await readFolderSession()) || (await AMI.loadSession());
 
     renderHeaderBar();
     if (preferred) await selectAccount(preferred, saved.itemId);
@@ -731,15 +747,64 @@
       }
     }
 
-    host.appendChild(el('h3', { text: 'What this computer remembers' }));
-    host.appendChild(el('p', {
-      class: 'help',
-      text: state.canRemember
-        ? 'The folder you picked, your name and current account, and any purchase orders you loaded but have not posted — all stored in this browser on this machine, never uploaded. Statuses, templates and trackers live in the shared folder and reach the whole team.'
-        : 'This browser cannot store anything between sessions, so you will be asked for the folder each time. Statuses, templates and trackers are still saved to the shared folder as you work.',
-    }));
+    host.appendChild(el('h3', { text: 'What survives closing the app' }));
+    const diag = el('table', { class: 'data' });
+    diag.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Thing' }), el('th', { text: 'Where it lives' }), el('th', { text: 'Now' }),
+    ])]));
+    const diagBody = el('tbody');
+    const row = (thing, where, state_, tone) => diagBody.appendChild(el('tr', {}, [
+      el('td', {}, [el('b', { text: thing })]),
+      el('td', { text: where }),
+      el('td', {}, [el('span', { class: 'chip ' + (tone || 'manual'), text: state_ })]),
+    ]));
+
+    row('Statuses, templates, accounts, tracker rows', 'The shared folder, written as you change them',
+      'always saved', 'ok');
+    row('Unposted purchase orders',
+      state.store.kind === 'folder' ? SESSION_DIR + '/ in the shared folder' : 'this browser only (no folder open)',
+      state.store.kind === 'folder' ? 'saved to the folder' : 'this browser only',
+      state.store.kind === 'folder' ? 'ok' : 'carried');
+    row('The folder itself, so you need not find it again', 'This browser, on this machine',
+      state.canRemember ? 'remembered' : 'not available here',
+      state.canRemember ? 'ok' : 'error');
+    row('Your name and current account', 'This browser, on this machine',
+      state.canRemember ? 'remembered' : 'not available here',
+      state.canRemember ? 'ok' : 'carried');
+    diag.appendChild(diagBody);
+    host.appendChild(el('div', { class: 'table-scroll' }, [diag]));
+
+    if (!state.canRemember) {
+      host.appendChild(el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', { text: 'This browser will not let the app store anything locally.' }),
+          el('span', {
+            class: 'detail',
+            text: 'It reported: ' + (AMI.lastPersistError() || 'no reason given')
+              + '. You will be asked for the folder each time you open the app. Everything else is '
+              + 'unaffected — unposted work is saved into the shared folder, so it still comes back.',
+          }),
+        ]),
+      ]));
+    }
 
     host.appendChild(el('div', { class: 'btn-row' }, [
+      el('button', {
+        class: 'btn', text: state.store.kind === 'folder' ? 'Change source folder' : 'Load a different bundle',
+        onclick: () => {
+          if (state.store.kind === 'folder') { changeWorkspaceFolder(); return; }
+          const inp = el('input', { type: 'file', accept: '.zip' });
+          inp.addEventListener('change', async () => {
+            try {
+              resetWorkspaceState();
+              await adoptStore(await importWorkspaceZip(new Uint8Array(await inp.files[0].arrayBuffer())));
+              toast('Loaded a different bundle.', 'ok');
+            } catch (e) { toast('That bundle could not be read: ' + e.message, 'error'); }
+          });
+          inp.click();
+        },
+      }),
       el('button', {
         class: 'btn', text: 'Export workspace bundle',
         onclick: async () => {
@@ -2152,12 +2217,76 @@
    * Memory across closing the app
    * ------------------------------------------------------------------ */
 
+  const SESSION_DIR = 'order-desk-sessions';
+  const sessionPathFor = (userId) => SESSION_DIR + '/' + (userId || 'default') + '.json';
+  /* Well under any sync limit; past this the PDFs are left out rather than
+     writing a huge file into a shared library on every edit. */
+  const SESSION_MAX_BYTES = 12 * 1024 * 1024;
+
+  function bytesToBase64(bytes) { return AMI.b64(bytes); }
+
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /**
+   * The folder copy is the one that survives anything: it needs no browser
+   * storage, only the folder you already opened, and it follows the workspace.
+   */
+  async function writeFolderSession(payload) {
+    if (!state.store) return false;
+    const path = sessionPathFor(state.userId);
+    try {
+      const withPdfs = Object.assign({}, payload, {
+        pos: payload.pos.map((p) => Object.assign({}, p, { pdf: bytesToBase64(new Uint8Array(p.bytes)) })),
+      });
+      for (const p of withPdfs.pos) delete p.bytes;
+      let text = JSON.stringify(withPdfs);
+      if (text.length > SESSION_MAX_BYTES) {
+        for (const p of withPdfs.pos) { delete p.pdf; p.pdfOmitted = true; }
+        text = JSON.stringify(withPdfs);
+      }
+      await state.store.write(path, ENC.encode(text));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function readFolderSession() {
+    if (!state.store) return null;
+    try {
+      const bytes = await state.store.read(sessionPathFor(state.userId));
+      if (!bytes) return null;
+      const parsed = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+      if (!parsed || !Array.isArray(parsed.pos) || !parsed.pos.length) return null;
+      parsed.pos = parsed.pos
+        .filter((p) => p.pdf)
+        .map((p) => ({
+          fileName: p.fileName, itemId: p.itemId, include: p.include,
+          overrides: p.overrides, bytes: base64ToBytes(p.pdf).buffer,
+        }));
+      parsed.origin = 'the shared folder';
+      return parsed.pos.length ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function clearFolderSession() {
+    if (!state.store) return;
+    try { await state.store.remove(sessionPathFor(state.userId)); } catch (e) { /* already gone */ }
+  }
+
   /** Save unposted work. Posted items drop out, so finishing a batch clears it. */
   async function persistSession() {
-    if (!state.canRemember || !state.store) return;
+    if (!state.store) return;
     const pending = state.pos.filter((p) => p.po && p.include && !(itemState(p.itemId) || {}).posted);
-    if (!pending.length) { await AMI.forgetSession(); return; }
-    await AMI.saveSession({
+    if (!pending.length) { await AMI.forgetSession(); await clearFolderSession(); return; }
+    const payload = {
       userId: state.userId,
       accountId: state.accountId,
       accountName: (currentAccount() || {}).name || '',
@@ -2171,7 +2300,11 @@
         include: p.include,
         overrides: p.overrides,
       })),
-    });
+    };
+    // Both copies: the folder one survives a browser that forgets everything,
+    // the local one is instant and works before a folder is reconnected.
+    await AMI.saveSession(payload);
+    await writeFolderSession(payload);
   }
 
   const saveSessionSoon = AMI.debounce(() => { persistSession(); }, 400);
@@ -2218,6 +2351,7 @@
   async function discardSession() {
     state.pendingSession = null;
     await AMI.forgetSession();
+    await clearFolderSession();
     renderIntake(); renderWorkspace();
     toast('Saved work discarded.', 'ok');
   }
@@ -2235,6 +2369,56 @@
     } catch (e) {
       return false;
     }
+  }
+
+  /**
+   * Point the app at a different folder. Anything unposted belongs to the old
+   * workspace, so it is saved there and cleared here rather than carried across.
+   */
+  async function changeWorkspaceFolder() {
+    if (unpostedCount() && !window.confirm(
+      unpostedCount() + ' purchase order(s) are loaded but not posted.\n\n'
+      + 'They stay saved in the current folder and will be offered back if you return to it. '
+      + 'Switch folders anyway?')) return;
+
+    saveSessionSoon.flush();
+    await AMI.forgetFolder();
+    state.rememberedFolder = null;
+    if (typeof window.showDirectoryPicker !== 'function') {
+      toast('This browser cannot open folders. Load a different bundle instead.', 'error');
+      renderWorkspace();
+      return;
+    }
+    try {
+      const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+      resetWorkspaceState();
+      await adoptStore(handleStore(dir));
+      toast('Now working in ' + (dir.name || 'the chosen folder') + '.', 'ok');
+    } catch (e) {
+      if (e && e.name === 'AbortError') { renderWorkspace(); return; }
+      toast('Could not open that folder: ' + e.message, 'error');
+      renderWorkspace();
+    }
+  }
+
+  /** Forget everything tied to the workspace we are leaving. */
+  function resetWorkspaceState() {
+    state.workspace = null;
+    state.store = null;
+    state.userId = '';
+    state.accountId = '';
+    state.itemId = '';
+    state.templates = [];
+    state.itemStates = new Map();
+    state.pos = [];
+    state.emailRows = {};
+    state.emailOverrides = {};
+    state.portfolio = null;
+    state.statusDoc = null;
+    state.pendingSession = null;
+    state.summaryHtml = '';
+    state.filters = { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' };
+    saveLocal({ userId: '', accountId: '', itemId: '' });
   }
 
   async function reconnectFolder() {
@@ -2383,7 +2567,7 @@
   function filteredOrders() {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
-    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date());
+    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
   }
 
   async function applyStatus(key, statusId, note) {
@@ -2822,8 +3006,8 @@
       el('div', { class: 'kan-meta', text: (order.values.cases != null ? order.values.cases + ' cs' : '') }),
       el('div', { class: 'kan-foot' }, [
         el('span', {
-          class: 'chip ' + (order.status.source === 'set' ? 'ok' : (order.status.source === 'derived' ? 'computed' : 'manual')),
-          text: order.status.source === 'set' ? 'set' : (order.status.source === 'derived' ? 'from tracker' : 'none'),
+          class: 'chip ' + SOURCE_CHIP[order.status.source],
+          text: SOURCE_SHORT[order.status.source],
         }),
         el('span', { class: 'kan-age', text: order.ageDays == null ? '' : order.ageDays + ' d' }),
       ]),
@@ -2866,6 +3050,39 @@
     ));
 
     host.appendChild(filterBar(() => renderOrderStatus(), { withItem: true, withStatus: true, withSearch: true }));
+
+    const user = currentUser() || {};
+    const canEditRules = !!user.isAdmin || !state.workspace.users.length;
+    const autoClose = !!state.workspace.settings.autoCloseInvoiced;
+    const ruleBox = el('input', {
+      type: 'checkbox', checked: autoClose, disabled: !canEditRules,
+      onchange: async (e) => {
+        state.workspace.settings.autoCloseInvoiced = e.target.checked;
+        if (await persistWorkspace()) {
+          state.portfolio = null;
+          await ensurePortfolio(true);
+          renderOrderStatus();
+          toast(e.target.checked
+            ? 'Invoiced orders will now show as closed.'
+            : 'Invoiced orders will now stay open until closed.', 'ok');
+        }
+      },
+    });
+    host.appendChild(el('div', { class: 'msg info' }, [
+      el('span', { class: 'icon', text: 'i' }),
+      el('div', {}, [
+        el('label', { class: 'check-inline' }, [
+          ruleBox,
+          document.createTextNode('Treat invoiced orders as closed'),
+        ]),
+        el('span', {
+          class: 'detail',
+          text: 'Applies only where the stage came from the tracker. Setting a stage by hand always '
+            + 'stands — choose "Invoiced" on an order and it stays invoiced. '
+            + (canEditRules ? 'This is a workspace-wide setting.' : 'Only administrators change this.'),
+        }),
+      ]),
+    ]));
 
     const f = state.filters;
     let orders = filteredOrders();
@@ -2933,8 +3150,8 @@
           sel,
         ]),
         el('td', {}, [el('span', {
-          class: 'chip ' + (o.status.source === 'set' ? 'ok' : (o.status.source === 'derived' ? 'computed' : 'manual')),
-          text: o.status.source === 'set' ? 'set by a person' : (o.status.source === 'derived' ? 'from tracker' : 'not set'),
+          class: 'chip ' + SOURCE_CHIP[o.status.source],
+          text: SOURCE_LONG[o.status.source],
         }), el('div', { class: 'bar-sub', text: o.status.reason })]),
         el('td', { text: o.lastEvent ? AMI.formatShort(o.lastEvent) + ' · ' + o.lastEventLabel : '—' }),
         el('td', { class: 'num', text: o.ageDays == null ? '—' : String(o.ageDays) }),
@@ -2988,7 +3205,8 @@
       return;
     }
     const scope = filteredPortfolio().filter((p) => p.account.id === account.id);
-    const orders = AMI.decorate(scope.flatMap((p) => p.orders), state.statusDoc || AMI.emptyStatusDoc(), new Date());
+    const orders = AMI.decorate(scope.flatMap((p) => p.orders),
+      state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
     const user = currentUser() || {};
 
     const built = AMI.buildAccountSummary({
@@ -3080,6 +3298,14 @@
     renderWorkspace();
     refreshTabs();
     showTab('workspace');
+
+    // Saved work is not the same as posted work, so say so on the way out.
+    window.addEventListener('beforeunload', (e) => {
+      if (!unpostedCount()) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    });
 
     // A debounced save may still be pending when the tab goes away.
     const flush = () => { saveSessionSoon.flush(); };

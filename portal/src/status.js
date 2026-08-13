@@ -244,7 +244,8 @@
    * A person's selection always beats the tracker's implication, and the source
    * is reported so the interface can show which of the two it is.
    */
-  function effectiveStatus(order, statusDoc) {
+  function effectiveStatus(order, statusDoc, options) {
+    const opts = options || {};
     const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
     if (entry && statusById(entry.status)) {
       return {
@@ -254,6 +255,16 @@
       };
     }
     if (order.derived) {
+      // A workspace rule may carry an invoiced order straight to closed. It only
+      // ever applies to a stage the tracker implied — an explicit choice stands.
+      if (opts.autoCloseInvoiced && order.derived.statusId === 'invoiced') {
+        return {
+          statusId: 'closed', source: 'auto',
+          updated: '', updatedBy: '', note: '',
+          reason: 'From the tracker: ' + order.derived.reason
+            + '. Closed automatically, because this workspace treats invoiced orders as closed.',
+        };
+      }
       return {
         statusId: order.derived.statusId, source: 'derived',
         updated: '', updatedBy: '', note: '',
@@ -280,10 +291,10 @@
   }
 
   /** Attach the effective status and aging to each order. */
-  function decorate(orders, statusDoc, today) {
+  function decorate(orders, statusDoc, today, options) {
     const now = today || new Date();
     return orders.map((o) => {
-      const status = effectiveStatus(o, statusDoc);
+      const status = effectiveStatus(o, statusDoc, options);
       return Object.assign({}, o, {
         status,
         isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
