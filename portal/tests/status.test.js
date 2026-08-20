@@ -202,23 +202,176 @@ function memoryStore(seed) {
   ok('and one stored as closed lands in the same place',
     openness[1].isOpen === false && openness[1].status.statusId === 'invoiced');
 
+  console.log('\nContract standing');
+  const decoratedAll = AMI.withSchedule(
+    AMI.decorate(orders, AMI.emptyStatusDoc(), new Date(2026, 7, 20)), new Date(2026, 7, 20));
+  const standing = AMI.contractStanding(decoratedAll, {
+    accountName: 'Aeromexico', itemName: 'Evidencia Tempranillo', cycle: '2026 Cycle',
+  });
+  check('the balance is the tracker\'s own running total after the last order',
+    standing.balanceBt, 44544);
+  check('in cases too', standing.balanceCs, 3712);
+  ok('and says which PO it was read after', standing.balanceFrom === '350633-2', standing.balanceFrom);
+  check('a balance above zero is an open contract', standing.state, 'open');
+  ok('the cycle is the sheet the item posts into', standing.cycle === '2026 Cycle');
+
+  check('the most recent delivery is the latest one actually recorded',
+    AMI.formatISO(standing.lastDelivery), '2026-06-18');
+  check('attributed to its PO', standing.lastDeliveryPo, '350633-1');
+  check('the furthest requested delivery is the latest date asked for',
+    AMI.formatISO(standing.furthestRequested), '2026-06-26');
+  check('also attributed', standing.furthestRequestedPo, '350633-2');
+
+  // A mistyped year would otherwise become "the furthest date" and stay there.
+  ok('a date the tracker cannot mean is not the furthest date',
+    standing.furthestRequested.getFullYear() === 2026, String(standing.furthestRequested));
+
+  // The 2025 sheet on this workbook really has over-ordered.
+  const olderSheet = wb.sheet('2025');
+  const olderHeader = AMI.findHeaderRow(olderSheet);
+  const olderOrders = AMI.decorate(AMI.readOrders(olderSheet, olderHeader, { itemId: 'evidencia' }),
+    AMI.emptyStatusDoc(), new Date(2026, 7, 20));
+  const overdrawn = AMI.contractStanding(olderOrders, { itemName: 'Evidencia', cycle: '2025' });
+  check('a balance below zero reads as over contract', overdrawn.state, 'over');
+  check('and keeps the negative figure rather than clamping it', overdrawn.balanceBt, -10176);
+  ok('flagged for the interface', overdrawn.isOver === true && overdrawn.isClosed === false);
+  ok('with a reason a person can act on',
+    /more has been ordered than the contract covers/.test(overdrawn.reason), overdrawn.reason);
+
+  const zeroed = AMI.contractStanding([Object.assign({}, decoratedAll[0], {
+    row: 99, values: { balanceBt: 0, balanceCs: 0 },
+  })], {});
+  check('a balance of exactly zero closes the item', zeroed.state, 'closed');
+  ok('and is flagged as closed', zeroed.isClosed === true && zeroed.isOver === false);
+  ok('with the reason stated', /everything contracted has been ordered/.test(zeroed.reason), zeroed.reason);
+
+  const noBalance = AMI.contractStanding([Object.assign({}, decoratedAll[0], { values: {} })], {});
+  check('a tracker with no balance column says so rather than guessing', noBalance.state, 'unknown');
+  check('and reports no figure', noBalance.balanceBt, null);
+  check('an item with no orders at all is unknown too', AMI.contractStanding([], {}).state, 'unknown');
+
+  console.log('\nCollection and delivery dates');
+  const NOW = new Date(2026, 7, 20);
+  const day = (y, m, d) => new Date(y, m - 1, d);
+  /* A decorated order, built by hand so each date condition can be isolated. */
+  const order = (po, dates, extra) => Object.assign({
+    po, key: 'a/i/' + po, row: 10, accountId: 'aeromexico', accountName: 'Aeromexico',
+    itemId: 'evidencia', itemName: 'Evidencia', divisionId: 'europe',
+    dates, values: {}, dateIssues: [], lastEvent: NOW, lastEventLabel: 'delivered',
+    ageDays: 0, isOpen: true, status: { statusId: 'transit', source: 'derived', reason: '' },
+  }, extra || {});
+
+  const onTime = order('A-1', {
+    requestedCollection: day(2026, 8, 3), actualCollection: day(2026, 8, 3),
+    requiredDelivery: day(2026, 8, 7), delivered: day(2026, 8, 6),
+  });
+  const f1 = AMI.scheduleFlags(onTime, NOW);
+  ok('meeting both dates raises nothing',
+    !f1.collectionOverdue && !f1.deliveryOverdue && !f1.collectedLate && !f1.deliveredLate,
+    JSON.stringify(f1));
+
+  const onTheDay = order('A-2', {
+    requestedCollection: day(2026, 8, 20), requiredDelivery: day(2026, 8, 20),
+  });
+  const f2 = AMI.scheduleFlags(onTheDay, NOW);
+  ok('a date due today is not yet overdue',
+    !f2.collectionOverdue && !f2.deliveryOverdue, JSON.stringify(f2));
+
+  const missedCollection = order('A-3', {
+    requestedCollection: day(2026, 8, 10), requiredDelivery: day(2026, 9, 30),
+  });
+  const f3 = AMI.scheduleFlags(missedCollection, NOW);
+  check('a passed collection date with nothing collected is overdue', f3.collectionOverdue.days, 10);
+  ok('and the delivery still ahead of us is not', !f3.deliveryOverdue);
+
+  const missedDelivery = order('A-4', {
+    requestedCollection: day(2026, 7, 1), actualCollection: day(2026, 7, 1),
+    requiredDelivery: day(2026, 7, 20),
+  });
+  const f4 = AMI.scheduleFlags(missedDelivery, NOW);
+  check('a passed delivery date with nothing delivered is overdue', f4.deliveryOverdue.days, 31);
+  ok('and a collection that happened is not chased', !f4.collectionOverdue);
+
+  const metLate = order('A-5', {
+    requestedCollection: day(2026, 6, 1), actualCollection: day(2026, 6, 5),
+    requiredDelivery: day(2026, 6, 10), delivered: day(2026, 6, 12),
+  });
+  const f5 = AMI.scheduleFlags(metLate, NOW);
+  check('collected after the date asked for is recorded as late', f5.collectedLate.days, 4);
+  check('and delivered late likewise', f5.deliveredLate.days, 2);
+  ok('but neither is overdue — there is nothing left to chase',
+    !f5.collectionOverdue && !f5.deliveryOverdue);
+
+  const noDates = order('A-6', {});
+  const f6 = AMI.scheduleFlags(noDates, NOW);
+  ok('an order with no requested dates raises nothing',
+    !f6.collectionOverdue && !f6.deliveryOverdue && !f6.collectedLate && !f6.deliveredLate);
+
+  console.log('\nAccount health from those dates');
   const account = { id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe' };
-  const healthy = AMI.summariseAccount(account, 'Europe', AMI.decorate(
-    orders.map((o) => Object.assign({}, o, { lastEvent: today })), doc, today), 0);
-  check('a current account reads as on track', healthy.health.level, 'good');
+  const health = (list, followUps) =>
+    AMI.summariseAccount(account, 'Europe', list, followUps || 0, null, NOW);
 
-  const stale = AMI.summariseAccount(account, 'Europe', AMI.decorate(
-    orders.map((o) => Object.assign({}, o, { lastEvent: new Date(2026, 5, 1) })), doc, today), 0);
-  ok('a long-idle open order raises attention', stale.health.level !== 'good', stale.health.level);
-  ok('and says which PO and how long', /no dated activity for \d+ days/.test(stale.health.reasons.join(' ')),
-    stale.health.reasons.join(' | '));
+  const clean = health([onTime, onTheDay]);
+  check('every date met or still ahead reads as on track', clean.health.level, 'good');
+  ok('and says so plainly',
+    /every requested collection and required delivery date/.test(clean.health.reasons.join(' ')),
+    clean.health.reasons.join(' | '));
 
-  const busy = AMI.summariseAccount(account, 'Europe', AMI.decorate(
-    orders.map((o) => Object.assign({}, o, { lastEvent: today })), doc, today), 9);
-  check('many outstanding follow-ups read as at risk', busy.health.level, 'critical');
-  ok('and the reason names them', /9 outstanding follow-up/.test(busy.health.reasons.join(' ')),
-    busy.health.reasons.join(' | '));
-  ok('thresholds are reported alongside the verdict', busy.thresholds.warningDays > 0);
+  const slipping = health([onTime, missedCollection]);
+  check('one collection past its date needs attention', slipping.health.level, 'warning');
+  check('and is counted', slipping.collectionsOverdue, 1);
+  ok('the reason names the PO and the days',
+    /PO A-3 by 10 days/.test(slipping.health.reasons.join(' ')), slipping.health.reasons.join(' | '));
+
+  const badlyLate = health([order('A-7', { requestedCollection: day(2026, 7, 1) })]);
+  check('a collection more than a fortnight past is at risk', badlyLate.health.level, 'critical');
+
+  const undelivered = health([missedDelivery]);
+  check('any delivery past its date is at risk', undelivered.health.level, 'critical');
+  check('and is counted separately from collections', undelivered.deliveriesOverdue, 1);
+  ok('the reason says no delivery is recorded',
+    /no delivery recorded/.test(undelivered.health.reasons.join(' ')), undelivered.health.reasons.join(' | '));
+
+  // The whole reason lateness is split two ways: an account that always runs a
+  // few days late would otherwise sit permanently at risk over nothing chaseable.
+  const lateButDone = health([metLate, metLate, metLate]);
+  check('orders met late do not move the health mark', lateButDone.health.level, 'good');
+  check('but they are counted', lateButDone.collectedLate, 3);
+  check('and so are the late deliveries', lateButDone.deliveredLate, 3);
+
+  const withFollowUps = health([onTime], 9);
+  check('follow-ups no longer set health on their own', withFollowUps.health.level, 'good');
+  check('though they are still reported', withFollowUps.followUps, 9);
+  ok('thresholds are reported alongside the verdict', withFollowUps.thresholds.lateCollectionDays > 0);
+
+  console.log('\nThe schedule of what is still coming');
+  const sched = AMI.scheduleEntries(
+    [onTime, missedCollection, missedDelivery, order('A-8', {
+      requestedCollection: day(2026, 8, 26), requiredDelivery: day(2026, 9, 4),
+    })], NOW);
+  check('a date already met drops out of the schedule',
+    sched.some((e) => e.order.po === 'A-1'), false);
+  check('what is left is in date order', sched.map((e) => e.order.po + ':' + e.kind),
+    ['A-4:delivery', 'A-3:collection', 'A-8:collection', 'A-8:delivery', 'A-3:delivery']);
+  check('missed dates are marked overdue', sched.filter((e) => e.overdue).map((e) => e.order.po),
+    ['A-4', 'A-3']);
+
+  const byWeek = AMI.groupSchedule(sched, 'week', NOW);
+  check('overdue is its own group, at the top', byWeek[0].key, 'overdue');
+  ok('rather than buried in the week it was due',
+    byWeek.slice(1).every((g) => !g.entries.some((e) => e.overdue)));
+  ok('weeks run Monday to Sunday',
+    AMI.startOfWeek(day(2026, 8, 20)).getDay() === 1, String(AMI.startOfWeek(day(2026, 8, 20))));
+  ok('and each week says how far off it is',
+    byWeek.slice(1).some((g) => /week/.test(g.sub)), byWeek.map((g) => g.label + '/' + g.sub).join(' | '));
+
+  const byMonth = AMI.groupSchedule(sched, 'month', NOW);
+  check('grouping by month keeps overdue first', byMonth[0].key, 'overdue');
+  ok('and names the month', /August 2026/.test(byMonth.map((g) => g.label).join(' ')),
+    byMonth.map((g) => g.label).join(' | '));
+  ok('the same entries appear either way',
+    byWeek.reduce((n, g) => n + g.entries.length, 0) === byMonth.reduce((n, g) => n + g.entries.length, 0));
 
   console.log('\nStatus storage');
   const store = memoryStore();

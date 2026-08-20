@@ -159,6 +159,7 @@
     { key: 'lot', re: /^Lot Number/i },
     { key: 'navInvoice', re: /^NAV INV/i },
     { key: 'balanceBt', re: /^Balance on Contract\s*\(bt\)/i },
+    { key: 'balanceCs', re: /^Balance on Contract\s*\(cs\)/i },
     { key: 'notes', re: /^Notes/i },
   ];
 
@@ -283,6 +284,229 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Contract standing
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Where an item's contract stands.
+   *
+   * The tracker carries a running balance that steps down with each order, so
+   * the last row's balance is what is left. Nothing is recalculated here — the
+   * sheet's own arithmetic is read, which means a balance that has gone negative
+   * shows as negative rather than being quietly clamped.
+   */
+  const CONTRACT_STATES = {
+    open: { id: 'open', label: 'Open', tone: 'good' },
+    closed: { id: 'closed', label: 'Closed', tone: 'neutral' },
+    over: { id: 'over', label: 'Over contract', tone: 'critical' },
+    unknown: { id: 'unknown', label: 'No balance column', tone: 'neutral' },
+  };
+
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  function contractStanding(orders, context) {
+    const ctx = context || {};
+    const rows = orders.slice().sort((a, b) => a.row - b.row);
+    const last = rows.length ? rows[rows.length - 1] : null;
+
+    const bt = last ? num(last.values.balanceBt) : null;
+    const cs = last ? num(last.values.balanceCs) : null;
+
+    let state = 'unknown';
+    let reason = 'this tracker has no balance column';
+    if (bt != null) {
+      if (bt < 0) {
+        state = 'over';
+        reason = 'the contract balance has gone below zero — more has been ordered than the contract covers';
+      } else if (bt === 0) {
+        state = 'closed';
+        reason = 'the contract balance is zero — everything contracted has been ordered';
+      } else {
+        state = 'open';
+        reason = 'the contract still has quantity left to order';
+      }
+    }
+
+    // The most recent delivery that actually happened, and the furthest-out
+    // delivery anyone has asked for. Implausible serials are already excluded
+    // upstream, so a mistyped year cannot become "the furthest date".
+    let lastDelivery = null;
+    let lastDeliveryPo = '';
+    let furthestRequested = null;
+    let furthestRequestedPo = '';
+    for (const o of rows) {
+      const d = o.dates.delivered;
+      if (d && (!lastDelivery || d > lastDelivery)) { lastDelivery = d; lastDeliveryPo = o.po; }
+      const r = o.dates.requiredDelivery;
+      if (r && (!furthestRequested || r > furthestRequested)) { furthestRequested = r; furthestRequestedPo = o.po; }
+    }
+
+    return {
+      accountId: ctx.accountId || '', accountName: ctx.accountName || '',
+      itemId: ctx.itemId || '', itemName: ctx.itemName || '',
+      cycle: ctx.cycle || '',
+      balanceBt: bt, balanceCs: cs,
+      balanceFrom: last ? last.po : '',
+      state, stateLabel: CONTRACT_STATES[state].label, tone: CONTRACT_STATES[state].tone, reason,
+      isClosed: state === 'closed',
+      isOver: state === 'over',
+      lastDelivery, lastDeliveryPo,
+      furthestRequested, furthestRequestedPo,
+      orders: rows.length,
+      open: rows.filter((o) => o.isOpen).length,
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Schedule and lateness
+   * ------------------------------------------------------------------ */
+
+  /**
+   * How an order stands against the dates it was promised.
+   *
+   * Two different things, kept apart because they call for different action:
+   *   - `overdue`: the date has passed and the tracker still records nothing.
+   *     Someone has to chase it today.
+   *   - `late`: it happened, but after the date asked for. Nothing to chase; it
+   *     is a record of how the account has actually run.
+   */
+  function scheduleFlags(order, today) {
+    const now = today || new Date();
+    const out = {
+      collectionOverdue: null, deliveryOverdue: null,
+      collectedLate: null, deliveredLate: null,
+    };
+
+    const reqCollection = order.dates.requestedCollection;
+    const collected = order.dates.actualCollection;
+    if (reqCollection) {
+      if (!collected) {
+        const days = AMI.daysBetween(reqCollection, now);
+        if (days > 0) out.collectionOverdue = { due: reqCollection, days };
+      } else if (AMI.daysBetween(reqCollection, collected) > 0) {
+        out.collectedLate = { due: reqCollection, on: collected, days: AMI.daysBetween(reqCollection, collected) };
+      }
+    }
+
+    const reqDelivery = order.dates.requiredDelivery;
+    const delivered = order.dates.delivered;
+    if (reqDelivery) {
+      if (!delivered) {
+        const days = AMI.daysBetween(reqDelivery, now);
+        if (days > 0) out.deliveryOverdue = { due: reqDelivery, days };
+      } else if (AMI.daysBetween(reqDelivery, delivered) > 0) {
+        out.deliveredLate = { due: reqDelivery, on: delivered, days: AMI.daysBetween(reqDelivery, delivered) };
+      }
+    }
+    return out;
+  }
+
+  /** Attach the schedule flags to every order. */
+  function withSchedule(orders, today) {
+    const now = today || new Date();
+    return orders.map((o) => Object.assign({}, o, { schedule: scheduleFlags(o, now) }));
+  }
+
+  /**
+   * Every collection and delivery still ahead of us or already missed.
+   *
+   * A date that has been met drops out — it needs nothing. A date that has
+   * passed with nothing recorded stays, marked overdue, because that is the
+   * most important thing a schedule can tell you.
+   */
+  function scheduleEntries(orders, today) {
+    const now = today || new Date();
+    const out = [];
+    for (const o of orders) {
+      const flags = o.schedule || scheduleFlags(o, now);
+
+      if (o.dates.requestedCollection && !o.dates.actualCollection) {
+        const days = AMI.daysBetween(o.dates.requestedCollection, now);
+        out.push({
+          order: o, kind: 'collection', label: 'Collection',
+          date: o.dates.requestedCollection,
+          overdue: !!flags.collectionOverdue,
+          days: -days,
+        });
+      }
+      if (o.dates.requiredDelivery && !o.dates.delivered) {
+        const days = AMI.daysBetween(o.dates.requiredDelivery, now);
+        out.push({
+          order: o, kind: 'delivery', label: 'Delivery',
+          date: o.dates.requiredDelivery,
+          overdue: !!flags.deliveryOverdue,
+          days: -days,
+        });
+      }
+    }
+    out.sort((a, b) => a.date - b.date);
+    return out;
+  }
+
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  /** The Monday of a date's week. Weeks run Monday to Sunday. */
+  function startOfWeek(d) {
+    const s = startOfDay(d);
+    const shift = (s.getDay() + 6) % 7;
+    return new Date(s.getFullYear(), s.getMonth(), s.getDate() - shift);
+  }
+
+  const shortDate = (d) => DAY_SHORT[d.getDay()] + ' ' + d.getDate() + ' '
+    + MONTH_NAMES[d.getMonth()].slice(0, 3);
+
+  /**
+   * Group schedule entries into weeks or months, overdue first.
+   *
+   * Overdue is its own group rather than being filed under the week it was due —
+   * it is a different kind of fact, and burying it in a past week would hide it.
+   */
+  function groupSchedule(entries, by, today) {
+    const now = today || new Date();
+    const groups = [];
+    const index = new Map();
+
+    const overdue = entries.filter((e) => e.overdue);
+    if (overdue.length) {
+      groups.push({
+        key: 'overdue', label: 'Overdue', sub: 'the date has passed with nothing recorded',
+        overdue: true, entries: overdue,
+      });
+    }
+
+    for (const e of entries) {
+      if (e.overdue) continue;
+      let key;
+      let label;
+      let sub;
+      if (by === 'month') {
+        const m = new Date(e.date.getFullYear(), e.date.getMonth(), 1);
+        key = 'm' + m.getFullYear() + '-' + m.getMonth();
+        label = MONTH_NAMES[m.getMonth()] + ' ' + m.getFullYear();
+        sub = '';
+      } else {
+        const w = startOfWeek(e.date);
+        const end = new Date(w.getFullYear(), w.getMonth(), w.getDate() + 6);
+        key = 'w' + w.getFullYear() + '-' + w.getMonth() + '-' + w.getDate();
+        label = shortDate(w) + ' – ' + shortDate(end);
+        const offset = AMI.daysBetween(startOfWeek(now), w) / 7;
+        sub = offset === 0 ? 'this week' : (offset === 1 ? 'next week' : 'in ' + offset + ' weeks');
+      }
+      if (!index.has(key)) {
+        const group = { key, label, sub, overdue: false, entries: [] };
+        index.set(key, group);
+        groups.push(group);
+      }
+      index.get(key).entries.push(e);
+    }
+    return groups;
+  }
+
+  /* ------------------------------------------------------------------ *
    * Roll-ups
    * ------------------------------------------------------------------ */
 
@@ -329,46 +553,79 @@
   }
 
   /* Thresholds are stated in the interface, so "attention" is never a black box. */
-  const HEALTH_THRESHOLDS = { warningDays: 21, criticalDays: 45, warningFollowUps: 1, criticalFollowUps: 5 };
+  const HEALTH_THRESHOLDS = {
+    // How far past a missed collection date before it stops being a slip and
+    // starts being a problem.
+    lateCollectionDays: 14,
+    // Ages, kept for the stalest-order column. They no longer set health.
+    warningDays: 21, criticalDays: 45,
+  };
 
   /**
-   * A per-account roll-up. `health` is a plain reading of two explicit signals —
-   * how long an open order has sat without a dated event, and how many follow-up
-   * items are outstanding — never a score.
+   * A per-account roll-up.
+   *
+   * Health reads two things and nothing else: orders whose requested collection
+   * date has passed with no collection recorded, and orders whose required
+   * delivery date has passed with no delivery recorded. Both are about what is
+   * true today and needs chasing today.
+   *
+   * An order that was collected or delivered late is counted separately, as a
+   * record of how the account has run — it is not chaseable and so does not move
+   * the health mark. Without that split every account would sit permanently at
+   * risk over a delivery that slipped two days last February.
    */
-  function summariseAccount(account, divisionName, orders, followUpCount, thresholds) {
+  function summariseAccount(account, divisionName, orders, followUpCount, thresholds, today) {
     const t = Object.assign({}, HEALTH_THRESHOLDS, thresholds || {});
-    const open = orders.filter((o) => o.isOpen);
-    const counts = countByStatus(orders);
+    const now = today || new Date();
+    const flagged = orders.map((o) => (o.schedule ? o : Object.assign({}, o, { schedule: scheduleFlags(o, now) })));
+
+    const open = flagged.filter((o) => o.isOpen);
+    const counts = countByStatus(flagged);
     const stalest = open.reduce((worst, o) => (
       o.ageDays != null && (!worst || o.ageDays > worst.ageDays) ? o : worst), null);
 
+    const collectionsOverdue = flagged.filter((o) => o.schedule.collectionOverdue);
+    const deliveriesOverdue = flagged.filter((o) => o.schedule.deliveryOverdue);
+    const collectedLate = flagged.filter((o) => o.schedule.collectedLate);
+    const deliveredLate = flagged.filter((o) => o.schedule.deliveredLate);
+
+    const worstCollection = collectionsOverdue.reduce((w, o) => (
+      !w || o.schedule.collectionOverdue.days > w.schedule.collectionOverdue.days ? o : w), null);
+    const worstDelivery = deliveriesOverdue.reduce((w, o) => (
+      !w || o.schedule.deliveryOverdue.days > w.schedule.deliveryOverdue.days ? o : w), null);
+
     const reasons = [];
     let level = 'good';
-    const stalestDays = stalest && stalest.ageDays != null ? stalest.ageDays : 0;
-    if (stalestDays >= t.criticalDays) {
+
+    // A missed delivery is the customer's problem, so it outranks everything.
+    if (deliveriesOverdue.length) {
       level = 'critical';
-      reasons.push('PO ' + stalest.po + ' has had no dated activity for ' + stalestDays + ' days');
-    } else if (stalestDays >= t.warningDays) {
-      level = 'warning';
-      reasons.push('PO ' + stalest.po + ' has had no dated activity for ' + stalestDays + ' days');
+      reasons.push(deliveriesOverdue.length + ' order(s) past their required delivery date with no delivery recorded'
+        + (worstDelivery ? ' — worst is PO ' + worstDelivery.po + ' by '
+          + worstDelivery.schedule.deliveryOverdue.days + ' days' : ''));
     }
-    if ((followUpCount || 0) >= t.criticalFollowUps) {
-      level = 'critical';
-      reasons.push(followUpCount + ' outstanding follow-up items');
-    } else if ((followUpCount || 0) >= t.warningFollowUps && level === 'good') {
-      level = 'warning';
-      reasons.push(followUpCount + ' outstanding follow-up item(s)');
+    if (collectionsOverdue.length) {
+      const worstDays = worstCollection ? worstCollection.schedule.collectionOverdue.days : 0;
+      if (worstDays >= t.lateCollectionDays) level = 'critical';
+      else if (level === 'good') level = 'warning';
+      reasons.push(collectionsOverdue.length + ' order(s) past their requested collection date with nothing collected'
+        + (worstCollection ? ' — worst is PO ' + worstCollection.po + ' by ' + worstDays + ' days' : ''));
     }
-    const unset = counts.unset;
-    if (unset && level === 'good') reasons.push(unset + ' order(s) with no status yet');
+    if (level === 'good') {
+      reasons.push('every requested collection and required delivery date so far has been met or is still ahead');
+    }
 
     return {
       accountId: account.id, accountName: account.name, divisionId: account.divisionId,
       divisionName: divisionName || '',
-      total: orders.length, open: open.length, counts,
+      total: flagged.length, open: open.length, counts,
       followUps: followUpCount || 0,
-      stalest, stalestDays,
+      stalest, stalestDays: stalest && stalest.ageDays != null ? stalest.ageDays : 0,
+      collectionsOverdue: collectionsOverdue.length,
+      deliveriesOverdue: deliveriesOverdue.length,
+      collectedLate: collectedLate.length,
+      deliveredLate: deliveredLate.length,
+      worstCollection, worstDelivery,
       health: { level, reasons },
       thresholds: t,
     };
@@ -453,6 +710,8 @@
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
     deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
     partitionClosed, summariseAccount, buildAccountSummary, daysSince,
+    CONTRACT_STATES, contractStanding,
+    scheduleFlags, withSchedule, scheduleEntries, groupSchedule, startOfWeek, MONTH_NAMES,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

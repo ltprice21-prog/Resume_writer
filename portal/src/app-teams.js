@@ -241,6 +241,7 @@
     portfolioLoading: false,
     filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
     excludeClosed: false,
+    scheduleBy: 'week',       // 'week' | 'month' on the upcoming-dates card
     lastStrippedNote: null,   // { templateId, text, html } after an import trimmed a note
     draftAttachments: [],     // files added to the current draft only, never saved
     drill: null,              // { title, sub, orders } while a chart detail is open
@@ -459,6 +460,7 @@
 
     const saved = loadLocal();
     state.excludeClosed = !!saved.excludeClosed;
+    if (saved.scheduleBy === 'month' || saved.scheduleBy === 'week') state.scheduleBy = saved.scheduleBy;
     if (saved.userId && workspace.users.some((u) => u.id === saved.userId)) state.userId = saved.userId;
     else if (workspace.users.length === 1) state.userId = workspace.users[0].id;
 
@@ -3333,6 +3335,9 @@
           const header = AMI.findHeaderRow(sheet);
           out.push({
             account, item, sheet, header,
+            // The sheet is the contract cycle — a workbook laid out by year has
+            // one sheet per cycle, so its name is what "this cycle" means.
+            cycle: sheetName,
             config: AMI.readSheetConfig(sheet),
             orders: AMI.readOrders(sheet, header, {
               accountId: account.id, accountName: account.name, divisionId: account.divisionId,
@@ -3372,7 +3377,29 @@
   function filteredOrders() {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
-    return applyClosedFilter(AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()));
+    const decorated = AMI.withSchedule(
+      AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()), new Date());
+    return applyClosedFilter(decorated);
+  }
+
+  /**
+   * Contract standing per item, in filter scope.
+   *
+   * Read from the whole tracker rather than the filtered orders — a contract
+   * balance is a fact about the item, and hiding finished orders must not make
+   * it look like less has been ordered than has.
+   */
+  function contractsInScope() {
+    const doc = state.statusDoc || AMI.emptyStatusDoc();
+    const now = new Date();
+    return filteredPortfolio().map((p) => {
+      const orders = AMI.withSchedule(AMI.decorate(p.orders, doc, now), now);
+      return AMI.contractStanding(orders, {
+        accountId: p.account.id, accountName: p.account.name,
+        itemId: p.item.id, itemName: p.item.name, cycle: p.cycle,
+      });
+    }).sort((a, b) => a.accountName.localeCompare(b.accountName)
+      || a.itemName.localeCompare(b.itemName));
   }
 
   async function applyStatus(key, statusId, note) {
@@ -3578,15 +3605,44 @@
       ]));
     }
 
+    /* Contract standing, read per item from each tracker's running balance. */
+    const contracts = contractsInScope();
+    const closedItems = contracts.filter((c) => c.isClosed);
+    const overContract = contracts.filter((c) => c.isOver);
+    const cycles = [...new Set(contracts.map((c) => c.cycle).filter(Boolean))];
+
+    /* What has been missed, and what is coming. */
+    const collectionsOverdue = orders.filter((o) => o.schedule.collectionOverdue);
+    const deliveriesOverdue = orders.filter((o) => o.schedule.deliveryOverdue);
+    const schedule = AMI.scheduleEntries(orders, new Date());
+    const nextUp = schedule.find((e) => !e.overdue) || null;
+
     /* Headline figures */
     const tilesHtml = AMI.statTiles([
       { label: 'Open orders', value: open.length, sub: 'of ' + orders.length + ' on the trackers', tone: 'neutral' },
-      { label: 'Awaiting shipment', value: counts.placed, sub: 'sent, not collected', tone: 'neutral' },
-      { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
-      { label: 'Delivered', value: counts.delivered, sub: 'arrived, not yet invoiced', tone: 'neutral' },
       {
-        label: 'Invoiced and closed', value: counts.invoiced,
-        sub: 'finished', tone: 'good',
+        label: 'Collections overdue', value: collectionsOverdue.length,
+        sub: collectionsOverdue.length ? 'past the date AMI asked for' : 'none past their date',
+        tone: collectionsOverdue.length ? 'critical' : 'good',
+        tip: 'Orders whose requested collection date has passed with no collection recorded on the tracker.',
+      },
+      {
+        label: 'Deliveries overdue', value: deliveriesOverdue.length,
+        sub: deliveriesOverdue.length ? 'past the customer’s required date' : 'none past their date',
+        tone: deliveriesOverdue.length ? 'critical' : 'good',
+        tip: 'Orders whose customer required delivery date has passed with no delivery recorded on the tracker.',
+      },
+      {
+        label: 'Items closed', value: closedItems.length,
+        sub: 'of ' + contracts.length + (cycles.length === 1 ? ' on ' + cycles[0] : ' item tracker(s)'),
+        tone: 'neutral',
+        tip: 'An item is closed when its contract balance reaches zero — everything contracted has been ordered.',
+      },
+      {
+        label: 'Over contract', value: overContract.length,
+        sub: overContract.length ? 'balance below zero' : 'none over-drawn',
+        tone: overContract.length ? 'critical' : 'good',
+        tip: 'More has been ordered than the contract covers. Read straight from the tracker’s own balance column.',
       },
       {
         label: 'Follow-ups outstanding', value: followUps,
@@ -3595,10 +3651,10 @@
         tone: followUps ? (followUps >= 5 ? 'critical' : 'warning') : 'good',
       },
       {
-        label: 'Longest without movement',
-        value: stalest && stalest.ageDays != null ? stalest.ageDays + ' d' : '—',
-        sub: stalest ? 'PO ' + stalest.po : 'no open orders',
-        tone: stalest && stalest.ageDays >= 45 ? 'critical' : (stalest && stalest.ageDays >= 21 ? 'warning' : 'good'),
+        label: 'Next date due',
+        value: nextUp ? AMI.formatShort(nextUp.date) : '—',
+        sub: nextUp ? nextUp.label.toLowerCase() + ' · PO ' + nextUp.order.po : 'nothing scheduled ahead',
+        tone: 'neutral',
       },
     ]);
     host.appendChild(el('div', { html: tilesHtml }).firstChild);
@@ -3613,7 +3669,25 @@
       ]));
     }
 
-    /* Pipeline + per-account bars */
+    const grid = el('div', { class: 'dash-grid' });
+
+    /* ---------------- Contracts ---------------- */
+
+    grid.appendChild(sectionHead('Contracts',
+      'What each item has left to order, and the delivery dates its tracker already carries.'));
+    grid.appendChild(contractsCard(contracts));
+
+    /* ---------------- Schedule ---------------- */
+
+    grid.appendChild(sectionHead('What is coming',
+      'Requested collection and required delivery dates still outstanding, nearest first.'));
+    grid.appendChild(scheduleCard(schedule));
+
+    /* ---------------- Pipeline ---------------- */
+
+    grid.appendChild(sectionHead('Pipeline',
+      'Where the orders themselves stand.'));
+
     const stageSegments = (list, prefix, keyPrefix) => {
       const c = AMI.countByStatus(list);
       return AMI.ORDER_STATUSES.map((s) => {
@@ -3627,8 +3701,6 @@
         };
       });
     };
-
-    const grid = el('div', { class: 'dash-grid' });
 
     grid.appendChild(chartCard({
       title: 'Order pipeline',
@@ -3693,6 +3765,19 @@
       ],
     }));
 
+    grid.appendChild(el('div', { class: 'card span-2' }, [
+      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
+      el('div', { class: 'body' }, [buildKanban(orders)]),
+    ]));
+
+    /* ---------------- Attention ---------------- */
+
+    grid.appendChild(sectionHead('Needs attention',
+      'Dates that have passed, and orders nothing has happened to.'));
+
+    grid.appendChild(missedCard(collectionsOverdue, deliveriesOverdue));
+
     /* Attention list */
     const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays);
     const staleRow = (o) => {
@@ -3727,8 +3812,8 @@
     const healthTable = el('table', { class: 'data' });
     healthTable.appendChild(el('thead', {}, [el('tr', {}, [
       el('th', { text: 'Account' }), el('th', { text: 'Division' }), el('th', { text: 'Health' }),
-      el('th', { text: 'Open' }), el('th', { text: 'Total' }), el('th', { text: 'Follow-ups' }),
-      el('th', { text: 'Stalest' }), el('th', {}),
+      el('th', { text: 'Collections overdue' }), el('th', { text: 'Deliveries overdue' }),
+      el('th', { text: 'Met late' }), el('th', { text: 'Open' }), el('th', { text: 'Follow-ups' }), el('th', {}),
     ])]));
     const healthBody = el('tbody');
     const accountsInScope = [...new Set(scope.map((p) => p.account.id))];
@@ -3737,15 +3822,22 @@
       const list = orders.filter((o) => o.accountId === accountId);
       const fu = scope.filter((p) => p.account.id === accountId)
         .reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
-      const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId), list, fu);
+      const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId),
+        list, fu, null, new Date());
       healthBody.appendChild(el('tr', {}, [
         el('td', {}, [el('b', { text: account.name })]),
         el('td', { text: s.divisionName || '—' }),
-        el('td', { html: AMI.healthPill(s.health.level, s.health.reasons.join(' · ') || 'Nothing outstanding') }),
+        el('td', { html: AMI.healthPill(s.health.level, s.health.reasons.join(' · ')) }),
+        el('td', { class: 'num' }, [numberCell(s.collectionsOverdue)]),
+        el('td', { class: 'num' }, [numberCell(s.deliveriesOverdue)]),
+        el('td', {
+          class: 'num',
+          'data-tip': 'Collected or delivered, but after the date asked for. Nothing to chase — '
+            + 'this is the record, not the workload, so it does not set the health mark.',
+          text: (s.collectedLate + s.deliveredLate) || '—',
+        }),
         el('td', { class: 'num', text: String(s.open) }),
-        el('td', { class: 'num', text: String(s.total) }),
         el('td', { class: 'num', text: String(s.followUps) }),
-        el('td', { text: s.stalest ? 'PO ' + s.stalest.po + ' · ' + s.stalestDays + ' d' : '—' }),
         el('td', {}, [
           el('button', {
             class: 'btn small', text: 'Orders',
@@ -3766,15 +3858,18 @@
     healthTable.appendChild(healthBody);
     grid.appendChild(el('div', { class: 'card span-2' }, [
       el('h2', {}, [document.createTextNode('Account health'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'attention set by days without movement and outstanding follow-ups' })]),
-      el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [healthTable])]),
-    ]));
-
-    /* Kanban */
-    grid.appendChild(el('div', { class: 'card span-2' }, [
-      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
-      el('div', { class: 'body' }, [buildKanban(orders)]),
+        el('span', { class: 'context-note', text: 'set by collection and delivery dates that have passed unmet' })]),
+      el('div', { class: 'body' }, [
+        el('p', {
+          class: 'help',
+          text: 'At risk when a required delivery date has passed with no delivery recorded, or a '
+            + 'requested collection is more than ' + AMI.HEALTH_THRESHOLDS.lateCollectionDays
+            + ' days past. Needs attention when any collection date has passed unmet. '
+            + '“Met late” counts orders that did happen, just after the date — a record of how the '
+            + 'account has run, not work outstanding.',
+        }),
+        el('div', { class: 'table-scroll' }, [healthTable]),
+      ]),
     ]));
 
     host.appendChild(grid);
@@ -3797,6 +3892,269 @@
   /* ------------------------------------------------------------------ *
    * Chart cards, zoom and drill-down
    * ------------------------------------------------------------------ */
+
+  /** A full-width heading that breaks the dashboard into its four questions. */
+  function sectionHead(title, sub) {
+    return el('div', { class: 'dash-section' }, [
+      el('h2', { text: title }),
+      sub ? el('p', { text: sub }) : null,
+    ]);
+  }
+
+  /** A count that stays quiet at zero and goes loud when it is not. */
+  function numberCell(n) {
+    if (!n) return el('span', { class: 'faint', text: '—' });
+    return el('span', { class: 'chip error', text: String(n) });
+  }
+
+  const dateCell = (d, po) => (d
+    ? el('span', {}, [
+      document.createTextNode(AMI.formatShort(d)),
+      po ? el('span', { class: 'note', text: ' PO ' + po }) : null,
+    ])
+    : el('span', { class: 'faint', text: 'none recorded' }));
+
+  /**
+   * Contract standing for every item in scope.
+   *
+   * The balance is the tracker's own running total, taken from the last order
+   * row — not recomputed here. A negative balance is shown as negative and
+   * flagged, because that is a real state their sheets get into and rounding it
+   * up to zero would hide it.
+   */
+  function contractsCard(contracts) {
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Item' }), el('th', { text: 'Cycle' }), el('th', { text: 'Contract' }),
+      el('th', { text: 'Balance (bt)' }), el('th', { text: 'Balance (cs)' }),
+      el('th', { text: 'Most recent delivery' }), el('th', { text: 'Furthest requested delivery' }),
+      el('th', { text: 'Orders' }),
+    ])]));
+    const body = el('tbody');
+
+    for (const c of contracts) {
+      const chipClass = c.isOver ? 'error' : (c.isClosed ? 'ok' : 'pdf');
+      body.appendChild(el('tr', {}, [
+        el('td', {}, [
+          el('b', { text: c.itemName || c.itemId }),
+          el('div', { class: 'note', text: c.accountName }),
+        ]),
+        el('td', { text: c.cycle || '—' }),
+        el('td', {}, [el('span', {
+          class: 'chip ' + chipClass, text: c.stateLabel, 'data-tip': c.reason,
+        })]),
+        el('td', {
+          class: 'num' + (c.isOver ? ' over' : ''),
+          'data-tip': c.balanceFrom ? 'The tracker’s running balance after PO ' + c.balanceFrom + '.' : '',
+          text: c.balanceBt == null ? '—' : c.balanceBt.toLocaleString(),
+        }),
+        el('td', {
+          class: 'num' + (c.isOver ? ' over' : ''),
+          text: c.balanceCs == null ? '—' : c.balanceCs.toLocaleString(),
+        }),
+        el('td', {}, [dateCell(c.lastDelivery, c.lastDeliveryPo)]),
+        el('td', {}, [dateCell(c.furthestRequested, c.furthestRequestedPo)]),
+        el('td', { class: 'num', text: c.open + ' / ' + c.orders }),
+      ]));
+    }
+    table.appendChild(body);
+
+    const over = contracts.filter((c) => c.isOver);
+    const closed = contracts.filter((c) => c.isClosed);
+
+    return el('div', { class: 'card span-2' }, [
+      el('h2', {}, [
+        document.createTextNode('Contract standing'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: contracts.length + ' item tracker(s) in scope' }),
+      ]),
+      el('div', { class: 'body' }, [
+        over.length ? el('div', { class: 'msg error' }, [
+          el('span', { class: 'icon', text: '!' }),
+          el('div', {}, [
+            el('strong', {
+              text: over.length + ' item(s) have ordered past the contract: '
+                + over.map((c) => c.itemName + ' (' + c.balanceBt.toLocaleString() + ' bt)').join(', '),
+            }),
+            el('span', {
+              class: 'detail',
+              text: 'The balance column on the tracker has gone below zero. Shown exactly as the '
+                + 'sheet has it — check the contract quantity or the orders posted against it.',
+            }),
+          ]),
+        ]) : null,
+        closed.length ? el('div', { class: 'msg ok' }, [
+          el('span', { class: 'icon', text: '✓' }),
+          el('div', {}, [
+            el('strong', {
+              text: closed.length + ' item(s) are closed: ' + closed.map((c) => c.itemName).join(', '),
+            }),
+            el('span', { class: 'detail', text: 'The contract balance is zero — everything contracted has been ordered.' }),
+          ]),
+        ]) : null,
+        contracts.length
+          ? el('div', { class: 'table-scroll' }, [table])
+          : el('div', { class: 'empty', text: 'No item trackers in scope.' }),
+        el('p', {
+          class: 'help',
+          text: 'Balance is the tracker’s own running total after the last order on the sheet, not a '
+            + 'figure worked out here. Dates are the latest delivery actually recorded and the '
+            + 'furthest-out delivery date anyone has asked for.',
+        }),
+      ]),
+    ]);
+  }
+
+  /**
+   * Collections and deliveries still outstanding, by week or month.
+   *
+   * Overdue gets its own group at the top rather than being filed under the week
+   * it was due — burying a missed date in a past week is how it stays missed.
+   */
+  function scheduleCard(entries) {
+    const body = el('div');
+
+    const draw = () => {
+      clear(body);
+      markActive();
+      const groups = AMI.groupSchedule(entries, state.scheduleBy, new Date());
+      if (!groups.length) {
+        body.appendChild(el('div', { class: 'empty', text: 'Nothing outstanding — every collection and delivery date on the trackers has been met.' }));
+        return;
+      }
+      for (const g of groups) {
+        const table = el('table', { class: 'data' });
+        table.appendChild(el('thead', {}, [el('tr', {}, [
+          el('th', { text: 'Date' }), el('th', { text: 'What' }), el('th', { text: 'PO' }),
+          el('th', { text: 'Account' }), el('th', { text: 'Item' }), el('th', { text: 'Cases' }),
+          el('th', { text: g.overdue ? 'Days past' : 'In' }),
+        ])]));
+        const rows = el('tbody');
+        for (const e of g.entries) {
+          rows.appendChild(el('tr', {}, [
+            el('td', { text: AMI.formatShort(e.date) }),
+            el('td', {}, [el('span', {
+              class: 'chip ' + (e.kind === 'delivery' ? 'computed' : 'pdf'),
+              text: e.label,
+            })]),
+            el('td', { class: 'mono', text: e.order.po }),
+            el('td', { text: e.order.accountName }),
+            el('td', { text: e.order.itemName }),
+            el('td', { class: 'num', text: e.order.values.cases != null ? String(e.order.values.cases) : '—' }),
+            el('td', { class: 'num', text: g.overdue ? Math.abs(e.days) + ' d' : e.days + ' d' }),
+          ]));
+        }
+        table.appendChild(rows);
+
+        body.appendChild(el('div', { class: 'sched-group' + (g.overdue ? ' overdue' : '') }, [
+          el('div', { class: 'sched-head' }, [
+            el('span', { class: 'sched-label', text: g.label }),
+            g.sub ? el('span', { class: 'note', text: g.sub }) : null,
+            el('span', { class: 'spacer' }),
+            el('span', {
+              class: 'chip ' + (g.overdue ? 'error' : 'manual'),
+              text: g.entries.length + (g.overdue ? ' missed' : ' due'),
+            }),
+          ]),
+          el('div', { class: 'table-scroll' }, [table]),
+        ]));
+      }
+    };
+
+    // The toggles outlive each redraw, so their active state has to be reapplied
+    // rather than baked in when they are built.
+    const toggles = ['week', 'month'].map((id) => el('button', {
+      class: 'btn small',
+      text: id === 'week' ? 'By week' : 'By month',
+      onclick: () => { state.scheduleBy = id; saveLocal({ scheduleBy: id }); draw(); },
+    }));
+
+    const markActive = () => {
+      toggles.forEach((b, i) => {
+        b.classList.toggle('primary', state.scheduleBy === (i === 0 ? 'week' : 'month'));
+        b.setAttribute('aria-pressed', state.scheduleBy === (i === 0 ? 'week' : 'month') ? 'true' : 'false');
+      });
+    };
+
+    draw();
+
+    return el('div', { class: 'card span-2' }, [
+      el('h2', {}, [
+        document.createTextNode('Upcoming collections and deliveries'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'chart-actions', role: 'group', 'aria-label': 'Group the schedule by' }, toggles),
+      ]),
+      el('div', { class: 'body' }, [
+        el('p', {
+          class: 'help',
+          text: 'Every requested collection date with nothing collected yet, and every required '
+            + 'delivery date with nothing delivered yet. A date that has been met drops off — it '
+            + 'needs nothing.',
+        }),
+        body,
+      ]),
+    ]);
+  }
+
+  /** The dates that have already been missed, split by which kind. */
+  function missedCard(collectionsOverdue, deliveriesOverdue) {
+    const list = (title, orders, kind, tip) => {
+      const table = el('table', { class: 'data' });
+      table.appendChild(el('thead', {}, [el('tr', {}, [
+        el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
+        el('th', { text: 'Due' }), el('th', { text: 'Days past' }),
+      ])]));
+      const body = el('tbody');
+      const sorted = orders.slice().sort((a, b) =>
+        b.schedule[kind].days - a.schedule[kind].days);
+      for (const o of sorted) {
+        body.appendChild(el('tr', {}, [
+          el('td', { class: 'mono', text: o.po }),
+          el('td', { text: o.accountName }),
+          el('td', { text: o.itemName }),
+          el('td', { text: AMI.formatShort(o.schedule[kind].due) }),
+          el('td', { class: 'num' }, [el('span', {
+            class: 'chip error', text: o.schedule[kind].days + ' d',
+          })]),
+        ]));
+      }
+      table.appendChild(body);
+
+      return el('div', { class: 'missed-col' }, [
+        el('h3', {}, [
+          document.createTextNode(title),
+          el('span', { class: 'spacer' }),
+          el('span', {
+            class: 'chip ' + (orders.length ? 'error' : 'ok'),
+            text: String(orders.length),
+          }),
+        ]),
+        el('p', { class: 'help', text: tip }),
+        orders.length
+          ? el('div', { class: 'table-scroll' }, [table])
+          : el('div', { class: 'msg ok' }, [
+            el('span', { class: 'icon', text: '✓' }),
+            el('div', { text: 'Nothing past its date.' }),
+          ]),
+      ]);
+    };
+
+    return el('div', { class: 'card span-2' }, [
+      el('h2', {}, [
+        document.createTextNode('Dates that have passed'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'this is what sets account health' }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('div', { class: 'missed-grid' }, [
+          list('Not collected', collectionsOverdue, 'collectionOverdue',
+            'The requested collection date has passed and the tracker records no collection.'),
+          list('Not delivered', deliveriesOverdue, 'deliveryOverdue',
+            'The customer’s required delivery date has passed and the tracker records no delivery.'),
+        ]),
+      ]),
+    ]);
+  }
 
   /**
    * A dashboard card whose chart can be redrawn larger. `build(big)` returns the

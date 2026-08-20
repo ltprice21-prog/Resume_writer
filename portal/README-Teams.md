@@ -117,16 +117,55 @@ Your choice of name is remembered in your browser; nothing else is stored locall
 
 ## Account Health
 
-The landing page. It reads every item tracker across the accounts you can see, and shows where
-the work actually is:
+The landing page. It reads every item tracker across the accounts you can see, and answers four
+questions in order, each its own section:
 
-- **Headline figures** — open orders, how many sit at each stage, follow-ups overdue, and the
-  longest an open order has gone without a dated event.
-- **Order pipeline** — one stacked bar across the four stages, with a legend carrying the counts.
-- **Orders by account** and **cases collected per month** — proportion and throughput.
-- **Longest without movement** — the eight open orders that have sat still longest.
-- **Account health** — one row per account, marked *On track*, *Needs attention* or *At risk*.
-- **Pipeline board** — a kanban of every order; drag a card between columns to change its stage.
+**Headline figures** first — open orders, collections and deliveries past their date, items
+closed, contracts over-drawn, follow-ups outstanding, and the next date due.
+
+### 1 · Contracts
+
+One row per item tracker: the contract balance in bottles and cases, whether the contract is
+open, closed or over-drawn, the most recent delivery actually recorded, and the furthest-out
+delivery date anyone has asked for — each dated figure attributed to its PO.
+
+**The balance is the tracker's own running total** after the last order on the sheet, not a
+figure worked out here. Their sheets carry a balance that steps down with each order, so the
+last row is what is left.
+
+| Balance | Reads as |
+| --- | --- |
+| Above zero | **Open** — quantity left to order |
+| Exactly zero | **Closed** — everything contracted has been ordered |
+| Below zero | **Over contract** — flagged in red, at the top of the card |
+
+A negative balance is shown as negative. It is a real state their sheets get into, and rounding
+it up to zero would hide it.
+
+**Items closed** is counted against the cycle — the sheet an item posts into. A workbook laid out
+by year has one sheet per cycle, so "0 of 2 on 2026 Cycle" means what it says.
+
+### 2 · What is coming
+
+Every requested collection date with nothing collected yet, and every required delivery date with
+nothing delivered yet, **grouped by week or by month**. A date that has been met drops off — it
+needs nothing.
+
+**Overdue is its own group at the top**, not filed under the week it was due. Burying a missed
+date in a past week is how it stays missed.
+
+### 3 · Pipeline
+
+Where the orders themselves stand: the stacked pipeline, orders by account, cases collected per
+month, and the kanban board.
+
+### 4 · Needs attention
+
+**Dates that have passed** — two lists, not collected and not delivered, each with how many days
+past. This is what sets account health.
+
+Then **longest without movement** (the eight open orders that have sat still longest) and the
+**account health** table.
 
 Filter by **division**, **account** and **item**. The division list only offers divisions you
 actually have accounts in, so the filter can never show you an empty world by accident.
@@ -188,10 +227,27 @@ per order, rather than one save overwriting the other's work.
 
 ### Health, stated plainly
 
-*Needs attention* and *At risk* come from two explicit signals, printed next to the verdict:
-days an open order has gone without a dated event (amber past 21, red past 45), and outstanding
-follow-up items (amber at 1, red at 5). There is no score and no weighting to reverse-engineer;
-the thresholds are one edit in `HEALTH_THRESHOLDS`.
+Health reads **two things and nothing else**: orders whose requested collection date has passed
+with no collection recorded, and orders whose required delivery date has passed with no delivery
+recorded.
+
+| | |
+| --- | --- |
+| **At risk** | Any required delivery date passed unmet, or a collection more than 14 days past. |
+| **Needs attention** | Any requested collection date passed unmet. |
+| **On track** | Every collection and delivery date so far has been met or is still ahead. |
+
+A missed delivery outranks a missed collection, because a missed delivery is the customer's
+problem.
+
+**Orders that were collected or delivered late are counted separately, and do not move the
+health mark.** They appear in a *Met late* column as a record of how the account has actually
+run. This split matters: on the sample tracker most historical orders ran one to five days late,
+so counting them as risk would leave every account permanently red over something nobody can
+chase. Health is about what needs doing today.
+
+There is no score and no weighting to reverse-engineer; the threshold is one edit in
+`HEALTH_THRESHOLDS`, and the reasons are printed next to every verdict.
 
 ### Dates the tracker cannot mean
 
@@ -402,7 +458,7 @@ portal/
     templates.js                  .msg/.oft/.eml/.docx ingestion, RTF de-encapsulation
     airports.js                   airport table and address lookup
     workspace.js                  divisions, accounts, items, people, templates, attachments
-    status.js                     the four stages, derivation, roll-ups
+    status.js                     the four stages, derivation, contracts, schedule, roll-ups
     charts.js                     stat tiles, bars, columns, stage fills
     persist.js                    remembering the folder and unposted work
     app.js / app-teams.js         the two interfaces
@@ -412,8 +468,8 @@ portal/
     engine.test.js       128 assertions   PO extraction, tracker maths, write-back, follow-ups
     ui.test.js            58 assertions   single-account app in Chromium
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
-    status.test.js       126 assertions   stage model, roll-ups, charts, stage weaves
-    teams-ui.test.js     148 assertions   multi-account app, dashboard, drill-down, persistence
+    status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
+    teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 
 ```bash

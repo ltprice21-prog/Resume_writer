@@ -1102,3 +1102,67 @@ svg.chart .col[data-drill]:hover { filter: brightness(1.15); }
 
 .attach-row .note { margin-left: auto; }
 .attach-row button { margin-left: 8px; }
+
+/* ---------- dashboard sections ----------
+ *
+ * The page answers four questions in order — what is contracted, what is coming,
+ * where the orders are, what needs attention. The headings are the compartments.
+ */
+
+.dash-section {
+  grid-column: 1 / -1;
+  margin: 10px 0 -4px;
+  padding-top: 8px;
+  border-top: 2px solid var(--border);
+}
+
+.dash-section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+.dash-section h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.dash-section p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); }
+
+/* A balance that has gone below zero is a real state, shown as such. */
+td.num.over { color: var(--critical-ink); font-weight: 700; }
+
+/* ---------- schedule ---------- */
+
+.sched-group { margin-bottom: 14px; }
+.sched-group:last-child { margin-bottom: 0; }
+
+.sched-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.sched-head .spacer { flex: 1; }
+.sched-label { font-size: 12.5px; font-weight: 700; }
+.sched-group.overdue .sched-label { color: var(--critical-ink); }
+
+.missed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.missed-col h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.missed-col h3 .spacer { flex: 1; }
+.missed-col .help { margin: 0 0 8px; }

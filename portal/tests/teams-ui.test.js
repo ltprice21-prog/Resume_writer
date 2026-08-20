@@ -42,18 +42,43 @@ function fixture(re) {
   return path.join(FIXTURES, f);
 }
 
-/** Clone the real tracker with a different item code, standing in for a second product. */
-async function variantTracker(bytes, sheetName, replacements) {
+/** The Excel serial for a date, for writing dates straight into a fixture. */
+const serial = (y, m, d) => Math.round(Date.UTC(y, m - 1, d) / 86400000) + 25569;
+
+/** A date that is always genuinely ahead of whenever the test happens to run. */
+function daysAhead(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return serial(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+/**
+ * Clone the real tracker with different cell values, standing in for a second
+ * product. `replacements` writes text; `numbers` writes a bare numeric value,
+ * which is how a date lands in a sheet.
+ */
+async function variantTracker(bytes, sheetName, replacements, numbers) {
   const wb = await AMI.Workbook.load(bytes);
   const sheet = wb.sheet(sheetName);
   let xml = sheet.xml;
-  for (const [ref, value] of Object.entries(replacements)) {
-    const re = new RegExp('<c r="' + ref + '"([^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+  const cellRe = (ref) => new RegExp('<c r="' + ref + '"([^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+
+  for (const [ref, value] of Object.entries(replacements || {})) {
+    const re = cellRe(ref);
     if (!re.test(xml)) throw new Error('Cell ' + ref + ' not found in ' + sheetName);
     xml = xml.replace(re, (m, attrs) => {
       const style = (/ s="(\d+)"/.exec(attrs) || [, null])[1];
       return '<c r="' + ref + '"' + (style ? ' s="' + style + '"' : '')
         + ' t="inlineStr"><is><t xml:space="preserve">' + value + '</t></is></c>';
+    });
+  }
+  for (const [ref, value] of Object.entries(numbers || {})) {
+    const re = cellRe(ref);
+    if (!re.test(xml)) throw new Error('Cell ' + ref + ' not found in ' + sheetName);
+    xml = xml.replace(re, (m, attrs) => {
+      const style = (/ s="(\d+)"/.exec(attrs) || [, null])[1];
+      return '<c r="' + ref + '"' + (style ? ' s="' + style + '"' : '')
+        + '><v>' + value + '</v></c>';
     });
   }
   sheet.xml = xml;
@@ -64,9 +89,17 @@ async function variantTracker(bytes, sheetName, replacements) {
 async function buildBundle() {
   const realTracker = new Uint8Array(fs.readFileSync(fixture(/Tracking_Chart.*\.xlsx$/i)));
   // B2 is "Product Name:", B7 is "NAV Code:" on the 2026 Cycle sheet.
+  // Row 44 is the last order and has neither a collection nor a delivery
+  // recorded, so dating it into the future gives the schedule something upcoming
+  // to bucket — the sample tracker's own dates are all in the past.
+  // Only the delivery date moves: the collection date stays in the past so it
+  // still reads as overdue, giving the page one of each to show.
+  //   O = Customer Required Delivery Date
   const montenero = await variantTracker(realTracker, '2026 Cycle', {
     B2: 'Montenero Rosso Italy',
     B7: 'MONTENERONV',
+  }, {
+    O44: daysAhead(11),
   });
 
   const workspace = {
@@ -467,23 +500,21 @@ async function buildBundle() {
     /moves nothing that is already written/i.test(overlayText),
     overlayText.replace(/\n/g, ' | ').slice(0, 400));
 
-  // Pick an explicit sheet and check it sticks.
+  // Naming a sheet explicitly is the point of the chooser, so pick one by name
+  // rather than taking whatever happens to be first.
   const sheetValues = await page.locator('.overlay-panel select').nth(1).locator('option')
     .evaluateAll((os) => os.filter((o) => !o.disabled && o.value).map((o) => o.value));
-  ok('at least one postable sheet is offered', sheetValues.length > 0, JSON.stringify(sheetOptions));
-  await page.locator('.overlay-panel select').nth(1).selectOption(sheetValues[0]);
+  ok('every postable sheet in the workbook is offered', sheetValues.length >= 2, JSON.stringify(sheetOptions));
+  ok('including the older cycles, not just the current one',
+    sheetValues.some((v) => /2025/.test(v)), JSON.stringify(sheetValues));
+
+  await page.locator('.overlay-panel select').nth(1).selectOption('2026 Cycle');
   await page.locator('.overlay-panel button', { hasText: 'Save tracker' }).click();
   await page.waitForSelector('.overlay-panel', { state: 'detached' });
   await page.waitForFunction(() => /Tracker set to/.test(document.body.innerText), null, { timeout: 10000 });
   ok('choosing a sheet is confirmed by name',
-    new RegExp(sheetValues[0]).test(await page.locator('.toast').innerText()),
+    /2026 Cycle/.test(await page.locator('.toast').innerText()),
     await page.locator('.toast').innerText());
-
-  const savedSheet = await page.evaluate(() => {
-    const raw = window.__ws;
-    return raw;
-  });
-  ok('the choice is stored on the item, not left to the automatic pick', savedSheet !== undefined || true);
 
   console.log('\nFollow-ups span every item');
   await userSelect.selectOption('eu-coordinator');
@@ -509,6 +540,9 @@ async function buildBundle() {
   ok('headline figures are shown',
     /OPEN ORDERS/i.test(dashText) && /IN TRANSIT/i.test(dashText), dashText.slice(0, 400));
   ok('the pipeline card is present', /Order pipeline/i.test(dashText));
+  ok('the page is broken into sections', /CONTRACTS/i.test(dashText) && /WHAT IS COMING/i.test(dashText)
+    && /PIPELINE/i.test(dashText) && /NEEDS ATTENTION/i.test(dashText),
+    dashText.replace(/\n/g, ' | ').slice(0, 600));
   ok('orders are broken down by account', /Orders by account/i.test(dashText));
   ok('throughput over time is charted', /Cases collected per month/i.test(dashText));
   ok('an attention list is present', /Longest without movement/i.test(dashText));
@@ -592,6 +626,103 @@ async function buildBundle() {
   ok('the monthly chart draws columns', cols > 0, cols + ' columns');
   ok('the chart is labelled for screen readers',
     (await page.locator('#dashboardBody svg.chart').first().getAttribute('aria-label')) !== null);
+
+  console.log('\nContract standing per item');
+  const contractCard = page.locator('#dashboardBody .card', { hasText: 'Contract standing' });
+  const contractText = await contractCard.innerText();
+  ok('every item tracker in scope gets a row',
+    /Evidencia Tempranillo/.test(contractText) && /Montenero/.test(contractText),
+    contractText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('the cycle is named', /2026 Cycle/.test(contractText));
+  ok('the balance is shown in bottles and cases',
+    /44,544/.test(contractText) && /3,712/.test(contractText),
+    contractText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('a contract with quantity left reads as open', /OPEN/i.test(contractText));
+  ok('the most recent delivery is dated', /6\/18\/2026/.test(contractText),
+    contractText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('and the furthest requested delivery too', /6\/26\/2026/.test(contractText));
+  ok('both are attributed to a PO', /PO 350633-1/.test(contractText) && /PO 350633-2/.test(contractText));
+  ok('the balance is said to be the tracker\'s own, not recomputed',
+    /tracker’s own running total/.test(contractText), contractText.replace(/\n/g, ' | ').slice(-300));
+
+  const tileText = await page.locator('#dashboardBody .stat-row').innerText();
+  ok('closed items are counted against the trackers in scope',
+    /ITEMS CLOSED/i.test(tileText) && /of 2/.test(tileText),
+    tileText.replace(/\n/g, ' | '));
+  ok('and over-contract items have their own count', /OVER CONTRACT/i.test(tileText));
+
+  console.log('\nDates that have passed');
+  const missed = page.locator('#dashboardBody .card', { hasText: 'this is what sets account health' });
+  const missedText = await missed.innerText();
+  ok('missed collections and deliveries are separated',
+    /Not collected/.test(missedText) && /Not delivered/.test(missedText),
+    missedText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('each says what it means',
+    /requested collection date has passed and the tracker records no collection/.test(missedText)
+    && /required delivery date has passed and the tracker records no delivery/.test(missedText));
+  ok('and how far past each one is', /\d+ D/i.test(missedText), missedText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('the tiles agree with the tables',
+    /COLLECTIONS OVERDUE/i.test(tileText) && /DELIVERIES OVERDUE/i.test(tileText));
+
+  console.log('\nUpcoming collections and deliveries');
+  const sched = page.locator('#dashboardBody .card', { hasText: 'Upcoming collections' });
+  const schedText = await sched.innerText();
+  ok('overdue dates lead the schedule', /Overdue/.test(schedText),
+    schedText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('and say why they are there',
+    /the date has passed with nothing recorded/.test(schedText));
+  ok('collections and deliveries are labelled apart',
+    /COLLECTION/i.test(schedText) && /DELIVERY/i.test(schedText));
+  ok('a met date drops off the schedule entirely',
+    /A date that has been met drops off/.test(schedText));
+
+  // The Montenero fixture carries a delivery date genuinely ahead of today, so
+  // there is a future bucket to group as well as the overdue one.
+  const weekGroups = await sched.locator('.sched-group').count();
+  ok('dates still ahead get their own group beside the overdue one',
+    weekGroups >= 2, weekGroups + ' groups');
+  const weekLabels = await sched.locator('.sched-label').allInnerTexts();
+  ok('and each upcoming group is labelled with its week',
+    weekLabels.some((l) => /^\w{3} \d+ \w{3} – \w{3} \d+ \w{3}$/.test(l.trim())), weekLabels.join(' | '));
+  const weekSubs = await sched.locator('.sched-head .note').allInnerTexts();
+  ok('saying how far off it is', weekSubs.some((t) => /week/.test(t)), weekSubs.join(' | '));
+
+  ok('by week is the default', await sched.locator('button', { hasText: 'By week' })
+    .evaluate((b) => b.classList.contains('primary')));
+
+  await sched.locator('button', { hasText: 'By month' }).click();
+  await page.waitForTimeout(400);
+  const monthLabels = await sched.locator('.sched-label').allInnerTexts();
+  ok('switching to months keeps overdue at the top', /Overdue/.test(monthLabels[0]), monthLabels.join(' | '));
+  ok('and names the month rather than a week range',
+    monthLabels.slice(1).some((l) => /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/.test(l.trim())),
+    monthLabels.join(' | '));
+  ok('the month button is now the active one',
+    await sched.locator('button', { hasText: 'By month' })
+      .evaluate((b) => b.classList.contains('primary')));
+  ok('and the week button is not',
+    !(await sched.locator('button', { hasText: 'By week' })
+      .evaluate((b) => b.classList.contains('primary'))));
+
+  await sched.locator('button', { hasText: 'By week' }).click();
+  await page.waitForTimeout(300);
+  ok('switching back restores the week labels',
+    (await sched.locator('.sched-label').allInnerTexts()).join(' | ') === weekLabels.join(' | '));
+
+  console.log('\nHealth reads the dates, not the ages');
+  const healthCard = page.locator('#dashboardBody .card', { hasText: 'set by collection and delivery dates' });
+  const healthText = await healthCard.innerText();
+  ok('the table counts overdue collections and deliveries per account',
+    /COLLECTIONS OVERDUE/i.test(healthText) && /DELIVERIES OVERDUE/i.test(healthText),
+    healthText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('an account with missed dates is at risk', /At risk/i.test(healthText),
+    healthText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('the rule is stated in full',
+    /required delivery date has passed with no delivery recorded/.test(healthText)
+    && /more than 14 days past/.test(healthText), healthText.replace(/\n/g, ' | ').slice(0, 500));
+  ok('and orders met late are counted apart from work outstanding',
+    /Met late/i.test(healthText) && /a record of how the account has run/.test(healthText),
+    healthText.replace(/\n/g, ' | ').slice(0, 600));
 
   const kanCols = await page.locator('#dashboardBody .kan-col').count();
   ok('the board has a column per stage', kanCols >= 4, kanCols + ' columns');

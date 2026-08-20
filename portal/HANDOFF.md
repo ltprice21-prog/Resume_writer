@@ -43,7 +43,7 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # 597 assertions across five files
+node portal/tests/*.test.js # 678 assertions across five files
 ```
 
 | Source | Responsibility |
@@ -52,7 +52,7 @@ node portal/tests/*.test.js # 597 assertions across five files
 | `templates.js` | Importing `.msg` / `.oft` / `.eml` / `.docx` / `.html` / `.txt`, CFB parsing, RTF decompression, placeholders, internal-note stripping |
 | `airports.js` | Airport table and address lookup, with a hard refusal to pick between a city's airports |
 | `workspace.js` | Divisions, accounts, items, users, templates, standing attachments, store interface, PO→item matching, recipient resolution |
-| `status.js` | The four order stages, derivation from the tracker, account summaries |
+| `status.js` | The four order stages, derivation from the tracker, contract standing, the schedule, account summaries |
 | `charts.js` | Stat tiles, stacked bars, column charts, stage fills — all inline SVG |
 | `persist.js` | IndexedDB wrapper for the folder handle and session, permission queries, debounce |
 | `app.js` / `app-teams.js` | The two UIs |
@@ -80,6 +80,30 @@ four stages sit on one hue, so hue never works alone: `stageClass(step)` paints
 both, `statusLegend` names the weave in words, and anything measuring something
 other than pipeline position (an age, a count) takes the reserved status palette
 via `tone` instead of a stage weave.
+
+### Contract standing and the schedule
+
+`contractStanding(orders, ctx)` reads the balance off the **last order row** — the tracker
+carries a running total that steps down per order, so nothing is recomputed. Below
+zero is `over`, exactly zero is `closed`, above zero is `open`. Their 2025 sheet
+really does go to −10,176 bt, so the negative case is not hypothetical; never
+clamp it.
+
+`scheduleFlags(order, today)` splits lateness two ways and the distinction is the
+whole point:
+
+- `collectionOverdue` / `deliveryOverdue` — the date passed and the tracker still
+  records nothing. Chaseable today. **These, and only these, set account health.**
+- `collectedLate` / `deliveredLate` — it happened, just after the date asked for.
+  Counted and displayed, but never moves the health mark.
+
+Without that split every account sits permanently at risk: on the sample tracker
+most historical orders ran one to five days late, which is unchaseable history,
+not workload. If someone asks why an account with late deliveries reads "on
+track", that is the answer.
+
+`groupSchedule(entries, 'week'|'month', today)` buckets what is outstanding, with
+overdue as its own leading group rather than filed under the week it was due.
 
 ### Follow-ups stop when the workflow overtakes them
 
@@ -145,10 +169,7 @@ tracker, and vendor email actually are.
 
 1. Whether the tracker-derivation rules match how they actually read those
    columns.
-2. Whether the per-rule `supersededBy` choices match their judgement — a lot
-   number is chased until an invoice exists, while a collection date stops at
-   delivery.
-3. What **Workspace → "What survives closing the app"** reports in their Chrome.
+2. What **Workspace → "What survives closing the app"** reports in their Chrome.
    That table was built to answer their "it does not save after closing" report,
    which was never reproducible here. The folder row reads either `remembered`
    or `not available here` plus the browser's own error text.
