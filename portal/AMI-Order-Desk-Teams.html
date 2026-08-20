@@ -794,7 +794,7 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
   border: 1px solid var(--border);
   border-left: 0;
   border-radius: var(--radius-sm);
-  padding: 8px 10px 8px 13px;
+  padding: 8px 10px 8px 15px;
   box-shadow: var(--shadow-1);
   cursor: grab;
   font-size: 12px;
@@ -808,7 +808,9 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  /* Wide enough for the weave to actually read; at 4px every stage looked solid
+   * and the card fell back to shade alone. */
+  width: 7px;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   background-color: var(--fill-color, var(--border-strong));
   background-image: var(--fill-pattern, none);

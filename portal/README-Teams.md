@@ -63,10 +63,23 @@ page. The file layout above would not change; only how it is read.
 
 ### Adding item trackers
 
-**Accounts → Edit an account → Item trackers → Add item tracker.** Name it, then pick its
-workbook from the folder — the picker lists every spreadsheet it finds and marks any already
-claimed by another item, so two items cannot quietly share one sheet. Leave the sheet blank
-and the app uses the last one carrying a `PO#` header.
+**Accounts → Edit an account → Item trackers → Add item tracker.** Name it, then open
+**Assign a tracker**.
+
+The dialog lists every spreadsheet in the folder and says which item already uses each one, so
+two items cannot quietly share a sheet. Choosing a workbook reads it and offers its real sheet
+names with the order count on each — a workbook laid out by year gives you the year. *Automatic*
+takes the last sheet carrying a `PO#` header, which is usually the current cycle, and the dialog
+names the sheet that would be.
+
+### Correcting a tracker assignment
+
+The same dialog reopens from anywhere the mistake shows: **Change workbook or sheet** in the item
+editor, the **Tracker** button on the item row in Workspace, and **Change tracker** on the warning
+when a workbook cannot be read.
+
+Reassigning moves nothing. Rows already posted stay in the workbook and sheet they went into —
+only the next post and the dashboard reading change. The dialog says so before you save.
 
 Each item can override the account's contacts. A second product from a different winery gets
 its own vendor address; anything left blank falls back to the account. Every draft says which
@@ -109,7 +122,7 @@ the work actually is:
 
 - **Headline figures** — open orders, how many sit at each stage, follow-ups overdue, and the
   longest an open order has gone without a dated event.
-- **Order pipeline** — one stacked bar across the five stages, with a legend carrying the counts.
+- **Order pipeline** — one stacked bar across the four stages, with a legend carrying the counts.
 - **Orders by account** and **cases collected per month** — proportion and throughput.
 - **Longest without movement** — the eight open orders that have sat still longest.
 - **Account health** — one row per account, marked *On track*, *Needs attention* or *At risk*.
@@ -118,24 +131,34 @@ the work actually is:
 Filter by **division**, **account** and **item**. The division list only offers divisions you
 actually have accounts in, so the filter can never show you an empty world by accident.
 
-### The five stages
+### Looking closer
 
-`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Invoiced` → `Closed`
+**Expand** on any chart opens it large — and unabridged, so *Longest without movement* shows
+every open order rather than the top eight.
 
-**Closed is the end of the line, so everything short of it counts as open** — including
-*Invoiced*, unless the rule below closes it for you.
+**Click any bar, band or column** to list the orders behind it: PO, account, item, cases, stage,
+where the stage came from, and the last dated activity. Every column is read from the tracker or
+from a status someone set — nothing in the drill-down is calculated for the chart. The **Orders**
+button on each account-health row does the same for a whole account.
 
-### Invoiced orders close themselves
+Escape, the backdrop or **Close** dismisses it.
 
-On by default: **an order the tracker shows as invoiced reads as Closed.** The rule applies
-only where the stage came from the tracker, so an explicit choice always stands — pick
-*Invoiced* on an order by hand and it stays invoiced. Rows closed this way say so, quoting both
-the evidence and the rule: *"a NAV invoice number is recorded. Closed automatically, because
-this workspace treats invoiced orders as closed."*
+### The four stages
 
-Turn it off with the checkbox on the Order status page and invoiced orders stay open until
-someone closes them. It is a workspace-wide setting, so only administrators change it; everyone
-else sees its state and why they cannot.
+`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Invoiced and Closed`
+
+**Invoicing ends the order.** There is no separate closed stage and no rule that moves orders
+between the two, because the two were never different here — a NAV invoice number on the tracker
+puts an order at the last stage on its own, and everything short of that counts as open.
+
+A status recorded as *Closed* before the stages merged still reads correctly; it resolves onto
+the merged stage and says so, so old records keep meaning what they meant.
+
+### Hiding what is finished
+
+**Hide invoiced and closed**, on both Account Health and Order status, leaves the finished
+orders out of the view. Counts, bars and the board all follow the switch — it changes what you
+are looking at, not what is true. The choice is per person and is remembered.
 
 Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
 to…", and filters including *Open only* and *No status set*. Anything you set there is what the
@@ -224,6 +247,26 @@ The single-account build remembers its tracker the same way.
 
 ---
 
+## Follow-ups
+
+Every item tracker on the account is scanned for a column that should have been filled by now,
+measured from a dated column and a grace period. Each line names the blank column and the dated
+column it is measured from — nothing is inferred.
+
+### Chases the workflow has overtaken
+
+**A chase stops being worth sending once the order has moved past it.** If a winery never
+confirmed an available date but the goods were collected three weeks ago, asking now changes
+nothing. Each rule declares which columns overtake it: a delivery date closes out the collection
+chase, an invoice number closes out the rest.
+
+Overtaken items move to a collapsed **No longer needed** list with the evidence that overtook
+them — *"still blank, but NAV INV # is recorded — the order moved on without it"*. They are not
+counted as outstanding work and no email is drafted for them.
+
+They are **not hidden**, because a blank column on a shipped order is still a gap in the record,
+and a tidier list would be a less honest one.
+
 ## Templates
 
 Upload what you already send. The app reads:
@@ -255,6 +298,7 @@ Anything in double braces is filled from the PO, the tracker and the account rec
 | **Quantities** | `{{totalCases}}` `{{totalPallets}}` `{{totalWeight}}` |
 | **Logistics** | `{{collectionDate}}` `{{collectionAddress}}` `{{deliveryAddress}}` `{{finalDelivery}}` `{{forwarder}}` |
 | **People** | `{{vendorContact}}` `{{recipientName}}` `{{senderName}}` `{{signature}}` `{{docsEmail}}` |
+| **Airport** | `{{airport}}` `{{airportCode}}` `{{airportName}}` |
 | **Other** | `{{today}}` |
 
 Every one traces back to a PO field, arithmetic over a PO and a tracker constant, or something
@@ -264,8 +308,36 @@ When you import a template containing literal values — a customer name, a cont
 offers to swap them for placeholders and shows exactly which. Nothing is changed until you
 click.
 
-If a template uses a placeholder with no value behind it, the draft says so rather than
-sending `{{something}}` to a vendor.
+### Fields in this template
+
+Every draft opens with a panel listing each placeholder the template uses, the value it will
+send, and where that value came from — `filled`, `derived`, `typed in`, or `missing`.
+
+**A missing field is raised before the preview, not left to be spotted in the text.** Each one
+gets a box to type a value into, and typing there applies to that draft only — the template and
+the tracker are untouched. Nothing is ever invented to cover a gap; an unfilled placeholder goes
+out as empty braces unless you fill it.
+
+### Airport codes
+
+A purchase order names its delivery point in words — *AEROPUERTO INTERNACIONAL CIUDAD DE
+MEXICO* — while a trucker's template wants *MEX*. Where a template quotes an airport, the code
+is read from the delivery address:
+
+1. **A code already printed on the PO wins.** Nothing is derived when the document says it.
+2. **Otherwise the address is matched against a built-in airport table**, by the airport's name
+   first and then by city. The result is labelled `derived` and the panel says to check it.
+3. **Where a city has more than one airport, nothing is chosen.** *London* offers LHR, LGW, STN,
+   LTN and LCY and waits for you to pick. Sending wine to Gatwick because the address said
+   "London" is exactly the mistake the table exists to prevent.
+
+### The internal note on an imported template
+
+Templates often end with a note to whoever filed them — `Use: Aeromexico`. On import, that line
+and everything after it is removed from the copy the portal keeps. The editor shows what was
+taken out and offers **Put it back** if the guess was wrong.
+
+**The file you uploaded is never written to.** Its note stays where it is.
 
 ### Editing
 
@@ -275,6 +347,24 @@ gets it. The Emails tab also has a per-draft editor for one-off changes that sho
 the template.
 
 ---
+
+## Attachments
+
+Three sources, and the draft says which is which:
+
+| | |
+| --- | --- |
+| **The PO PDFs** | The orders in hand for this item. One checkbox, on by default for vendor mail. |
+| **Standing files** | Kept on the item in the shared folder, attached to every message for it. |
+| **This draft only** | Added in the preview, used once, never saved anywhere. |
+
+**Manage files sent with every message** copies a file into `attachments/<account>/<item>/` in
+the shared folder, so a colleague opening the same workspace attaches the same file — a link to
+somebody's desktop would break for everyone else. Each standing file can be limited to certain
+kinds of message (customer only, say) or left to go on all of them.
+
+If a standing file has been deleted from the shared folder, the draft refuses to build and says
+which file is missing rather than sending a message that is quietly short an attachment.
 
 ## Recipients
 
@@ -308,18 +398,22 @@ portal/
   AMI-Order-Desk-Teams.html       multi-account build
   build.js                        produces both
   src/
-    engine.js                     ZIP, XLSX, PDF, planning, validation, EML
+    engine.js                     ZIP, XLSX, PDF, planning, validation, follow-ups, EML
     templates.js                  .msg/.oft/.eml/.docx ingestion, RTF de-encapsulation
-    workspace.js                  divisions, accounts, people, template storage
+    airports.js                   airport table and address lookup
+    workspace.js                  divisions, accounts, items, people, templates, attachments
+    status.js                     the four stages, derivation, roll-ups
+    charts.js                     stat tiles, bars, columns, stage fills
+    persist.js                    remembering the folder and unposted work
     app.js / app-teams.js         the two interfaces
     styles.css                    shared
     shell.html / shell-teams.html
   tests/
-    engine.test.js       118 assertions   PO extraction, tracker maths, write-back
+    engine.test.js       128 assertions   PO extraction, tracker maths, write-back, follow-ups
     ui.test.js            58 assertions   single-account app in Chromium
-    teams.test.js        103 assertions   template ingestion, workspace model, PO routing
-    status.test.js       107 assertions   status model, the invoiced rule, roll-ups, charts
-    teams-ui.test.js     110 assertions   multi-account app, dashboard and persistence
+    teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
+    status.test.js       126 assertions   stage model, roll-ups, charts, stage weaves
+    teams-ui.test.js     148 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 
 ```bash
@@ -331,7 +425,7 @@ node portal/tests/ui.test.js <fixturesDir>          # needs playwright
 node portal/tests/teams-ui.test.js <fixturesDir>    # needs playwright
 ```
 
-### Colour
+### Colour, and not depending on it
 
 Chrome uses one blue accent. Order stages use a **separate single-hue ordinal ramp**, so a stage
 colour can never be mistaken for a button, and *further along the pipeline* always reads as
@@ -340,6 +434,23 @@ the data-visualisation validator for monotone lightness, visible step gaps and c
 their own surface; dark mode is its own set of steps, not an automatic inversion. The reserved
 good/warning/critical colours are used only for health and never for a series, and always ship
 with an icon and a word so colour never carries meaning alone.
+
+**Every stage also carries a weave**, and that is the primary signal:
+
+| Stage | Fill |
+| --- | --- |
+| Order placed – awaiting shipment | solid |
+| In transit | diagonal stripes |
+| Delivered | horizontal stripes |
+| Invoiced and Closed | vertical stripes |
+
+Four stages on one hue is the hardest case for a reader with colour vision deficiency, so hue is
+never asked to work alone. The weave appears on bar segments, legend swatches, board headings,
+card rails and stage pills; the legend **names** each weave in words as well as showing it, so
+the key survives being read aloud, printed in grey or photocopied.
+
+A row that measures something other than pipeline position — an order's age, a count — takes the
+reserved status palette instead. A weave there would claim a stage the row does not have.
 
 Fixtures (a sample PO PDF, a tracking chart, a saved `.msg`) are **not** committed — they hold
 customer data. Point the tests at a local folder containing them. The multi-item browser test

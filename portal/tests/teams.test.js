@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 require('../src/engine.js');
 require('../src/templates.js');
+require('../src/airports.js');
 const AMI = require('../src/workspace.js');
 
 const FIXTURES = process.argv[2] || process.env.AMI_FIXTURES
@@ -424,6 +425,90 @@ async function makeDocx(paragraphs) {
   const found = await AMI.findWorkbooks(treeStore, '', 3);
   check('workbooks found, lock files and templates skipped', found,
     ['trackers/2026/Delta.xlsx', 'trackers/Aeromexico.xlsx']);
+
+  console.log('\nAirport codes from a delivery address');
+  const mex = AMI.airportForAddress([
+    'COMI-BOND AEROPUERTO INTERNACIONAL CIUDAD DE MEXICO',
+    'ALMACEN FISCALIZADO AICM COL. PENSADOR MEXICANO', 'MEXICO MX 15510',
+  ]);
+  check('the airport named in words is found', mex.code, 'MEX');
+  check('and reported as read from the address, not printed', mex.source, 'name');
+  ok('with a reason a person can check', /names Mexico City MEX/.test(mex.reason), mex.reason);
+
+  const printed = AMI.airportForAddress('Deliver to CDG bonded warehouse, France');
+  check('a code already on the document is used as-is', printed.code, 'CDG');
+  check('and is not passed off as derived', printed.source, 'printed');
+
+  // The whole point of the table: it refuses rather than guesses.
+  const london = AMI.airportForAddress('Bonded store, London, United Kingdom');
+  check('a city with several airports yields no code', london.code, '');
+  check('and offers every one of them', london.choices.map((a) => a.code), ['LHR', 'LGW', 'STN', 'LTN', 'LCY']);
+  ok('saying why nothing was chosen', /does not say which/.test(london.reason), london.reason);
+
+  const ny = AMI.airportForAddress('Warehouse 5, New York, NY 11430');
+  check('the same holds for New York', ny.code, '');
+  check('with its three airports listed', ny.choices.map((a) => a.code), ['JFK', 'EWR', 'LGA']);
+  const named = AMI.airportForAddress('Cargo building, Newark Liberty International Airport, NJ');
+  check('but naming the airport settles it', named.code, 'EWR');
+
+  check('a city with one airport is unambiguous', AMI.airportForAddress('Schiphol, Netherlands').code, 'AMS');
+  check('accents do not defeat the match', AMI.airportForAddress('Genève Aéroport, Cointrin').code, 'GVA');
+  check('nothing is invented for an address with no airport',
+    AMI.airportForAddress('Nowhere Industrial Estate, Smalltown').code, '');
+  check('nor for an empty address', AMI.airportForAddress('').source, '');
+  ok('an ordinary three-letter word is not read as a code',
+    AMI.airportForAddress('THE AIR CARGO CENTRE, Smalltown').code === '',
+    JSON.stringify(AMI.airportForAddress('THE AIR CARGO CENTRE, Smalltown')));
+  ok('every entry in the table is a three-letter code',
+    AMI.AIRPORTS.every((a) => /^[A-Z]{3}$/.test(a.code)));
+  ok('and no code appears twice',
+    new Set(AMI.AIRPORTS.map((a) => a.code)).size === AMI.AIRPORTS.length);
+
+  console.log('\nThe internal note on an imported template');
+  const stripped = AMI.stripInternalNote('<p>Dear vendor,</p><p>Please confirm.</p><p>Use: Aeromexico</p>');
+  ok('the note is found', stripped.found);
+  check('and removed from the body', stripped.html, '<p>Dear vendor,</p><p>Please confirm.</p>');
+  check('while being reported back', stripped.removed, 'Use: Aeromexico');
+
+  const trailing = AMI.stripInternalNote(
+    '<div><p>Body</p><p>Use: Delta</p><p>and a second note</p></div>');
+  check('everything after the note goes too', trailing.html, '<div><p>Body</p></div>');
+  ok('and the cut leaves valid markup', /<\/div>$/.test(trailing.html), trailing.html);
+
+  const clean = AMI.stripInternalNote('<p>Body with no note</p>');
+  ok('a template without a note is untouched', !clean.found && clean.html === '<p>Body with no note</p>');
+  const midSentence = AMI.stripInternalNote('<p>Please use: the attached form when ordering</p>');
+  ok('"use:" inside a sentence is not mistaken for the note',
+    !midSentence.found, JSON.stringify(midSentence));
+  check('balancing closes open tags innermost first',
+    AMI.balanceTags('<div><p><b>x'), '<div><p><b>x</b></p></div>');
+  ok('and leaves void elements alone', AMI.balanceTags('<p>a<br>b') === '<p>a<br>b</p>');
+
+  console.log('\nStanding attachments');
+  const attached = AMI.normaliseWorkspace({
+    accounts: [{
+      name: 'Aeromexico', divisionId: 'europe',
+      items: [{
+        name: 'Evidencia', trackerPath: 't.xlsx',
+        attachments: [
+          { path: 'attachments/aeromexico/evidencia/spec.pdf', name: 'spec.pdf', roles: ['customer'] },
+          { path: 'attachments/aeromexico/evidencia/form.pdf', name: 'form.pdf' },
+          { name: 'no-path.pdf' },
+        ],
+      }],
+    }],
+  });
+  const attItem = attached.accounts[0].items[0];
+  check('an attachment without a path is dropped', attItem.attachments.map((f) => f.name),
+    ['spec.pdf', 'form.pdf']);
+  check('a file scoped to one role goes only there',
+    AMI.attachmentsForRole(attItem, 'customer').map((f) => f.name), ['spec.pdf', 'form.pdf']);
+  check('and not to the others',
+    AMI.attachmentsForRole(attItem, 'vendor').map((f) => f.name), ['form.pdf']);
+  check('an item with no attachments returns none', AMI.attachmentsForRole({ attachments: [] }, 'vendor'), []);
+  check('files live beside the templates in the shared folder',
+    AMI.attachDirFor('aeromexico', 'evidencia'), 'attachments/aeromexico/evidencia');
+  check('a new item starts with none', AMI.addItem(attached.accounts[0], 'Montenero').attachments, []);
 
   console.log('\n' + '-'.repeat(52));
   console.log(passed + ' passed, ' + failed + ' failed');

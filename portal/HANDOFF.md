@@ -43,16 +43,17 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # 496 assertions across five files
+node portal/tests/*.test.js # 597 assertions across five files
 ```
 
 | Source | Responsibility |
 | --- | --- |
-| `engine.js` | ZIP read/write, XLSX model, PDF text extraction, row planning, validation, `.eml` building |
-| `templates.js` | Importing `.msg` / `.oft` / `.eml` / `.docx` / `.html` / `.txt`, CFB parsing, RTF decompression, placeholders |
-| `workspace.js` | Divisions, accounts, items, users, templates, store interface, PO→item matching, recipient resolution |
-| `status.js` | The five order stages, derivation from the tracker, the auto-close rule, account summaries |
-| `charts.js` | Stat tiles, stacked bars, column charts, kanban pills — all inline SVG |
+| `engine.js` | ZIP read/write, XLSX model, PDF text extraction, row planning, validation, follow-up rules, `.eml` building |
+| `templates.js` | Importing `.msg` / `.oft` / `.eml` / `.docx` / `.html` / `.txt`, CFB parsing, RTF decompression, placeholders, internal-note stripping |
+| `airports.js` | Airport table and address lookup, with a hard refusal to pick between a city's airports |
+| `workspace.js` | Divisions, accounts, items, users, templates, standing attachments, store interface, PO→item matching, recipient resolution |
+| `status.js` | The four order stages, derivation from the tracker, account summaries |
+| `charts.js` | Stat tiles, stacked bars, column charts, stage fills — all inline SVG |
 | `persist.js` | IndexedDB wrapper for the folder handle and session, permission queries, debounce |
 | `app.js` / `app-teams.js` | The two UIs |
 | `styles.css` | Salesforce-Lightning-style system, light and dark as deliberate palettes |
@@ -60,16 +61,53 @@ node portal/tests/*.test.js # 496 assertions across five files
 ### Provenance tags
 
 Field values: `pdf` · `computed` · `formula` · `carried` · `manual` · `edited`.
-Order stages: `set` (a person chose it) · `auto` (the invoiced→closed rule) ·
-`derived` (read from the tracker) · `none`.
+Order stages: `set` (a person chose it) · `derived` (read from the tracker) ·
+`none` (nothing to go on — never guessed).
 
-### The five stages, in order
+### The four stages, in order
 
-`placed` → `transit` → `delivered` → `invoiced` (open) → `closed` (terminal).
+`placed` → `transit` → `delivered` → `invoiced` (terminal, labelled "Invoiced and
+Closed").
 
-Invoiced deliberately precedes closed. `workspace.settings.autoCloseInvoiced`
-defaults to true and closes **derived** invoiced orders only — an invoiced stage
-a person set by hand always stands.
+Invoicing ends the order; there is no separate closed stage and no rule that
+moves orders between the two. `LEGACY_STATUS_IDS` maps a stored `closed` onto
+`invoiced` so records written before the merge keep meaning what they meant, and
+`canonicalStatusId` is the only place that mapping lives.
+
+Each stage also declares a `pattern` — solid, diagonal, horizontal, vertical —
+which is the **primary** signal, not decoration. The customer is colourblind and
+four stages sit on one hue, so hue never works alone: `stageClass(step)` paints
+both, `statusLegend` names the weave in words, and anything measuring something
+other than pipeline position (an age, a count) takes the reserved status palette
+via `tone` instead of a stage weave.
+
+### Follow-ups stop when the workflow overtakes them
+
+Each rule in `FOLLOW_UP_RULES` declares `supersededBy` — the columns whose
+presence makes the chase pointless. `findOpenItems` marks those items
+`superseded` with the evidence rather than dropping them; the interface files
+them under "No longer needed" and excludes them from every count. Do not change
+this to hide them: a blank column on a shipped order is still a gap in the
+record, and that was a deliberate call.
+
+### Templates never invent a value
+
+`auditPlaceholders` reports every placeholder a template uses, its value and its
+provenance — `filled`, `derived`, `typed in`, `missing`. A gap gets a box to type
+into, stored in `state.emailOverrides.vars` and applying to that draft only.
+
+Airport codes follow the same rule. `airportForAddress` prefers a code already
+printed on the PO, falls back to matching the airport's name and then the city,
+and **returns nothing with a list of `choices` when a city has several airports**.
+Never add a tie-break: sending wine to Gatwick because the address said "London"
+is the exact failure that table exists to prevent.
+
+### Attachments
+
+Three sources, kept distinct: the PO PDFs in hand, standing files on the item
+under `attachments/<account>/<item>/` in the shared folder, and per-draft files
+held in `state.draftAttachments` and never written anywhere. A missing standing
+file blocks the draft with its name rather than sending one short.
 
 ### Persistence
 
@@ -105,10 +143,11 @@ tracker, and vendor email actually are.
 
 ## Open questions for the customer
 
-1. Whether Invoiced should count as open. It currently does; the auto-close rule
-   makes this mostly moot.
-2. Whether the tracker-derivation rules match how they actually read those
+1. Whether the tracker-derivation rules match how they actually read those
    columns.
+2. Whether the per-rule `supersededBy` choices match their judgement — a lot
+   number is chased until an invoice exists, while a collection date stops at
+   delivery.
 3. What **Workspace → "What survives closing the app"** reports in their Chrome.
    That table was built to answer their "it does not save after closing" report,
    which was never reproducible here. The folder row reads either `remembered`

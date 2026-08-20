@@ -126,12 +126,20 @@ async function buildBundle() {
     { label: 'Montenero vendor order', role: 'vendor', itemId: 'montenero', subject: 'Montenero only — {{poList}}' },
     '<p>Montenero-specific wording for {{item}}.</p>',
   );
+  // One field the portal derives (the airport) and one it cannot know, so the
+  // fields panel has both kinds to report.
+  const customerTemplate = AMI.templateFileText(
+    { label: 'Customer delivery note', role: 'customer', itemId: '', subject: 'Delivery to {{airport}} — {{poList}}' },
+    '<p>Dear {{recipientName}},</p><p>{{totalCases}} case(s) of {{item}} are routed to {{airport}}.</p>'
+    + '<p>Your reference: {{customerReference}}</p><p>{{signature}}</p>',
+  );
 
   return AMI.zip([
     { name: 'workspace.json', bytes: ENC.encode(JSON.stringify(workspace, null, 2)) },
     { name: 'templates/aeromexico/vendor-order.html', bytes: ENC.encode(vendorTemplate) },
     { name: 'templates/aeromexico/trucker-booking.html', bytes: ENC.encode(truckerTemplate) },
     { name: 'templates/aeromexico/montenero-vendor.html', bytes: ENC.encode(monteneroOnly) },
+    { name: 'templates/aeromexico/customer-delivery.html', bytes: ENC.encode(customerTemplate) },
     { name: 'trackers/Evidencia Tracking Chart.xlsx', bytes: realTracker },
     { name: 'trackers/Montenero Tracking Chart.xlsx', bytes: montenero },
   ]);
@@ -307,6 +315,76 @@ async function buildBundle() {
   ok('weight computed from that item\'s tracker', /4466 kg/.test(preview),
     (preview.match(/Total weight:.*/) || [''])[0]);
 
+  console.log('\nThe fields a template needs');
+  await page.locator('#emailBody button', { hasText: 'Customer / airline' }).click();
+  await page.waitForTimeout(900);
+  const fieldsCard = page.locator('#emailBody .card', { hasText: 'Fields in this template' });
+  await fieldsCard.waitFor({ timeout: 10000 });
+  const fieldsText = await fieldsCard.innerText();
+
+  ok('every placeholder the template uses is listed',
+    ['{{airport}}', '{{totalCases}}', '{{item}}', '{{customerReference}}', '{{signature}}']
+      .every((f) => fieldsText.includes(f)), fieldsText.replace(/\n/g, ' | ').slice(0, 500));
+  ok('a field with no value is called missing',
+    /\{\{customerReference\}\}[\s\S]*?MISSING/i.test(fieldsText),
+    fieldsText.replace(/\n/g, ' | ').slice(0, 600));
+  ok('and the warning names it before the preview',
+    /field\(s\) this template needs have no value[\s\S]*customerReference/i.test(fieldsText),
+    fieldsText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('nothing is invented to cover the gap',
+    /Nothing is invented to cover a gap/i.test(fieldsText));
+
+  // The airport is derived from the delivery address on the PO, and labelled so.
+  ok('the airport is derived rather than left blank',
+    /\{\{airport\}\}[\s\S]*?DERIVED/i.test(fieldsText), fieldsText.replace(/\n/g, ' | ').slice(0, 600));
+  ok('and the panel says where it came from and to check it',
+    /read from the delivery address/i.test(fieldsText) && /Check it before sending/i.test(fieldsText),
+    fieldsText.replace(/\n/g, ' | ').slice(0, 400));
+  ok('MEX is the code read from the Mexico City address',
+    /MEX/.test(fieldsText), fieldsText.replace(/\n/g, ' | ').slice(0, 600));
+
+  // Filling a gap by hand applies to this draft and nothing else.
+  const missingRow = fieldsCard.locator('tr', { hasText: '{{customerReference}}' });
+  await missingRow.locator('input').fill('AM-2026-114');
+  await missingRow.locator('input').press('Enter');
+  await page.waitForTimeout(900);
+  const filledText = await page.locator('#emailBody .card', { hasText: 'Fields in this template' }).innerText();
+  ok('a typed value is recorded as typed in',
+    /\{\{customerReference\}\}[\s\S]*?TYPED IN/i.test(filledText),
+    filledText.replace(/\n/g, ' | ').slice(0, 600));
+  ok('and the panel reports every field filled',
+    /Every field this template needs has a value/i.test(filledText),
+    filledText.replace(/\n/g, ' | ').slice(0, 300));
+  const customerPreview = await page.locator('#emailBody .email-preview').innerText();
+  ok('the draft carries the typed value', /AM-2026-114/.test(customerPreview),
+    customerPreview.replace(/\n/g, ' | ').slice(0, 300));
+  ok('and no empty braces are left in it', !/\{\{/.test(customerPreview),
+    (customerPreview.match(/\{\{\w+\}\}/g) || []).join(' '));
+
+  console.log('\nAttachments on a draft');
+  const attachCard = page.locator('#emailBody .card', { hasText: 'Attachments' });
+  const attachText = await attachCard.innerText();
+  ok('the PO PDFs are offered', /Attach the 1 PO PDF\(s\)/.test(attachText),
+    attachText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('a draft with no extra files says so', /No extra files on this draft/.test(attachText));
+  ok('and both kinds of attachment are explained',
+    /used once and never saved/.test(attachText) && /everyone working this item sends the same one/.test(attachText),
+    attachText.replace(/\n/g, ' | ').slice(0, 400));
+
+  await attachCard.locator('button', { hasText: 'Manage files sent with every message' }).click();
+  await page.waitForSelector('.overlay-panel');
+  const standingText = await page.locator('.overlay-panel').innerText();
+  ok('the standing-file dialog opens empty', /Nothing is sent automatically for this item/.test(standingText),
+    standingText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('and says the file is copied into the shared folder',
+    /copied into the shared folder/i.test(standingText) && /attachments\/aeromexico\/evidencia/.test(standingText),
+    standingText.replace(/\n/g, ' | ').slice(0, 400));
+  await page.locator('.overlay-panel button', { hasText: 'Close' }).click();
+  await page.waitForSelector('.overlay-panel', { state: 'detached' });
+
+  await page.locator('#emailBody button', { hasText: 'Vendor / winery' }).click();
+  await page.waitForTimeout(800);
+
   console.log('\nSwitching item switches the draft context');
   await itemSelect.selectOption('montenero');
   await page.waitForTimeout(1000);
@@ -444,14 +522,82 @@ async function buildBundle() {
   const stageBars = await page.locator('#dashboardBody .bar-seg').count();
   ok('the pipeline draws stacked segments', stageBars > 0, stageBars + ' segments');
   const legendItems = await page.locator('#dashboardBody ul.legend li').count();
-  ok('a legend is always present for the stage ramp', legendItems >= 5, legendItems + ' legend items');
+  ok('a legend is always present for the stage ramp', legendItems >= 4, legendItems + ' legend items');
+
+  console.log('\nStages are told apart without colour');
+  const legendText = await page.locator('#dashboardBody ul.legend').first().innerText();
+  ok('the legend names each stage\'s weave',
+    /solid/i.test(legendText) && /diagonal/i.test(legendText)
+    && /horizontal/i.test(legendText) && /vertical/i.test(legendText),
+    legendText.replace(/\n/g, ' | '));
+  const segClasses = await page.locator('#dashboardBody .bar-track').first().locator('.bar-seg')
+    .evaluateAll((els) => els.map((e) => e.className));
+  ok('each segment is painted by its stage class',
+    segClasses.every((c) => /stage-fill stage-[1-4]/.test(c)), segClasses.join(' | '));
+  // The weave is a real painted fill, not just a class name.
+  const patterns = await page.locator('#dashboardBody .bar-track').first().locator('.bar-seg')
+    .evaluateAll((els) => els.map((e) => getComputedStyle(e).backgroundImage));
+  ok('and stages past the first carry a repeating gradient',
+    patterns.slice(1).every((p) => /repeating-linear-gradient/.test(p)), patterns.join(' | '));
+  ok('with a distinct weave per stage',
+    new Set(patterns).size === patterns.length, patterns.join(' | '));
+  const headClasses = await page.locator('#dashboardBody .kan-head')
+    .evaluateAll((els) => els.map((e) => e.className));
+  ok('the board headings are weaved too',
+    headClasses.filter((c) => /stage-fill/.test(c)).length >= 4, headClasses.join(' | '));
+
+  console.log('\nZooming and drilling into a chart');
+  await page.locator('#dashboardBody .card', { hasText: 'Order pipeline' })
+    .locator('button', { hasText: 'Expand' }).click();
+  await page.waitForSelector('.overlay-panel');
+  ok('a chart opens larger in an overlay',
+    /Order pipeline/.test(await page.locator('.overlay-panel').innerText()));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.overlay-panel', { state: 'detached' });
+  ok('and Escape closes it', true);
+
+  // Clicking a band lists the orders behind it.
+  const band = page.locator('#dashboardBody .card', { hasText: 'Order pipeline' })
+    .locator('.bar-seg[data-drill]').first();
+  const bandTip = await band.getAttribute('data-tip');
+  await band.click();
+  await page.waitForSelector('.overlay-panel');
+  const drillText = await page.locator('.overlay-panel').innerText();
+  ok('clicking a band lists the orders in it',
+    /order\(s\)\./.test(drillText), drillText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('the list names the stage that was clicked',
+    new RegExp(bandTip.split(':')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(drillText),
+    bandTip + ' vs ' + drillText.replace(/\n/g, ' | ').slice(0, 200));
+  const drillRows = await page.locator('.overlay-panel table.data tbody tr').count();
+  ok('with a row per order', drillRows > 0, drillRows + ' rows');
+  ok('and every column traced to the tracker or a person',
+    /nothing here is calculated for the chart/i.test(drillText));
+  const drillHeads = await page.locator('.overlay-panel table.data thead th').allInnerTexts();
+  ok('the drill-down names the PO, stage and provenance',
+    drillHeads.some((h) => /PO/i.test(h)) && drillHeads.some((h) => /Stage/i.test(h))
+    && drillHeads.some((h) => /Where it comes from/i.test(h)), drillHeads.join(' | '));
+  await page.locator('.overlay-panel button', { hasText: 'Close' }).click();
+  await page.waitForSelector('.overlay-panel', { state: 'detached' });
+
+  const monthCol = page.locator('#dashboardBody svg.chart rect.col[data-drill]').first();
+  if (await monthCol.count()) {
+    await monthCol.click();
+    await page.waitForSelector('.overlay-panel');
+    ok('a month column drills into what was collected then',
+      /Collected in/.test(await page.locator('.overlay-panel').innerText()));
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.overlay-panel', { state: 'detached' });
+  }
   const cols = await page.locator('#dashboardBody svg.chart rect.col').count();
   ok('the monthly chart draws columns', cols > 0, cols + ' columns');
   ok('the chart is labelled for screen readers',
     (await page.locator('#dashboardBody svg.chart').first().getAttribute('aria-label')) !== null);
 
   const kanCols = await page.locator('#dashboardBody .kan-col').count();
-  ok('the board has a column per stage', kanCols >= 5, kanCols + ' columns');
+  ok('the board has a column per stage', kanCols >= 4, kanCols + ' columns');
+  const kanTitles = await page.locator('#dashboardBody .kan-title').allInnerTexts();
+  check('the board ends at the merged terminal stage',
+    kanTitles.filter((t) => /Invoiced|Closed/i.test(t)), ['Invoiced and Closed']);
   const kanCards = await page.locator('#dashboardBody .kan-card').count();
   ok('orders appear as cards', kanCards > 0, kanCards + ' cards');
   ok('cards say where their status came from',
