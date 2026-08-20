@@ -39,6 +39,53 @@
     toastTimer = setTimeout(() => t.remove(), 5600);
   }
 
+  /* ------------------------------------------------------------------ *
+   * Overlay
+   * ------------------------------------------------------------------ *
+   *
+   * One modal, used for enlarging a chart and for listing the orders behind a
+   * mark. Closing is deliberately easy — Escape, the backdrop, or the button —
+   * because it only ever shows a bigger view of what is already on the page.
+   */
+
+  let closeOverlay = null;
+
+  function openOverlay(title, sub, buildBody, opts) {
+    const o = opts || {};
+    if (closeOverlay) closeOverlay();
+
+    const body = el('div', { class: 'overlay-body' });
+    const shell = el('div', { class: 'overlay-panel' + (o.wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [
+      el('div', { class: 'overlay-head' }, [
+        el('div', {}, [
+          el('h2', { text: title }),
+          sub ? el('p', { class: 'overlay-sub', text: sub }) : null,
+        ].filter(Boolean)),
+        el('span', { class: 'spacer' }),
+        ...(o.actions || []),
+        el('button', { class: 'btn small', text: 'Close', onclick: () => closeOverlay && closeOverlay() }),
+      ]),
+      body,
+    ]);
+    const back = el('div', { class: 'overlay' }, [shell]);
+
+    buildBody(body);
+
+    const onKey = (e) => { if (e.key === 'Escape') closeOverlay && closeOverlay(); };
+    back.addEventListener('mousedown', (e) => { if (e.target === back) closeOverlay && closeOverlay(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(back);
+    document.body.classList.add('overlay-open');
+
+    closeOverlay = () => {
+      document.removeEventListener('keydown', onKey);
+      back.remove();
+      document.body.classList.remove('overlay-open');
+      closeOverlay = null;
+    };
+    return closeOverlay;
+  }
+
   function download(bytes, name, mime) {
     const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: mime || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
@@ -64,10 +111,10 @@
   };
 
   /* How an order's stage was arrived at. */
-  const SOURCE_CHIP = { set: 'ok', derived: 'computed', auto: 'carried', none: 'manual' };
-  const SOURCE_SHORT = { set: 'set', derived: 'from tracker', auto: 'auto-closed', none: 'none' };
+  const SOURCE_CHIP = { set: 'ok', derived: 'computed', none: 'manual' };
+  const SOURCE_SHORT = { set: 'set', derived: 'from tracker', none: 'none' };
   const SOURCE_LONG = {
-    set: 'set by a person', derived: 'from tracker', auto: 'closed by rule', none: 'not set',
+    set: 'set by a person', derived: 'from tracker', none: 'not set',
   };
   const sourceChip = (s) => el('span', { class: 'chip ' + s, text: SOURCE_LABEL[s] || s });
 
@@ -193,6 +240,10 @@
     portfolio: null,          // [{ account, item, sheet, header, config, orders, followUps }]
     portfolioLoading: false,
     filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
+    excludeClosed: false,
+    lastStrippedNote: null,   // { templateId, text, html } after an import trimmed a note
+    draftAttachments: [],     // files added to the current draft only, never saved
+    drill: null,              // { title, sub, orders } while a chart detail is open
     summaryHtml: '',
     // Memory across closing the app
     rememberedFolder: null,
@@ -213,11 +264,32 @@
   const visibleAccounts = () => (state.workspace && state.userId ? AMI.accountsForUser(state.workspace, state.userId) : []);
   const itemState = (id) => state.itemStates.get(id) || null;
 
-  /** Workspace-wide rules that change how a stage is resolved. */
-  const statusOptions = () => ({
-    autoCloseInvoiced: !!(state.workspace && state.workspace.settings
-      && state.workspace.settings.autoCloseInvoiced),
-  });
+  /**
+   * Whether finished orders are being left out of the view. A per-person choice,
+   * not a workspace rule — hiding them changes what you look at, not what is true.
+   */
+  const excludingClosed = () => !!state.excludeClosed;
+
+  /** Drop the terminal stage when the view is set to hide it. */
+  const applyClosedFilter = (orders) => (excludingClosed() ? orders.filter((o) => o.isOpen) : orders);
+
+  function setExcludeClosed(on) {
+    state.excludeClosed = !!on;
+    saveLocal({ excludeClosed: state.excludeClosed });
+  }
+
+  /** The switch that hides finished orders, wired to re-render its own page. */
+  function closedToggle(rerender) {
+    const box = el('input', {
+      type: 'checkbox', checked: excludingClosed(),
+      onchange: (e) => { setExcludeClosed(e.target.checked); rerender(); },
+    });
+    return el('label', {
+      class: 'check-inline',
+      'data-tip': 'Leaves out orders at the Invoiced and Closed stage. Nothing is deleted — '
+        + 'the counts and totals on this page follow the switch.',
+    }, [box, document.createTextNode('Hide invoiced and closed')]);
+  }
 
   function poColumn(header) {
     const c = header.columns.find((x) => /^PO\s*#/i.test(x.header));
@@ -386,6 +458,7 @@
     }
 
     const saved = loadLocal();
+    state.excludeClosed = !!saved.excludeClosed;
     if (saved.userId && workspace.users.some((u) => u.id === saved.userId)) state.userId = saved.userId;
     else if (workspace.users.length === 1) state.userId = workspace.users[0].id;
 
@@ -716,6 +789,13 @@
                     renderHeaderBar(); renderWorkspace(); renderEmail(); renderTemplates();
                   },
                 }),
+              // A wrong workbook or sheet shows up here first, so the fix lives
+              // here too rather than three tabs away.
+              el('button', {
+                class: 'btn small', text: 'Tracker',
+                'data-tip': 'Change which workbook and sheet this item posts into.',
+                onclick: () => editItemTracker(account.id, item.id),
+              }),
             ]),
           ]));
         }
@@ -727,7 +807,19 @@
           if (st && st.error) {
             host.appendChild(el('div', { class: 'msg warn' }, [
               el('span', { class: 'icon', text: '!' }),
-              el('div', {}, [el('strong', { text: (item.name || item.id) + ': ' + st.error })]),
+              el('div', {}, [
+                el('strong', { text: (item.name || item.id) + ': ' + st.error }),
+                el('span', {
+                  class: 'detail',
+                  text: 'If the workbook moved or the wrong one was linked, point this item at the right one.',
+                }),
+                el('div', { class: 'btn-row' }, [
+                  el('button', {
+                    class: 'btn small', text: 'Change tracker',
+                    onclick: () => editItemTracker(account.id, item.id),
+                  }),
+                ]),
+              ]),
             ]));
           }
         }
@@ -1193,8 +1285,14 @@
 
     const recipients = AMI.resolveRecipients(account, item, role, first, user);
 
+    // A template that quotes an airport code wants the delivery airport. The PO
+    // names it in words, so the code is looked up from the address — reported as
+    // derived, and refused outright where the city has more than one airport.
+    const deliveryLines = first ? (first.finalDeliveryTo.length ? first.finalDeliveryTo : first.shipToBlock) : [];
+    const airport = AMI.airportForAddress(deliveryLines);
+
     return {
-      rows, included, first, recipients, item,
+      rows, included, first, recipients, item, airport,
       vars: {
         account: account.name || '',
         item: item ? item.name : '',
@@ -1222,8 +1320,427 @@
         today: AMI.formatEmailDate(new Date()),
         table: AMI.orderTableHtml(rows),
         signature: user.signature || '',
+        airport: airport.code,
+        airportCode: airport.code,
+        airportName: airport.airport ? airport.airport.names[0] || airport.airport.city : '',
       },
     };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Placeholder audit
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Where each placeholder's value comes from. Stated per field rather than as
+   * one blanket claim, because a draft mixes values read off the PO with values
+   * computed from the tracker and values a person typed — and the difference
+   * matters when someone is checking a draft before it goes out.
+   */
+  const VAR_SOURCE = {
+    account: 'the account', item: 'the item', division: 'the account',
+    customer: 'the tracker', product: 'the PO', size: 'the PO',
+    vendorContact: 'the PO', recipientName: 'the saved contact', senderName: 'your profile',
+    poCount: 'the loaded POs', poGroups: 'the loaded POs', poList: 'the loaded POs',
+    docsEmail: 'the PO', finalDelivery: 'the PO', collectionAddress: 'the PO',
+    deliveryAddress: 'the PO', collectionDate: 'the tracker', totalPallets: 'computed',
+    totalCases: 'computed', totalWeight: 'computed', forwarder: 'the PO',
+    today: "today's date", table: 'the POs and the tracker', signature: 'your profile',
+    airport: 'the delivery address', airportCode: 'the delivery address',
+    airportName: 'the delivery address',
+  };
+
+  const isAirportField = (name) => /airport/i.test(name);
+
+  /**
+   * One row per placeholder the template uses: its value, where that came from,
+   * and whether anything is missing. Nothing is invented to fill a gap — a blank
+   * stays blank and is reported.
+   */
+  function auditPlaceholders(template, ctx) {
+    const used = AMI.templatePlaceholders((template.html || '') + ' ' + (template.subject || ''));
+    const manual = (state.emailOverrides.vars) || {};
+
+    return used.map((name) => {
+      const typed = manual[name];
+      if (typed != null && String(typed).trim() !== '') {
+        return { name, value: String(typed), source: 'you typed it', filled: true, manual: true };
+      }
+
+      const value = ctx.vars[name];
+      const filled = value != null && String(value).trim() !== '';
+
+      if (isAirportField(name) && !filled) {
+        return {
+          name, value: '', filled: false, airport: true,
+          source: 'the delivery address',
+          why: ctx.airport.reason,
+          choices: ctx.airport.choices || [],
+        };
+      }
+
+      return {
+        name,
+        value: filled ? String(value) : '',
+        filled,
+        source: VAR_SOURCE[name] || 'not a field this portal fills',
+        why: filled ? '' : (VAR_SOURCE[name]
+          ? 'nothing in ' + VAR_SOURCE[name] + ' supplies it'
+          : 'the template asks for a field the portal does not know'),
+        derived: isAirportField(name) && ctx.airport.source !== 'printed',
+        airport: isAirportField(name),
+      };
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Attachments
+   * ------------------------------------------------------------------ *
+   *
+   * Three sources, and the draft says which is which:
+   *   - the PO PDFs for this item, already in hand
+   *   - standing files kept on the item in the shared folder, so every message
+   *     for that item carries them and every colleague sends the same ones
+   *   - files added to this one draft, held in memory and never written anywhere
+   */
+
+  const MIME_BY_EXT = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', doc: 'application/msword', xls: 'application/vnd.ms-excel',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    csv: 'text/csv', txt: 'text/plain', zip: 'application/zip', xml: 'application/xml',
+  };
+
+  const mimeFor = (name) => MIME_BY_EXT[String(name).split('.').pop().toLowerCase()]
+    || 'application/octet-stream';
+
+  /** Everything that goes on this draft, read fresh so a replaced file is current. */
+  async function collectAttachments(item, role, poEntries) {
+    const out = (poEntries || []).map((i) => ({
+      name: i.fileName, mime: 'application/pdf', bytes: i.bytes,
+    }));
+
+    for (const f of AMI.attachmentsForRole(item, role)) {
+      const bytes = await state.store.read(f.path);
+      if (!bytes) {
+        throw new Error('"' + f.name + '" is set to go on every ' + role
+          + ' message but is missing from the shared folder. Remove it from the item, or put the file back.');
+      }
+      out.push({ name: f.name, mime: mimeFor(f.name), bytes });
+    }
+
+    for (const f of state.draftAttachments) out.push(f);
+    return out;
+  }
+
+  /** The attachment controls on a draft. */
+  function attachmentsPanel(account, item, standing, attachBox, included) {
+    const list = el('div', { class: 'attach-list' });
+
+    const redraw = () => {
+      clear(list);
+      for (const f of standing) {
+        list.appendChild(el('div', { class: 'attach-row' }, [
+          el('span', { class: 'chip ok', text: 'every message' }),
+          el('span', { class: 'mono', text: f.name }),
+          el('span', {
+            class: 'note',
+            text: f.roles.length ? 'on ' + f.roles.join(', ') + ' messages' : 'on every kind of message',
+          }),
+        ]));
+      }
+      for (const f of state.draftAttachments) {
+        list.appendChild(el('div', { class: 'attach-row' }, [
+          el('span', { class: 'chip edited', text: 'this draft' }),
+          el('span', { class: 'mono', text: f.name }),
+          el('span', { class: 'note', text: (f.bytes.length / 1024).toFixed(0) + ' KB' }),
+          el('button', {
+            class: 'btn small danger', text: 'Remove',
+            onclick: () => {
+              state.draftAttachments = state.draftAttachments.filter((x) => x !== f);
+              redraw();
+            },
+          }),
+        ]));
+      }
+      if (!standing.length && !state.draftAttachments.length) {
+        list.appendChild(el('p', { class: 'note', text: 'No extra files on this draft.' }));
+      }
+    };
+    redraw();
+
+    const picker = el('input', { type: 'file', multiple: true, hidden: true });
+    picker.addEventListener('change', async () => {
+      for (const file of Array.from(picker.files)) {
+        state.draftAttachments.push({
+          name: file.name, mime: file.type || mimeFor(file.name),
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        });
+      }
+      picker.value = '';
+      redraw();
+    });
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Attachments'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'PDFs, standing files, and anything added here' }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('label', { class: 'check-inline' }, [
+          attachBox,
+          document.createTextNode('Attach the ' + included.length + ' PO PDF(s) for ' + item.name),
+        ]),
+        list,
+        picker,
+        el('div', { class: 'btn-row' }, [
+          el('button', { class: 'btn small', text: 'Add a file to this draft', onclick: () => picker.click() }),
+          el('button', {
+            class: 'btn small', text: 'Manage files sent with every message',
+            onclick: () => editItemAttachments(account.id, item.id),
+          }),
+        ]),
+        el('p', {
+          class: 'help',
+          text: 'A file added to this draft is used once and never saved. A standing file lives in '
+            + 'the shared folder, so everyone working this item sends the same one.',
+        }),
+      ]),
+    ]);
+  }
+
+  /**
+   * Standing attachments for an item. Adding one copies it into the shared
+   * folder, because a link to somebody's desktop would break for everyone else.
+   */
+  function editItemAttachments(accountId, itemId) {
+    const account = state.workspace.accounts.find((a) => a.id === accountId);
+    const item = AMI.findItem(account, itemId);
+    if (!item) return;
+
+    openOverlay('Files sent with every message', account.name + ' → ' + (item.name || item.id), (host) => {
+      const body = el('div');
+
+      const draw = () => {
+        clear(body);
+        if (!item.attachments.length) {
+          body.appendChild(el('div', { class: 'empty', text: 'Nothing is sent automatically for this item.' }));
+        } else {
+          const table = el('table', { class: 'data' });
+          table.appendChild(el('thead', {}, [el('tr', {}, [
+            el('th', { text: 'File' }), el('th', { text: 'Goes on' }),
+            el('th', { text: 'Added' }), el('th', {}),
+          ])]));
+          const rows = el('tbody');
+          for (const f of item.attachments) {
+            const roleSel = el('select', { multiple: true, size: 4 },
+              AMI.ROLES.map((r) => el('option', {
+                value: r.id, selected: f.roles.includes(r.id), text: r.name,
+              })));
+            roleSel.addEventListener('change', async () => {
+              f.roles = Array.from(roleSel.selectedOptions).map((o) => o.value);
+              await persistWorkspace();
+            });
+            rows.appendChild(el('tr', {}, [
+              el('td', { class: 'mono', text: f.name }),
+              el('td', {}, [
+                roleSel,
+                el('div', { class: 'note', text: f.roles.length ? '' : 'none selected — goes on every kind' }),
+              ]),
+              el('td', { class: 'note', text: (f.addedBy || 'someone') + (f.addedAt ? ' · ' + f.addedAt.slice(0, 10) : '') }),
+              el('td', {}, [el('button', {
+                class: 'btn small danger', text: 'Remove',
+                onclick: async () => {
+                  if (!window.confirm('Stop sending "' + f.name + '" with every message for this item?\n\n'
+                    + 'The file stays in the shared folder; it just will not be attached any more.')) return;
+                  item.attachments = item.attachments.filter((x) => x !== f);
+                  if (await persistWorkspace()) { draw(); toast('Removed from this item.', 'ok'); }
+                },
+              })]),
+            ]));
+          }
+          table.appendChild(rows);
+          body.appendChild(el('div', { class: 'table-scroll' }, [table]));
+        }
+      };
+      draw();
+
+      const picker = el('input', { type: 'file', multiple: true, hidden: true });
+      picker.addEventListener('change', async () => {
+        const user = currentUser() || {};
+        for (const file of Array.from(picker.files)) {
+          const path = AMI.attachDirFor(account.id, item.id) + '/' + file.name;
+          try {
+            await state.store.write(path, new Uint8Array(await file.arrayBuffer()));
+          } catch (e) {
+            toast('Could not copy ' + file.name + ' into the shared folder: ' + e.message, 'error');
+            continue;
+          }
+          item.attachments = item.attachments.filter((x) => x.path !== path);
+          item.attachments.push({
+            path, name: file.name, roles: [],
+            addedBy: user.name || '', addedAt: new Date().toISOString(),
+          });
+        }
+        picker.value = '';
+        if (await persistWorkspace()) {
+          draw();
+          renderEmail();
+          toast('Copied into the shared folder and set to go with every message.', 'ok');
+        }
+      });
+
+      host.appendChild(el('p', {
+        class: 'help',
+        text: 'These go on every message drafted for this item. Choose which kinds of message a '
+          + 'file belongs on, or leave every kind unselected for all of them.',
+      }));
+      host.appendChild(body);
+      host.appendChild(picker);
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', { class: 'btn primary', text: 'Add a file', onclick: () => picker.click() }),
+      ]));
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: 'The file is copied into the shared folder.' }),
+          el('span', {
+            class: 'detail',
+            text: 'It goes under ' + AMI.attachDirFor(account.id, item.id) + ', so a colleague opening '
+              + 'this workspace attaches the same file. Replacing it there replaces it for everyone.',
+          }),
+        ]),
+      ]));
+    }, { wide: true });
+  }
+
+  /** Values merged in the order: portal-derived, then whatever a person typed. */
+  function mergedVars(ctx) {
+    return Object.assign({}, ctx.vars, state.emailOverrides.vars || {});
+  }
+
+  function setManualVar(name, value) {
+    if (!state.emailOverrides.vars) state.emailOverrides.vars = {};
+    if (value == null || String(value).trim() === '') delete state.emailOverrides.vars[name];
+    else state.emailOverrides.vars[name] = String(value).trim();
+    // The body may already have been edited by hand; leave that alone, but a
+    // body still generated from the template must pick the new value up.
+    renderEmail();
+  }
+
+  /**
+   * The fields this template pulls in, and where each one came from.
+   *
+   * A missing field is the thing most likely to send a wrong email, so it is
+   * raised before the preview rather than left to be noticed in the text. Every
+   * gap gets a box to type the value in, and typing one never edits the
+   * template — it applies to this draft only.
+   */
+  function fieldsPanel(audit, ctx) {
+    const missing = audit.filter((f) => !f.filled);
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Field' }), el('th', { text: 'Value' }),
+      el('th', { text: 'Where it comes from' }), el('th', { text: 'Fill it in' }),
+    ])]));
+    const body = el('tbody');
+
+    for (const f of audit) {
+      let fill = null;
+      if (!f.filled && f.airport && f.choices && f.choices.length) {
+        // Several airports serve this city. Offering the list is the only honest
+        // move — picking one would be a guess dressed up as a lookup.
+        const pick = el('select', {}, [
+          el('option', { value: '', text: 'Which airport?' }),
+          ...f.choices.map((a) => el('option', { value: a.code, text: AMI.airportLabel(a) })),
+        ]);
+        pick.addEventListener('change', () => setManualVar(f.name, pick.value));
+        fill = pick;
+      } else if (!f.filled) {
+        const input = el('input', { type: 'text', placeholder: 'type a value for this draft' });
+        input.addEventListener('change', () => setManualVar(f.name, input.value));
+        fill = input;
+      } else if (f.manual) {
+        fill = el('button', {
+          class: 'btn small', text: 'Clear',
+          onclick: () => setManualVar(f.name, ''),
+        });
+      }
+
+      const chip = f.manual ? el('span', { class: 'chip edited', text: 'typed in' })
+        : (f.filled
+          ? (f.derived ? el('span', { class: 'chip computed', text: 'derived' })
+            : el('span', { class: 'chip pdf', text: 'filled' }))
+          : el('span', { class: 'chip error', text: 'missing' }));
+
+      body.appendChild(el('tr', {}, [
+        el('td', { class: 'mono', text: '{{' + f.name + '}}' }),
+        el('td', {}, [
+          f.filled
+            ? el('span', { text: f.value.length > 90 ? f.value.slice(0, 90) + '…' : f.value.replace(/<[^>]*>/g, ' ') })
+            : el('span', { class: 'faint', text: '—' }),
+        ]),
+        el('td', {}, [chip, document.createTextNode(' '),
+          el('span', { class: 'note', text: f.why || f.source })]),
+        el('td', {}, [fill]),
+      ]));
+    }
+    table.appendChild(body);
+
+    const head = missing.length
+      ? el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', {
+            text: missing.length + ' field(s) this template needs have no value: '
+              + missing.map((f) => '{{' + f.name + '}}').join(', '),
+          }),
+          el('span', {
+            class: 'detail',
+            text: 'They will go out as empty braces unless you fill them in below. '
+              + 'Nothing is invented to cover a gap.',
+          }),
+        ]),
+      ])
+      : el('div', { class: 'msg ok' }, [
+        el('span', { class: 'icon', text: '✓' }),
+        el('div', {}, [el('strong', { text: 'Every field this template needs has a value.' })]),
+      ]);
+
+    const airportNote = audit.some((f) => f.airport) && ctx.airport.code
+      ? el('p', {
+        class: 'help',
+        text: ctx.airport.source === 'printed'
+          ? 'The airport code is printed on the purchase order.'
+          : 'The airport code was read from the delivery address — ' + ctx.airport.reason
+            + '. Check it before sending.',
+      })
+      : null;
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Fields in this template'),
+        el('span', { class: 'spacer' }),
+        el('span', {
+          class: 'chip ' + (missing.length ? 'error' : 'ok'),
+          text: (audit.length - missing.length) + ' of ' + audit.length + ' filled',
+        }),
+      ]),
+      el('div', { class: 'body' }, [
+        head,
+        airportNote,
+        el('div', { class: 'table-scroll' }, [table]),
+        el('p', {
+          class: 'help',
+          text: 'Anything typed here applies to this draft only — the template and the '
+            + 'tracker are untouched.',
+        }),
+      ]),
+    ]);
   }
 
   const BUILTIN_VENDOR_TEMPLATE = {
@@ -1290,7 +1807,7 @@
     host.appendChild(el('div', { class: 'btn-row' }, AMI.ROLES.map((r) => el('button', {
       class: 'btn small' + (state.selectedRole === r.id ? ' primary' : ''),
       text: r.name,
-      onclick: () => { state.selectedRole = r.id; state.selectedTemplateId = ''; state.emailOverrides = {}; renderEmail(); },
+      onclick: () => { state.selectedRole = r.id; state.selectedTemplateId = ''; state.emailOverrides = {}; state.draftAttachments = []; renderEmail(); },
     }))));
 
     const templates = availableTemplates(state.selectedRole);
@@ -1328,7 +1845,7 @@
 
     const toInput = el('input', { type: 'text', value: ov.to != null ? ov.to : (template.to || ctx.recipients.to) });
     const ccInput = el('input', { type: 'text', value: ov.cc != null ? ov.cc : (template.cc || ctx.recipients.cc) });
-    const subjInput = el('input', { type: 'text', value: ov.subject != null ? ov.subject : AMI.fillTemplate(template.subject || '', ctx.vars) });
+    const subjInput = el('input', { type: 'text', value: ov.subject != null ? ov.subject : AMI.fillTemplate(template.subject || '', mergedVars(ctx)) });
     toInput.addEventListener('change', () => { ov.to = toInput.value; });
     ccInput.addEventListener('change', () => { ov.cc = ccInput.value; });
     subjInput.addEventListener('change', () => { ov.subject = subjInput.value; });
@@ -1381,17 +1898,11 @@
       ]));
     }
 
-    const bodyHtml = ov.html != null ? ov.html : AMI.fillTemplate(template.html || '', ctx.vars);
-    const unresolved = AMI.templatePlaceholders(bodyHtml);
-    if (unresolved.length) {
-      host.appendChild(el('div', { class: 'msg warn' }, [
-        el('span', { class: 'icon', text: '!' }),
-        el('div', {}, [
-          el('strong', { text: 'Unfilled placeholder(s): ' + unresolved.map((p) => '{{' + p + '}}').join(', ') }),
-          el('span', { class: 'detail', text: 'No value was available for these. Edit the draft below or correct the template.' }),
-        ]),
-      ]));
-    }
+    const audit = auditPlaceholders(template, ctx);
+    if (audit.length) host.appendChild(fieldsPanel(audit, ctx));
+
+    const vars = mergedVars(ctx);
+    const bodyHtml = ov.html != null ? ov.html : AMI.fillTemplate(template.html || '', vars);
 
     host.appendChild(el('h3', { text: 'Preview' }));
     host.appendChild(el('div', { class: 'email-preview', html: bodyHtml }));
@@ -1406,10 +1917,10 @@
     ]));
 
     const attachBox = el('input', { type: 'checkbox', checked: state.selectedRole === 'vendor' });
+    const standing = AMI.attachmentsForRole(item, state.selectedRole);
+    host.appendChild(attachmentsPanel(account, item, standing, attachBox, included));
+
     host.appendChild(el('div', { class: 'btn-row' }, [
-      el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:13px;' }, [
-        attachBox, document.createTextNode('Attach the ' + included.length + ' PO PDF(s) for ' + item.name),
-      ]),
       el('span', { class: 'spacer' }),
       el('button', {
         class: 'btn', text: 'Copy body',
@@ -1422,14 +1933,20 @@
       }),
       el('button', {
         class: 'btn primary', text: 'Download Outlook draft (.eml)',
-        onclick: () => {
+        onclick: async () => {
           const user = currentUser() || {};
+          let files;
+          try {
+            files = await collectAttachments(item, state.selectedRole, attachBox.checked ? included : []);
+          } catch (e) {
+            toast(e.message, 'error');
+            return;
+          }
           const eml = AMI.buildEml({
             from: user.email ? (user.name ? user.name + ' <' + user.email + '>' : user.email) : '',
             to: toInput.value, cc: ccInput.value, subject: subjInput.value,
             html: '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;">' + bodyHtml + '</body></html>',
-            attachments: attachBox.checked
-              ? included.map((i) => ({ name: i.fileName, mime: 'application/pdf', bytes: i.bytes })) : [],
+            attachments: files,
           });
           download(new Blob([eml], { type: 'message/rfc822' }),
             safeName(account.name + ' ' + item.name + ' ' + state.selectedRole + ' ' + (ctx.vars.poGroups || stamp())) + '.eml');
@@ -1531,14 +2048,22 @@
     const account = currentAccount();
     try {
       const parsed = await AMI.parseTemplateFile(new Uint8Array(await file.arrayBuffer()), file.name);
+
+      // "Use: Aeromexico" and anything after it is a note to whoever files the
+      // template, not part of the message. It comes out of the imported copy;
+      // the source file is only ever read, so its note stays where it is.
+      const trimmed = AMI.stripInternalNote(parsed.html);
+
       const saved = await AMI.saveTemplate(state.store, account.id, {
         label: parsed.subject ? parsed.subject.slice(0, 60) : file.name.replace(/\.[a-z0-9]+$/i, ''),
         role: state.selectedRole, itemId: '',
         subject: parsed.subject, to: parsed.to, cc: parsed.cc,
-        html: parsed.html, source: file.name + ' — ' + parsed.bodySource,
+        html: trimmed.html, source: file.name + ' — ' + parsed.bodySource,
       });
       state.templates = await AMI.listTemplates(state.store, account.id);
-      toast('Imported ' + file.name + ' (' + parsed.bodySource + '). Set its role, item scope and placeholders.', 'ok');
+      if (trimmed.found) state.lastStrippedNote = { templateId: saved.id, text: trimmed.removed, html: parsed.html };
+      toast('Imported ' + file.name + ' (' + parsed.bodySource + ').'
+        + (trimmed.found ? ' The internal note was removed.' : ''), 'ok');
       renderTemplates();
       openTemplateEditor(saved.id);
     } catch (e) {
@@ -1580,6 +2105,9 @@
     [label, subject, roleSel, scopeSel, body].forEach((n) => n.addEventListener('input', refresh));
     refresh();
 
+    const strippedNote = state.lastStrippedNote && state.lastStrippedNote.templateId === t.id
+      ? state.lastStrippedNote : null;
+
     const item = currentItem();
     const ctxForSuggest = item && posForItem(item.id).length ? emailVars(t.role || 'vendor') : null;
     const suggestions = ctxForSuggest
@@ -1605,6 +2133,23 @@
           el('label', { class: 'field' }, [el('span', { text: 'Applies to' }), scopeSel]),
         ]),
         el('label', { class: 'field' }, [el('span', { text: 'Subject line' }), subject]),
+        strippedNote ? el('div', { class: 'msg info' }, [
+          el('span', { class: 'icon', text: 'i' }),
+          el('div', {}, [
+            el('strong', { text: 'An internal note was removed from the end of this template.' }),
+            el('span', { class: 'detail', text: '“' + strippedNote.text + '” — this and everything after it was '
+              + 'taken out of the imported copy. The file you uploaded is untouched.' }),
+            el('div', { class: 'btn-row' }, [el('button', {
+              class: 'btn small', text: 'Put it back',
+              onclick: () => {
+                body.value = strippedNote.html;
+                state.lastStrippedNote = null;
+                refresh();
+                toast('The note is back in the template body. Save to keep it.', 'ok');
+              },
+            })]),
+          ]),
+        ]) : null,
         suggestions.length ? el('div', { class: 'msg info' }, [
           el('span', { class: 'icon', text: 'i' }),
           el('div', {}, [
@@ -1791,6 +2336,200 @@
     return out;
   }
 
+  /* ------------------------------------------------------------------ *
+   * Tracker assignment
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Which sheets of a workbook can actually take orders.
+   *
+   * A tracking workbook usually holds several years or cycles, so the choice is
+   * real: reported per sheet, with the row count, rather than left to the
+   * automatic pick.
+   */
+  async function readSheetChoices(path) {
+    const bytes = await state.store.read(path);
+    if (!bytes) throw new Error('Not found at ' + path);
+    const wb = await AMI.Workbook.load(bytes);
+    const out = wb.sheets.map((sh) => {
+      let header = null;
+      try { header = AMI.findHeaderRow(sh); } catch (e) { header = null; }
+      const rows = header ? AMI.dataRows(sh, header).length : 0;
+      return { name: sh.name, usable: !!header, rows };
+    });
+    // The automatic pick is the last usable sheet, so name it the same way here.
+    const usable = out.filter((s) => s.usable);
+    return { sheets: out, autoName: usable.length ? usable[usable.length - 1].name : '' };
+  }
+
+  /**
+   * Point an item at a workbook and a sheet, or correct a wrong one.
+   *
+   * Reassignment never rewrites anything: rows already posted stay in the
+   * workbook they were written to, which the dialog says plainly, because the
+   * alternative — quietly moving them — would be a much worse surprise.
+   */
+  function editItemTracker(accountId, itemId) {
+    const account = state.workspace.accounts.find((a) => a.id === accountId);
+    const item = AMI.findItem(account, itemId);
+    if (!item) return;
+
+    const originalPath = item.trackerPath;
+    const originalSheet = item.sheet;
+
+    const pathField = el('input', { type: 'text', value: item.trackerPath, placeholder: 'trackers/Item Tracking Chart.xlsx' });
+    const workbookPick = el('select', {}, [el('option', { value: '', text: 'Scanning the folder…' })]);
+    const sheetPick = el('select', {}, [el('option', { value: '', text: 'Choose a workbook first' })]);
+    const sheetNote = el('div', { class: 'note' });
+    const status = el('div');
+
+    const usedBy = (path) => state.workspace.accounts.flatMap((acc) => AMI.accountItems(acc)
+      .filter((x) => x !== item && x.trackerPath === path)
+      .map((x) => acc.name + ' → ' + (x.name || x.id)));
+
+    async function loadSheets(path) {
+      clear(sheetPick);
+      clear(status);
+      sheetNote.textContent = '';
+      if (!path) {
+        sheetPick.appendChild(el('option', { value: '', text: 'Choose a workbook first' }));
+        return;
+      }
+      sheetPick.appendChild(el('option', { value: '', text: 'Reading the workbook…' }));
+      let info;
+      try {
+        info = await readSheetChoices(path);
+      } catch (e) {
+        clear(sheetPick);
+        sheetPick.appendChild(el('option', { value: '', text: 'Could not read this workbook' }));
+        status.appendChild(el('div', { class: 'msg error' }, [
+          el('span', { class: 'icon', text: '!' }),
+          el('div', {}, [el('strong', { text: 'Could not read ' + fileOf(path) }),
+            el('span', { class: 'detail', text: e.message })]),
+        ]));
+        return;
+      }
+
+      clear(sheetPick);
+      sheetPick.appendChild(el('option', {
+        value: '',
+        selected: !item.sheet,
+        text: 'Automatic' + (info.autoName ? ' — currently "' + info.autoName + '"' : ''),
+      }));
+      for (const sh of info.sheets) {
+        sheetPick.appendChild(el('option', {
+          value: sh.name,
+          selected: sh.name === item.sheet,
+          disabled: !sh.usable,
+          text: sh.name + (sh.usable ? '  (' + sh.rows + ' order row(s))' : '  — no PO# header, cannot post here'),
+        }));
+      }
+
+      const usable = info.sheets.filter((sh) => sh.usable).length;
+      sheetNote.textContent = usable
+        ? usable + ' of ' + info.sheets.length + ' sheet(s) carry a PO# header. Automatic takes the last of them, '
+          + 'which is the current cycle in a workbook laid out by year.'
+        : 'No sheet in this workbook has a PO# header row, so nothing can be posted into it.';
+
+      if (item.sheet && !info.sheets.some((sh) => sh.name === item.sheet)) {
+        status.appendChild(el('div', { class: 'msg warn' }, [
+          el('span', { class: 'icon', text: '!' }),
+          el('div', {}, [
+            el('strong', { text: 'This item names a sheet that is not in this workbook.' }),
+            el('span', { class: 'detail', text: '"' + item.sheet + '" is not here, so the automatic pick is being used instead.' }),
+          ]),
+        ]));
+      }
+    }
+
+    AMI.findWorkbooks(state.store, '', 4).then((paths) => {
+      clear(workbookPick);
+      workbookPick.appendChild(el('option', {
+        value: '', text: paths.length ? 'Pick a workbook…' : 'No workbooks found in this folder',
+      }));
+      for (const path of paths) {
+        const others = usedBy(path);
+        workbookPick.appendChild(el('option', {
+          value: path, selected: path === item.trackerPath,
+          text: path + (others.length ? '  (also used by ' + others.join(', ') + ')' : ''),
+        }));
+      }
+      if (item.trackerPath && !paths.includes(item.trackerPath)) {
+        workbookPick.appendChild(el('option', {
+          value: item.trackerPath, selected: true,
+          text: item.trackerPath + '  (linked, but not found in the folder now)',
+        }));
+      }
+      if (item.trackerPath) loadSheets(item.trackerPath);
+    });
+
+    workbookPick.addEventListener('change', () => {
+      pathField.value = workbookPick.value;
+      item.sheet = '';
+      loadSheets(workbookPick.value);
+    });
+    pathField.addEventListener('change', () => { loadSheets(pathField.value.trim()); });
+
+    openOverlay('Tracker for ' + (item.name || item.id), account.name, (host) => {
+      host.appendChild(el('p', { class: 'help', text: 'Which workbook this item posts into, and which sheet of it.' }));
+      host.appendChild(editorField('Workbook in this folder', workbookPick));
+      host.appendChild(editorField('Path', pathField, 'Relative to the workspace folder. Editable if the workbook is somewhere the scan does not reach.'));
+      host.appendChild(editorField('Sheet', sheetPick, 'Automatic is right for most workbooks. Choose a sheet to post into a particular year or cycle.'));
+      host.appendChild(sheetNote);
+      host.appendChild(status);
+
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: 'Changing this moves nothing that is already written.' }),
+          el('span', {
+            class: 'detail',
+            text: 'Rows posted earlier stay in the workbook and sheet they went into. This only '
+              + 'changes where the next post goes, and which sheet the dashboard reads for this item.',
+          }),
+        ]),
+      ]));
+
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', {
+          class: 'btn primary', text: 'Save tracker',
+          onclick: async () => {
+            const path = pathField.value.trim();
+            const sheet = sheetPick.value;
+            if (!path) { toast('Pick a workbook first.', 'error'); return; }
+
+            const clash = state.workspace.accounts.flatMap((acc) => AMI.accountItems(acc)
+              .filter((x) => x !== item && x.trackerPath === path && (x.sheet || '') === sheet)
+              .map((x) => acc.name + ' → ' + (x.name || x.id)));
+            if (clash.length && !window.confirm(
+              'This is the same workbook and sheet as ' + clash.join(', ') + '.\n\n'
+              + 'Two items posting into one sheet will interleave their orders. Save anyway?')) return;
+
+            item.trackerPath = path;
+            item.sheet = sheet;
+            if (await persistWorkspace()) {
+              if (closeOverlay) closeOverlay();
+              state.portfolio = null;
+              await selectAccount(account.id, state.itemId);
+              renderAccounts();
+              toast('Tracker set to ' + fileOf(path) + (sheet ? ' · ' + sheet : ' · automatic sheet') + '.', 'ok');
+            } else {
+              item.trackerPath = originalPath;
+              item.sheet = originalSheet;
+            }
+          },
+        }),
+        el('button', {
+          class: 'btn', text: 'Cancel',
+          onclick: () => {
+            item.sheet = originalSheet;
+            if (closeOverlay) closeOverlay();
+          },
+        }),
+      ]));
+    });
+  }
+
   async function openAccountEditor(accountId) {
     const ws = state.workspace;
     const a = ws.accounts.find((x) => x.id === accountId);
@@ -1916,25 +2655,19 @@
     const name = el('input', { type: 'text', value: it.name });
     const product = el('input', { type: 'text', value: it.product, placeholder: 'read from the tracker when blank' });
     const navCode = el('input', { type: 'text', value: it.navCode, placeholder: 'read from the tracker when blank' });
-    const sheet = el('input', { type: 'text', value: it.sheet, placeholder: 'auto — last sheet with a PO# header' });
-    const trackerPath = el('input', { type: 'text', value: it.trackerPath, placeholder: 'trackers/Item Tracking Chart.xlsx' });
     const notes = el('input', { type: 'text', value: it.notes });
     const contactInputs = {};
 
-    const trackerPick = el('select', {}, [el('option', { value: '', text: 'Scanning folder…' })]);
-    const usedPaths = ws.accounts.flatMap((acc) => AMI.accountItems(acc)
-      .filter((x) => x !== it && x.trackerPath).map((x) => x.trackerPath));
-    AMI.findWorkbooks(state.store, '', 4).then((paths) => {
-      clear(trackerPick);
-      trackerPick.appendChild(el('option', { value: '', text: paths.length ? 'Pick a workbook…' : 'No workbooks found in this folder' }));
-      for (const p of paths) {
-        trackerPick.appendChild(el('option', {
-          value: p, selected: p === it.trackerPath,
-          text: p + (usedPaths.includes(p) ? '  (already used by another item)' : ''),
-        }));
-      }
-    });
-    trackerPick.addEventListener('change', () => { if (trackerPick.value) trackerPath.value = trackerPick.value; });
+    // The workbook and sheet are set in their own dialog, which reads the file
+    // to offer the real sheet names rather than asking anyone to type one.
+    const trackerLine = el('div', { class: 'note' });
+    const describeTracker = () => {
+      const st = itemState(it.id);
+      trackerLine.textContent = it.trackerPath
+        ? fileOf(it.trackerPath) + ' · sheet: ' + (it.sheet || ((st && st.sheetName) ? st.sheetName + ' (automatic)' : 'automatic'))
+        : 'No tracker assigned yet.';
+    };
+    describeTracker();
 
     host.appendChild(el('div', { class: 'card' }, [
       el('h2', {}, [
@@ -1943,13 +2676,15 @@
         el('button', { class: 'btn small', text: 'Back to account', onclick: () => openAccountEditor(a.id) }),
       ]),
       el('div', { class: 'body' }, [
-        el('div', { class: 'grid-2' }, [
-          editorField('Item name', name, 'How it appears in the item switcher.'),
-          editorField('Sheet to post into', sheet),
-        ]),
+        editorField('Item name', name, 'How it appears in the item switcher.'),
         el('h3', { text: 'Tracker' }),
-        editorField('Workbook in this folder', trackerPick),
-        editorField('Path', trackerPath, 'Relative to the workspace folder.'),
+        trackerLine,
+        el('div', { class: 'btn-row' }, [
+          el('button', {
+            class: 'btn', text: it.trackerPath ? 'Change workbook or sheet' : 'Assign a tracker',
+            onclick: () => editItemTracker(a.id, it.id),
+          }),
+        ]),
         el('h3', { text: 'Matching' }),
         el('p', { class: 'help', text: 'Purchase orders are routed here when their item number matches. Leave both blank and the values are read from the tracker itself — which is usually what you want.' }),
         el('div', { class: 'grid-2' }, [
@@ -1967,8 +2702,6 @@
               it.name = name.value.trim() || it.name;
               it.product = product.value.trim();
               it.navCode = navCode.value.trim();
-              it.sheet = sheet.value.trim();
-              it.trackerPath = trackerPath.value.trim();
               it.notes = notes.value.trim();
               it.contacts = collectContacts(contactInputs);
               if (await persistWorkspace()) {
@@ -2084,6 +2817,11 @@
     }
     state.openItems.sort((a, b) => b.ageDays - a.ageDays);
 
+    // A chase the workflow has overtaken is not worth sending, but the gap it
+    // marks is still worth seeing — so it moves aside rather than disappearing.
+    const live = state.openItems.filter((i) => !i.superseded);
+    const overtaken = state.openItems.filter((i) => i.superseded);
+
     host.appendChild(el('p', { class: 'help', text: 'Every item tracker on ' + account.name + ' is scanned. Each line names the blank column and the dated column it is measured from — nothing here is inferred.' }));
 
     if (!state.openItems.length) {
@@ -2091,8 +2829,22 @@
       return;
     }
 
+    if (!live.length) {
+      host.appendChild(el('div', { class: 'msg ok' }, [
+        el('span', { class: 'icon', text: '✓' }),
+        el('div', {}, [
+          el('strong', { text: 'Nothing left worth chasing.' }),
+          el('span', {
+            class: 'detail',
+            text: overtaken.length + ' item(s) are still blank on the trackers, but each order has '
+              + 'moved past the point where the answer would change anything. They are listed below.',
+          }),
+        ]),
+      ]));
+    }
+
     const byParty = {};
-    for (const i of state.openItems) (byParty[i.party] = byParty[i.party] || []).push(i);
+    for (const i of live) (byParty[i.party] = byParty[i.party] || []).push(i);
 
     for (const party of Object.keys(byParty)) {
       const items = byParty[party];
@@ -2136,6 +2888,54 @@
         ]),
       ]));
     }
+
+    if (overtaken.length) host.appendChild(supersededCard(overtaken));
+  }
+
+  /**
+   * Follow-ups the workflow overtook. Collapsed, because they need no action —
+   * but present, because a blank column on a shipped order is still a gap in the
+   * record, and hiding it would make the tracker look tidier than it is.
+   */
+  function supersededCard(items) {
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Still blank' }),
+      el('th', { text: 'Why it no longer needs chasing' }), el('th', { text: 'Age' }),
+    ])]));
+    const body = el('tbody');
+    for (const entry of items) {
+      body.appendChild(el('tr', {}, [
+        el('td', { text: entry.itemName }),
+        el('td', { class: 'mono', text: entry.po }),
+        el('td', { text: entry.missingHeader }),
+        el('td', { text: entry.supersededReason }),
+        el('td', { class: 'num', text: entry.ageDays + ' d' }),
+      ]));
+    }
+    table.appendChild(body);
+
+    const details = el('details', { class: 'fold' }, [
+      el('summary', { text: 'Show the ' + items.length + ' item(s)' }),
+      el('div', { class: 'table-scroll' }, [table]),
+    ]);
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('No longer needed'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'chip ok', text: items.length + ' resolved by the workflow' }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('p', {
+          class: 'help',
+          text: 'These columns are still blank, but the order has since been collected, delivered '
+            + 'or invoiced — so the answer would no longer change what happens next. Nothing was '
+            + 'deleted, and no email is drafted for them.',
+        }),
+        details,
+      ]),
+    ]);
   }
 
   function buildChaseEmails(party, items) {
@@ -2564,10 +3364,15 @@
   }
 
   /** Decorated orders for the current filters. */
+  /**
+   * Orders in scope, after the account and item filters and after the
+   * hide-finished switch. Counts and totals downstream follow the switch, which
+   * is the point of it — it changes what you are looking at, not what is true.
+   */
   function filteredOrders() {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
-    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
+    return applyClosedFilter(AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()));
   }
 
   async function applyStatus(key, statusId, note) {
@@ -2699,12 +3504,16 @@
       return;
     }
 
+    state.drillIndex = new Map();
     const orders = filteredOrders();
     const scope = filteredPortfolio();
     const counts = AMI.countByStatus(orders);
     const open = orders.filter((o) => o.isOpen);
     const unset = orders.filter((o) => !o.status.statusId);
-    const followUps = scope.reduce((n, p) => n + p.followUps.length, 0);
+    // Only chases that still matter — the ones the workflow overtook are shown
+    // on the Follow-ups page but never counted as outstanding work.
+    const followUps = scope.reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
+    const settledFollowUps = scope.reduce((n, p) => n + p.followUps.filter((f) => f.superseded).length, 0);
     const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
 
     host.appendChild(pageHeader(
@@ -2714,6 +3523,7 @@
         : 'All my accounts',
       'Where every order stands right now, read from the item trackers and the statuses your team has set.',
       [
+        closedToggle(() => renderDashboard()),
         el('button', {
           class: 'btn', text: 'Refresh',
           onclick: async () => { await ensurePortfolio(true); renderDashboard(); toast('Trackers re-read.', 'ok'); },
@@ -2775,13 +3585,13 @@
       { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
       { label: 'Delivered', value: counts.delivered, sub: 'arrived, not yet invoiced', tone: 'neutral' },
       {
-        label: 'Invoiced, not closed', value: counts.invoiced,
-        sub: 'billed, awaiting reconciliation',
-        tone: counts.invoiced ? 'warning' : 'neutral',
+        label: 'Invoiced and closed', value: counts.invoiced,
+        sub: 'finished', tone: 'good',
       },
       {
-        label: 'Follow-ups overdue', value: followUps,
-        sub: followUps ? 'across ' + scope.length + ' tracker(s)' : 'nothing outstanding',
+        label: 'Follow-ups outstanding', value: followUps,
+        sub: followUps ? 'across ' + scope.length + ' tracker(s)'
+          : (settledFollowUps ? settledFollowUps + ' overtaken by the workflow' : 'nothing outstanding'),
         tone: followUps ? (followUps >= 5 ? 'critical' : 'warning') : 'good',
       },
       {
@@ -2804,21 +3614,32 @@
     }
 
     /* Pipeline + per-account bars */
-    const segments = AMI.ORDER_STATUSES.map((s) => ({
-      label: s.label, value: counts[s.id],
-      color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
-    }));
+    const stageSegments = (list, prefix, keyPrefix) => {
+      const c = AMI.countByStatus(list);
+      return AMI.ORDER_STATUSES.map((s) => {
+        const key = keyPrefix + s.id;
+        drill(key, (prefix ? prefix + ' — ' : '') + s.label,
+          s.hint, list.filter((o) => o.status.statusId === s.id));
+        return {
+          label: (prefix ? prefix + ' — ' : '') + s.label,
+          value: c[s.id], step: s.step, key,
+          patternWord: AMI.patternWord(s),
+        };
+      });
+    };
 
     const grid = el('div', { class: 'dash-grid' });
 
-    grid.appendChild(el('div', { class: 'card span-2' }, [
-      el('h2', {}, [document.createTextNode('Order pipeline'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: orders.length + ' order(s) in scope' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.stackedBar(segments, { emptyText: 'No orders' }) }).firstChild,
+    grid.appendChild(chartCard({
+      title: 'Order pipeline',
+      note: orders.length + ' order(s) in scope',
+      span: 2,
+      build: () => [
+        el('div', { html: AMI.stackedBar(stageSegments(orders, '', 'stage:'), { emptyText: 'No orders' }) }).firstChild,
         el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
-      ]),
-    ]));
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each stage has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in pipeline order. Click a band to list the orders in it.' }),
+      ],
+    }));
 
     const accountRows = [];
     const byAccount = new Map();
@@ -2829,60 +3650,78 @@
     for (const [accountId, list] of byAccount) {
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       if (!account) continue;
-      const c = AMI.countByStatus(list);
       accountRows.push({
         label: account.name,
         sub: AMI.divisionName(state.workspace, account.divisionId),
-        segments: AMI.ORDER_STATUSES.map((s) => ({
-          label: account.name + ' — ' + s.label, value: c[s.id],
-          color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
-        })),
+        segments: stageSegments(list, account.name, 'acct:' + accountId + ':'),
         meta: list.filter((x) => x.isOpen).length + ' open',
       });
     }
     accountRows.sort((a, b) => a.label.localeCompare(b.label));
 
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: 'Orders by account' }),
-      el('div', { class: 'body' }, [
+    grid.appendChild(chartCard({
+      title: 'Orders by account',
+      build: () => [
         el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
         el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
-      ]),
-    ]));
+      ],
+    }));
 
     /* Throughput */
     const collected = orders
       .filter((o) => o.dates.actualCollection)
-      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0 }));
+      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0, order: o }));
     const series = AMI.monthlySeries(collected, 12, new Date());
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Cases collected per month'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'last 12 months' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.columnChart(series, { unit: 'cases', ariaLabel: 'Cases collected per month' }) }).firstChild,
-      ]),
-    ]));
+    for (const b of series) {
+      b.key = 'month:' + b.year + '-' + b.month;
+      drill(b.key, 'Collected in ' + b.label,
+        'Orders whose actual collection date falls in this month.',
+        collected.filter((e) => e.date.getFullYear() === b.year && e.date.getMonth() === b.month)
+          .map((e) => e.order));
+    }
+    grid.appendChild(chartCard({
+      title: 'Cases collected per month',
+      note: 'last 12 months',
+      build: (big) => [
+        el('div', {
+          html: AMI.columnChart(series, {
+            unit: 'cases', ariaLabel: 'Cases collected per month',
+            width: big ? 1000 : 640, height: big ? 340 : 168,
+          }),
+        }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Click a column to list the orders collected that month.' }),
+      ],
+    }));
 
     /* Attention list */
-    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays).slice(0, 8);
-    const staleRows = stale.map((o) => ({
-      label: 'PO ' + o.po,
-      sub: o.accountName + ' · ' + o.itemName,
-      value: o.ageDays,
-      color: o.ageDays >= 45 ? 'var(--critical)' : (o.ageDays >= 21 ? 'var(--warning)' : 'var(--stage-2)'),
-      meta: o.ageDays + ' d',
-      tip: 'PO ' + o.po + ' — last dated activity '
-        + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays);
+    const staleRow = (o) => {
+      const key = 'order:' + o.key;
+      drill(key, 'PO ' + o.po, o.accountName + ' · ' + o.itemName, [o]);
+      return {
+        label: 'PO ' + o.po,
+        sub: o.accountName + ' · ' + o.itemName,
+        value: o.ageDays,
+        // Age is not a pipeline stage, so it borrows the reserved status palette
+        // rather than the stage ramp — a stage weave here would mean nothing.
+        tone: o.ageDays >= AMI.HEALTH_THRESHOLDS.criticalDays ? 'critical'
+          : (o.ageDays >= AMI.HEALTH_THRESHOLDS.warningDays ? 'warning' : 'neutral'),
+        key,
+        meta: o.ageDays + ' d',
+        tip: 'PO ' + o.po + ' — last dated activity '
+          + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+      };
+    };
+    grid.appendChild(chartCard({
+      title: 'Longest without movement',
+      note: 'open orders, days since the last dated activity',
+      build: (big) => [
+        el('div', {
+          html: AMI.barList((big ? stale : stale.slice(0, 8)).map(staleRow), { emptyText: 'No open orders' }),
+        }).firstChild,
+        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' + (big || stale.length <= 8 ? '' : ' Showing the 8 oldest — expand for all ' + stale.length + '.') }),
+      ],
     }));
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Longest without movement'),
-        el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'open orders, days since the last dated activity' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.barList(staleRows, { emptyText: 'No open orders' }) }).firstChild,
-        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' }),
-      ]),
-    ]));
 
     /* Account health table */
     const healthTable = el('table', { class: 'data' });
@@ -2896,7 +3735,8 @@
     for (const accountId of accountsInScope) {
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       const list = orders.filter((o) => o.accountId === accountId);
-      const fu = scope.filter((p) => p.account.id === accountId).reduce((n, p) => n + p.followUps.length, 0);
+      const fu = scope.filter((p) => p.account.id === accountId)
+        .reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
       const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId), list, fu);
       healthBody.appendChild(el('tr', {}, [
         el('td', {}, [el('b', { text: account.name })]),
@@ -2906,14 +3746,21 @@
         el('td', { class: 'num', text: String(s.total) }),
         el('td', { class: 'num', text: String(s.followUps) }),
         el('td', { text: s.stalest ? 'PO ' + s.stalest.po + ' · ' + s.stalestDays + ' d' : '—' }),
-        el('td', {}, [el('button', {
-          class: 'btn small', text: 'Summary',
-          onclick: () => {
-            state.filters.accountId = accountId;
-            showTab('orderstatus');
-            setTimeout(() => generateSummary(), 0);
-          },
-        })]),
+        el('td', {}, [
+          el('button', {
+            class: 'btn small', text: 'Orders',
+            onclick: () => showDrill('Orders on ' + account.name,
+              (s.divisionName ? s.divisionName + ' division · ' : '') + s.total + ' order(s)', list),
+          }),
+          el('button', {
+            class: 'btn small', text: 'Summary',
+            onclick: () => {
+              state.filters.accountId = accountId;
+              showTab('orderstatus');
+              setTimeout(() => generateSummary(), 0);
+            },
+          }),
+        ]),
       ]));
     }
     healthTable.appendChild(healthBody);
@@ -2931,6 +3778,118 @@
     ]));
 
     host.appendChild(grid);
+    wireDrill(host);
+  }
+
+  /**
+   * One delegated handler per host covers every mark inside it, now and after
+   * any redraw. Wired once, because the host outlives the charts it holds.
+   */
+  function wireDrill(host) {
+    if (host.dataset.drillWired) return;
+    host.dataset.drillWired = '1';
+    host.addEventListener('click', onDrillClick);
+    host.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') onDrillClick(e);
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Chart cards, zoom and drill-down
+   * ------------------------------------------------------------------ */
+
+  /**
+   * A dashboard card whose chart can be redrawn larger. `build(big)` returns the
+   * nodes; it is called once for the card and again, with `big` set, for the
+   * enlarged copy, so the two never drift apart.
+   */
+  function chartCard(spec) {
+    const body = el('div', { class: 'body' }, spec.build(false));
+    return el('div', { class: 'card' + (spec.span === 2 ? ' span-2' : '') }, [
+      el('h2', {}, [
+        document.createTextNode(spec.title),
+        el('span', { class: 'spacer' }),
+        spec.note ? el('span', { class: 'context-note', text: spec.note }) : null,
+        el('button', {
+          class: 'btn small',
+          text: 'Expand',
+          'data-tip': 'Open this chart larger, with every row rather than the top few.',
+          onclick: () => openOverlay(spec.title, spec.note || '', (host) => {
+            for (const n of spec.build(true)) host.appendChild(n);
+            wireDrill(host);
+          }, { wide: true }),
+        }),
+      ].filter(Boolean)),
+      body,
+    ]);
+  }
+
+  /** Record what sits behind a mark, so clicking it can show the orders. */
+  function drill(key, title, sub, orders) {
+    if (!state.drillIndex) state.drillIndex = new Map();
+    state.drillIndex.set(key, { title, sub, orders });
+  }
+
+  function onDrillClick(e) {
+    const mark = e.target.closest && e.target.closest('[data-drill]');
+    if (!mark) return;
+    if (e.type === 'keydown') e.preventDefault();
+    const entry = state.drillIndex && state.drillIndex.get(mark.getAttribute('data-drill'));
+    if (!entry) return;
+    showDrill(entry.title, entry.sub, entry.orders);
+  }
+
+  /** The orders behind one mark, as a table you can act on. */
+  function showDrill(title, sub, orders) {
+    openOverlay(title, sub, (host) => {
+      if (!orders.length) {
+        host.appendChild(el('div', { class: 'empty', text: 'No orders here.' }));
+        return;
+      }
+      host.appendChild(el('p', {
+        class: 'drill-note',
+        text: orders.length + ' order(s). Every column is read from the tracker or from a status '
+          + 'someone set — nothing here is calculated for the chart.',
+      }));
+
+      const table = el('table', { class: 'data' });
+      table.appendChild(el('thead', {}, [el('tr', {}, [
+        el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
+        el('th', { text: 'Cases' }), el('th', { text: 'Stage' }), el('th', { text: 'Where it comes from' }),
+        el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
+      ])]));
+      const body = el('tbody');
+      const sorted = orders.slice().sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
+      for (const o of sorted) {
+        const st = AMI.statusById(o.status.statusId);
+        body.appendChild(el('tr', {}, [
+          el('td', {}, [el('b', { text: o.po })]),
+          el('td', { text: o.accountName }),
+          el('td', { text: o.itemName }),
+          el('td', { class: 'num', text: o.values.cases != null ? String(o.values.cases) : '—' }),
+          el('td', { html: AMI.statusPill(st, { short: true }) }),
+          el('td', {}, [el('span', {
+            class: 'chip ' + (SOURCE_CHIP[o.status.source] || 'manual'),
+            text: SOURCE_LONG[o.status.source] || o.status.source,
+            'data-tip': o.status.reason,
+          })]),
+          el('td', { text: o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : '—' }),
+          el('td', { class: 'num', text: o.ageDays == null ? '—' : String(o.ageDays) }),
+        ]));
+      }
+      table.appendChild(body);
+      host.appendChild(el('div', { class: 'table-scroll' }, [table]));
+
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', {
+          class: 'btn', text: 'Set statuses for these',
+          onclick: () => {
+            if (closeOverlay) closeOverlay();
+            showTab('orderstatus');
+          },
+        }),
+      ]));
+    }, { wide: true });
   }
 
   /* ------------------------------------------------------------------ *
@@ -2948,22 +3907,22 @@
       else unset.push(o);
     }
 
-    const makeColumn = (title, stageVar, list, statusId, hint) => {
+    const makeColumn = (title, stage, list, statusId, hint) => {
       const cards = el('div', { class: 'kan-cards' });
       if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
       for (const o of list) cards.appendChild(makeCard(o));
 
-      const col = el('div', { class: 'kan-col' }, [
-        el('div', {
-          class: 'kan-head',
-          style: '--stage:' + stageVar,
-          'data-tip': hint,
-        }, [
-          el('span', { class: 'kan-title', text: title }),
-          el('span', { class: 'kan-count', text: String(list.length) }),
-        ]),
-        cards,
+      // The heading carries the stage's weave, so the columns stay apart at a
+      // glance without depending on their shade.
+      const head = el('div', {
+        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.step) : ' kan-head-unset'),
+        'data-tip': hint + (stage ? ' Shown as ' + AMI.patternWord(stage) + '.' : ''),
+      }, [
+        el('span', { class: 'kan-title', text: title }),
+        el('span', { class: 'kan-count', text: String(list.length) }),
       ]);
+
+      const col = el('div', { class: 'kan-col' }, [head, cards]);
 
       if (statusId) {
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
@@ -2983,10 +3942,10 @@
     };
 
     for (const c of columns) {
-      board.appendChild(makeColumn(c.status.short, 'var(--stage-' + c.status.step + ')', c.orders, c.status.id, c.status.hint));
+      board.appendChild(makeColumn(c.status.short, c.status, c.orders, c.status.id, c.status.hint));
     }
     if (unset.length) {
-      board.appendChild(makeColumn('No status', 'var(--border-strong)', unset, '',
+      board.appendChild(makeColumn('No status', null, unset, '',
         'Nothing in the tracker indicates a stage, and nobody has set one.'));
     }
     return board;
@@ -2994,10 +3953,11 @@
 
   function makeCard(order) {
     const st = AMI.statusById(order.status.statusId);
+    // Only the stage tokens, not the fill — a card is mostly text and needs a
+    // plain ground. Its left rail carries the weave instead.
     const card = el('div', {
-      class: 'kan-card',
+      class: 'kan-card ' + (st ? 'stage-' + st.step : 'kan-card-unset'),
       draggable: 'true',
-      style: '--stage:' + (st ? 'var(--stage-' + st.step + ')' : 'var(--border-strong)'),
       'data-tip': order.status.reason,
       'data-po': order.po,
     }, [
@@ -3044,6 +4004,7 @@
       'Order status',
       'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
       [
+        closedToggle(() => renderOrderStatus()),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -3051,35 +4012,16 @@
 
     host.appendChild(filterBar(() => renderOrderStatus(), { withItem: true, withStatus: true, withSearch: true }));
 
-    const user = currentUser() || {};
-    const canEditRules = !!user.isAdmin || !state.workspace.users.length;
-    const autoClose = !!state.workspace.settings.autoCloseInvoiced;
-    const ruleBox = el('input', {
-      type: 'checkbox', checked: autoClose, disabled: !canEditRules,
-      onchange: async (e) => {
-        state.workspace.settings.autoCloseInvoiced = e.target.checked;
-        if (await persistWorkspace()) {
-          state.portfolio = null;
-          await ensurePortfolio(true);
-          renderOrderStatus();
-          toast(e.target.checked
-            ? 'Invoiced orders will now show as closed.'
-            : 'Invoiced orders will now stay open until closed.', 'ok');
-        }
-      },
-    });
     host.appendChild(el('div', { class: 'msg info' }, [
       el('span', { class: 'icon', text: 'i' }),
       el('div', {}, [
-        el('label', { class: 'check-inline' }, [
-          ruleBox,
-          document.createTextNode('Treat invoiced orders as closed'),
-        ]),
+        el('strong', { text: 'An invoiced order is a closed order.' }),
         el('span', {
           class: 'detail',
-          text: 'Applies only where the stage came from the tracker. Setting a stage by hand always '
-            + 'stands — choose "Invoiced" on an order and it stays invoiced. '
-            + (canEditRules ? 'This is a workspace-wide setting.' : 'Only administrators change this.'),
+          text: 'Invoicing is the end of the pipeline here, so the last stage reads '
+            + '“Invoiced and Closed”. A NAV invoice number on the tracker puts an order there '
+            + 'on its own. Use the “Hide invoiced and closed” switch on this page or on Account '
+            + 'Health to work with only what is still live.',
         }),
       ]),
     ]));
@@ -3206,7 +4148,7 @@
     }
     const scope = filteredPortfolio().filter((p) => p.account.id === account.id);
     const orders = AMI.decorate(scope.flatMap((p) => p.orders),
-      state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
+      state.statusDoc || AMI.emptyStatusDoc(), new Date());
     const user = currentUser() || {};
 
     const built = AMI.buildAccountSummary({

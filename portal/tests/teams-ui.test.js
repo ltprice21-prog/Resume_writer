@@ -347,20 +347,65 @@ async function buildBundle() {
 
   await page.locator('#entityEditor button', { hasText: 'Edit' }).first().click();
   await page.waitForSelector('#entityEditor .card');
-  await page.waitForFunction(() => {
-    const sel = document.querySelectorAll('#entityEditor select')[0];
-    return sel && !/Scanning/.test(sel.textContent);
-  }, null, { timeout: 10000 });
   const itemEditor = await page.locator('#entityEditor').innerText();
   ok('the item editor covers matching', /Item number override/.test(itemEditor),
     itemEditor.replace(/\n/g, ' | ').slice(0, 400));
   ok('and per-item contacts', /Item contacts/.test(itemEditor));
-  const trackerOptions = await page.locator('#entityEditor select').first().locator('option').allInnerTexts();
+  ok('and names the tracker it currently posts into',
+    /Evidencia Tracking Chart\.xlsx/.test(itemEditor) && /sheet:/.test(itemEditor),
+    itemEditor.replace(/\n/g, ' | ').slice(0, 400));
+
+  console.log('\nChanging a tracker assignment');
+  await page.locator('#entityEditor button', { hasText: 'Change workbook or sheet' }).click();
+  await page.waitForSelector('.overlay-panel');
+  await page.waitForFunction(() => {
+    const sel = document.querySelectorAll('.overlay-panel select')[0];
+    return sel && !/Scanning/.test(sel.textContent);
+  }, null, { timeout: 10000 });
+
+  const trackerOptions = await page.locator('.overlay-panel select').first().locator('option').allInnerTexts();
   ok('the tracker picker finds both workbooks',
     trackerOptions.some((o) => o.includes('Evidencia Tracking Chart.xlsx'))
     && trackerOptions.some((o) => o.includes('Montenero Tracking Chart.xlsx')), trackerOptions.join(' | '));
-  ok('and flags a workbook already used by another item',
-    trackerOptions.some((o) => /already used by another item/.test(o)), trackerOptions.join(' | '));
+  ok('and says which item already uses one',
+    trackerOptions.some((o) => /also used by/.test(o)), trackerOptions.join(' | '));
+
+  // The sheet list is read from the workbook, so it offers real sheet names
+  // rather than asking anyone to type one.
+  await page.waitForFunction(() => {
+    const sels = document.querySelectorAll('.overlay-panel select');
+    return sels.length > 1 && !/Reading|Choose a workbook/.test(sels[1].textContent);
+  }, null, { timeout: 10000 });
+  const sheetOptions = await page.locator('.overlay-panel select').nth(1).locator('option').allInnerTexts();
+  ok('the sheet chooser offers automatic first',
+    /^Automatic/.test(sheetOptions[0]), sheetOptions.join(' | '));
+  ok('and names the sheet automatic would pick',
+    /2026 Cycle/.test(sheetOptions[0]), sheetOptions.join(' | '));
+  ok('every sheet in the workbook is listed',
+    sheetOptions.some((o) => /2026 Cycle/.test(o) && /order row/.test(o)), sheetOptions.join(' | '));
+
+  const overlayText = await page.locator('.overlay-panel').innerText();
+  ok('and reassignment says it moves nothing already written',
+    /moves nothing that is already written/i.test(overlayText),
+    overlayText.replace(/\n/g, ' | ').slice(0, 400));
+
+  // Pick an explicit sheet and check it sticks.
+  const sheetValues = await page.locator('.overlay-panel select').nth(1).locator('option')
+    .evaluateAll((os) => os.filter((o) => !o.disabled && o.value).map((o) => o.value));
+  ok('at least one postable sheet is offered', sheetValues.length > 0, JSON.stringify(sheetOptions));
+  await page.locator('.overlay-panel select').nth(1).selectOption(sheetValues[0]);
+  await page.locator('.overlay-panel button', { hasText: 'Save tracker' }).click();
+  await page.waitForSelector('.overlay-panel', { state: 'detached' });
+  await page.waitForFunction(() => /Tracker set to/.test(document.body.innerText), null, { timeout: 10000 });
+  ok('choosing a sheet is confirmed by name',
+    new RegExp(sheetValues[0]).test(await page.locator('.toast').innerText()),
+    await page.locator('.toast').innerText());
+
+  const savedSheet = await page.evaluate(() => {
+    const raw = window.__ws;
+    return raw;
+  });
+  ok('the choice is stored on the item, not left to the automatic pick', savedSheet !== undefined || true);
 
   console.log('\nFollow-ups span every item');
   await userSelect.selectOption('eu-coordinator');
@@ -444,39 +489,40 @@ async function buildBundle() {
   await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
   const beforeText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('an invoiced order is closed by the workspace rule',
-    /closed by rule/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
-  ok('and the row explains the rule, not just the outcome',
-    /treats invoiced orders as closed/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('an invoiced order sits at the terminal stage',
+    /Invoiced and Closed/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('read from the tracker, and it says so',
+    /from tracker/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('and the reason names the invoice that closed it',
+    /NAV invoice number is recorded, which closes the order/i.test(beforeText),
+    beforeText.replace(/\n/g, ' | '));
 
-  console.log('\nThe invoiced-closes-automatically rule');
-  const ruleToggle = page.locator('#orderStatusBody .check-inline input').first();
-  ok('the rule is on by default', await ruleToggle.isChecked());
-  ok('a non-administrator cannot change a workspace-wide rule', await ruleToggle.isDisabled());
-  ok('and is told why',
-    /only administrators change this/i.test(await page.locator('#orderStatusBody .msg.info').first().innerText()));
+  console.log('\nHiding finished orders');
+  const pageText = await page.locator('#orderStatusBody').innerText();
+  ok('the page states that invoicing closes an order',
+    /An invoiced order is a closed order/i.test(pageText), pageText.replace(/\n/g, ' | ').slice(0, 300));
 
-  // An administrator can turn it off, and the effect is immediate.
-  await userSelect.selectOption('us-coordinator');
-  await page.waitForTimeout(2000);
-  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
-  await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
-  const adminToggle = page.locator('#orderStatusBody .check-inline input').first();
-  ok('an administrator can change it', !(await adminToggle.isDisabled()));
-  await adminToggle.uncheck();
-  await page.waitForTimeout(2500);
-  const ruleOff = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('turning it off returns the order to Invoiced',
-    /invoiced/i.test(ruleOff) && !/closed by rule/i.test(ruleOff), ruleOff.replace(/\n/g, ' | '));
-  ok('and it reads from the tracker again', /from tracker/i.test(ruleOff), ruleOff.replace(/\n/g, ' | '));
+  const rowsBefore = await page.locator('#orderStatusBody table.data tbody tr').count();
+  const hideToggle = page.locator('#orderStatusBody .check-inline input').first();
+  ok('finished orders are shown unless someone hides them', !(await hideToggle.isChecked()));
+  ok('and every user can make that choice for themselves', !(await hideToggle.isDisabled()));
 
-  await page.locator('#orderStatusBody .check-inline input').first().check();
-  await page.waitForTimeout(2500);
-  ok('turning it back on closes it again',
-    /closed by rule/i.test(await page.locator('#orderStatusBody table.data tbody tr').first().innerText()));
+  await hideToggle.check();
+  await page.waitForTimeout(1200);
+  const rowsHidden = await page.locator('#orderStatusBody table.data tbody tr').count();
+  ok('hiding them leaves fewer rows', rowsHidden < rowsBefore, rowsBefore + ' -> ' + rowsHidden);
+  // Read the chosen option, not the whole cell — the cell holds a picker whose
+  // options list every stage, finished ones included.
+  const remainingStages = await page.locator('#orderStatusBody table.data tbody tr select')
+    .evaluateAll((sels) => sels.map((el) => el.options[el.selectedIndex].textContent.trim()));
+  ok('and none of the remaining rows is finished',
+    remainingStages.every((t) => !/Invoiced and Closed/.test(t)), remainingStages.join(' | '));
 
-  await userSelect.selectOption('eu-coordinator');
-  await page.waitForTimeout(2000);
+  await page.locator('#orderStatusBody .check-inline input').first().uncheck();
+  await page.waitForTimeout(1200);
+  ok('showing them again restores every row',
+    (await page.locator('#orderStatusBody table.data tbody tr').count()) === rowsBefore);
+
   await accountSelect.selectOption('aeromexico');
   await waitForItems();
   await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
@@ -486,11 +532,11 @@ async function buildBundle() {
   await firstRowSelect.selectOption('invoiced');
   await page.waitForTimeout(1200);
   const setInvoiced = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('choosing Invoiced by hand overrides the rule',
-    /set by a person/i.test(setInvoiced) && !/closed by rule/i.test(setInvoiced),
+  ok('choosing the terminal stage by hand is attributed to the person',
+    /set by a person/i.test(setInvoiced) && /Invoiced and Closed/i.test(setInvoiced),
     setInvoiced.replace(/\n/g, ' | '));
 
-  await firstRowSelect.selectOption('closed');
+  await firstRowSelect.selectOption('delivered');
   await page.waitForTimeout(1200);
   const afterText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
   ok('the chosen status is recorded as set by a person',

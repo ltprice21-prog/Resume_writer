@@ -18,6 +18,54 @@
   const fmt = (n) => (n == null || !Number.isFinite(n) ? '—' : n.toLocaleString());
 
   /* ------------------------------------------------------------------ *
+   * Stage fills
+   * ------------------------------------------------------------------ *
+   *
+   * A stage is drawn with a hue AND a weave, because hue alone excludes a
+   * reader with colour vision deficiency — and on this pipeline the four stages
+   * sit on one hue by design, which makes them the hardest case. The weave order
+   * is solid, diagonal, horizontal, vertical, matching pipeline order.
+   */
+
+  const PATTERN_WORD = {
+    solid: 'solid', diagonal: 'diagonal stripes',
+    horizontal: 'horizontal stripes', vertical: 'vertical stripes',
+  };
+
+  /** The class that paints a stage. Everything showing a stage uses this. */
+  const stageClass = (step) => 'stage-fill stage-' + step;
+
+  /** Spoken form of a stage's fill, for tooltips and screen readers. */
+  const patternWord = (status) => PATTERN_WORD[(status && status.pattern) || 'solid'] || 'solid';
+
+  /**
+   * SVG cannot reach the CSS gradients, so stage fills are declared once per
+   * chart as `<pattern>` elements referencing the same custom properties.
+   */
+  function stagePatternDefs(steps) {
+    const list = steps || [1, 2, 3, 4];
+    const body = list.map((n) => {
+      const ink = 'var(--stage-ink-' + n + ')';
+      const bg = '<rect width="8" height="8" fill="var(--stage-' + n + ')"/>';
+      if (n === 1) return pat(n, bg);
+      if (n === 2) {
+        return pat(n, bg + '<path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="' + ink
+          + '" stroke-width="3"/>');
+      }
+      if (n === 3) return pat(n, bg + '<rect y="4" width="8" height="3" fill="' + ink + '"/>');
+      return pat(n, bg + '<rect x="4" width="3" height="8" fill="' + ink + '"/>');
+    }).join('');
+    return '<defs>' + body + '</defs>';
+
+    function pat(n, inner) {
+      return '<pattern id="stagepat-' + n + '" patternUnits="userSpaceOnUse" width="8" height="8">'
+        + inner + '</pattern>';
+    }
+  }
+
+  const stagePaint = (step) => 'url(#stagepat-' + step + ')';
+
+  /* ------------------------------------------------------------------ *
    * Stat tiles
    * ------------------------------------------------------------------ */
 
@@ -42,8 +90,11 @@
    * ------------------------------------------------------------------ */
 
   /**
-   * One stacked bar. Segments carry a 2px surface gap so adjacent stages stay
-   * separable without relying on hue contrast alone.
+   * One stacked bar. Segments carry a 2px surface gap and their own weave, so
+   * adjacent stages stay separable without relying on hue contrast.
+   *
+   * Each segment is `{ value, label, step, key }`; `key` makes the segment
+   * clickable for drill-down.
    */
   function stackedBar(segments, opts) {
     const o = opts || {};
@@ -53,24 +104,32 @@
     }
     const parts = segments.filter((s) => s.value > 0).map((s) => {
       const pct = (s.value / total) * 100;
+      const patterned = s.step && s.step !== 1;
       const label = pct >= (o.labelThreshold || 11)
-        ? '<span class="bar-inline"' + (s.ink ? ' style="--ink:' + s.ink + '"' : '') + '>'
-          + esc(s.value) + '</span>'
+        ? '<span class="bar-inline' + (patterned ? ' on-pattern' : '') + '">' + esc(s.value) + '</span>'
         : '';
-      return '<span class="bar-seg" style="flex:' + s.value + ';background:' + s.color + ';"'
-        + ' data-tip="' + esc(s.label + ': ' + fmt(s.value) + ' of ' + fmt(total)
-          + ' (' + Math.round(pct) + '%)') + '">' + label + '</span>';
+      const tip = s.label + ': ' + fmt(s.value) + ' of ' + fmt(total) + ' (' + Math.round(pct) + '%)'
+        + (s.patternWord ? ' · ' + s.patternWord : '');
+      return '<span class="bar-seg ' + esc(stageClass(s.step || 1)) + '"'
+        + ' style="flex:' + s.value + ';"'
+        + (s.key ? ' data-drill="' + esc(s.key) + '" tabindex="0" role="button"' : '')
+        + ' data-tip="' + esc(tip) + '">' + label + '</span>';
     }).join('');
     return '<div class="bar-track">' + parts + '</div>';
   }
 
-  /** Shared key for anything drawn with the status ramp. */
+  /**
+   * Shared key for anything drawn with the status ramp. Names the weave as well
+   * as showing it, so the key still works when read aloud or printed in grey.
+   */
   function statusLegend(statuses, counts) {
     return '<ul class="legend">' + statuses.map((s) => {
       const n = counts ? counts[s.id] : null;
-      return '<li data-tip="' + esc(s.hint) + '">'
-        + '<span class="swatch" style="background:var(--stage-' + s.step + ');"></span>'
+      const word = patternWord(s);
+      return '<li data-tip="' + esc(s.hint + ' Shown as ' + word + '.') + '">'
+        + '<span class="swatch ' + esc(stageClass(s.step)) + '" aria-hidden="true"></span>'
         + '<span class="legend-label">' + esc(s.short) + '</span>'
+        + '<span class="legend-pattern">' + esc(word) + '</span>'
         + (n != null ? '<span class="legend-value">' + fmt(n) + '</span>' : '')
         + '</li>';
     }).join('') + '</ul>';
@@ -94,10 +153,16 @@
     return '<div class="bar-list">' + rows.map((r) => {
       const total = r.segments ? r.segments.reduce((a, s) => a + s.value, 0) : (r.value || 0);
       const scale = max ? (total / max) * 100 : 0;
+      // A row that measures something other than pipeline position (an age, a
+      // count) takes the reserved status palette, never a stage weave — a weave
+      // there would claim a stage the row does not have.
+      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.step || 3);
       const inner = r.segments
         ? stackedBar(r.segments, { labelThreshold: 14 })
-        : '<div class="bar-track"><span class="bar-seg" style="flex:1;background:'
-          + (r.color || 'var(--stage-3)') + ';" data-tip="' + esc(r.tip || (r.label + ': ' + fmt(total))) + '"></span></div>';
+        : '<div class="bar-track"><span class="bar-seg ' + esc(paint) + '"'
+          + ' style="flex:1;"'
+          + (r.key ? ' data-drill="' + esc(r.key) + '" tabindex="0" role="button"' : '')
+          + ' data-tip="' + esc(r.tip || (r.label + ': ' + fmt(total))) + '"></span></div>';
       return '<div class="bar-row"' + (r.onclickKey ? ' data-row-key="' + esc(r.onclickKey) + '"' : '') + '>'
         + '<div class="bar-label">' + esc(r.label)
         + (r.sub ? '<span class="bar-sub">' + esc(r.sub) + '</span>' : '') + '</div>'
@@ -148,6 +213,7 @@
       const r = Math.min(4, barW / 2);
       return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1)
         + '" height="' + Math.max(h, p.value ? 2 : 0).toFixed(1) + '" rx="' + r + '" class="col"'
+        + (p.key && p.value ? ' data-drill="' + esc(p.key) + '" tabindex="0" role="button"' : '')
         + ' data-tip="' + esc(p.label + ': ' + fmt(p.value) + (o.unit ? ' ' + o.unit : '')) + '"/>'
         + (showLabel && p.value
           ? '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (y - 5).toFixed(1)
@@ -184,8 +250,9 @@
     if (!status || !status.id) {
       return '<span class="pill pill-unset"' + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>Not set</span>';
     }
-    return '<span class="pill pill-stage" style="--pill:var(--stage-' + status.step + ');"'
-      + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>' + esc(o.short ? status.short : status.label) + '</span>';
+    const tip = [o.tip, 'Shown as ' + patternWord(status) + '.'].filter(Boolean).join(' ');
+    return '<span class="pill pill-stage ' + esc(stageClass(status.step)) + '"'
+      + ' data-tip="' + esc(tip) + '">' + esc(o.short ? status.short : status.label) + '</span>';
   }
 
   /* ------------------------------------------------------------------ *
@@ -218,6 +285,7 @@
   Object.assign(AMI, {
     statTiles, stackedBar, statusLegend, barList, columnChart,
     healthPill, statusPill, monthlySeries, MONTH_SHORT,
+    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

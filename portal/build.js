@@ -32,6 +32,7 @@ const TARGETS = [
       STYLES: 'styles.css',
       ENGINE: 'engine.js',
       TEMPLATES: 'templates.js',
+      AIRPORTS: 'airports.js',
       WORKSPACE: 'workspace.js',
       PERSIST: 'persist.js',
       STATUS: 'status.js',

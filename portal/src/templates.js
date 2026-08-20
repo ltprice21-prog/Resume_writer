@@ -601,6 +601,77 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Internal notes
+   * ------------------------------------------------------------------ */
+
+  /* A note to whoever files the template — "Use: Aeromexico" — not part of the
+   * message. It sits at the end, and everything after it is the same kind of
+   * annotation. */
+  const USE_NOTE = /(?:^|\n)\s*(?:<[^>]*>\s*)*use\s*[:\-–]/i;
+
+  /**
+   * Strip the trailing internal note from an imported template.
+   *
+   * Only the imported copy is changed; the file on disk is never written to, so
+   * the original .msg or .docx keeps its note. What was removed is returned, so
+   * the interface can show it and put it back if the guess was wrong.
+   */
+  function stripInternalNote(html) {
+    const text = String(html || '');
+
+    // Work on the text with tags flattened, so a note wrapped in <p> or <span>
+    // is found at the same place as a bare one.
+    const plain = text.replace(/<[^>]*>/g, '\n');
+    const at = plain.search(USE_NOTE);
+    if (at < 0) return { html: text, removed: '', found: false };
+
+    // Map the position in the flattened text back to the source by counting the
+    // visible characters, since flattening only ever replaces tags with "\n".
+    let seen = 0;
+    let cut = -1;
+    let inTag = false;
+    let tagStart = -1;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '<') { inTag = true; tagStart = i; continue; }
+      if (inTag) {
+        if (ch === '>') { inTag = false; seen++; if (seen > at && cut < 0) cut = tagStart; }
+        continue;
+      }
+      if (seen >= at && cut < 0) cut = i;
+      seen++;
+    }
+    if (cut < 0) return { html: text, removed: '', found: false };
+
+    const removed = text.slice(cut).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!removed) return { html: text, removed: '', found: false };
+
+    // Close anything the cut left open, so the kept part is still valid markup.
+    const kept = text.slice(0, cut);
+    return { html: balanceTags(kept).trim(), removed, found: true };
+  }
+
+  const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link', 'col', 'area', 'base']);
+
+  /** Close any tags left open by a cut, innermost first. */
+  function balanceTags(html) {
+    const open = [];
+    const re = /<(\/?)([a-zA-Z][\w-]*)[^>]*?(\/?)>/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const name = m[2].toLowerCase();
+      if (VOID_TAGS.has(name) || m[3] === '/') continue;
+      if (m[1]) {
+        const at = open.lastIndexOf(name);
+        if (at >= 0) open.splice(at, 1);
+      } else {
+        open.push(name);
+      }
+    }
+    return html + open.reverse().map((t) => '</' + t + '>').join('');
+  }
+
+  /* ------------------------------------------------------------------ *
    * Placeholder discovery
    * ------------------------------------------------------------------ */
 
@@ -641,6 +712,7 @@
     readCfb, isCfb, decompressRtf, deEncapsulateHtml, rtfToText,
     textToHtml, innerBody, decodeRfc2047,
     templatePlaceholders, suggestPlaceholders, applyPlaceholderSuggestions,
+    stripInternalNote, balanceTags,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

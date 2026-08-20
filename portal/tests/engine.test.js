@@ -265,6 +265,35 @@ function findFixture(pattern) {
   const poeItems = openItems.filter((i) => i.ruleId === 'proof-of-export');
   ok('"to fill" counts as outstanding', poeItems.length > 0, poeItems.length + ' proof-of-export items');
 
+  console.log('\nFollow-ups the workflow has overtaken');
+  const overtaken = openItems.filter((i) => i.superseded);
+  const stillLive = openItems.filter((i) => !i.superseded);
+  ok('this tracker has both kinds', overtaken.length > 0 && stillLive.length > 0,
+    stillLive.length + ' live, ' + overtaken.length + ' overtaken');
+  ok('live chases come first', openItems.slice(0, stillLive.length).every((i) => !i.superseded));
+  ok('every overtaken item names the column that overtook it',
+    overtaken.every((i) => i.superseded.header && i.supersededReason));
+  ok('and says the order moved on without it',
+    overtaken.every((i) => /moved on without it/.test(i.supersededReason)));
+  ok('an invoice number is quoted as a number, never as a date in 1926',
+    overtaken.filter((i) => /NAV INV/i.test(i.superseded.header)).every((i) => i.superseded.date === null),
+    overtaken.map((i) => i.superseded.header + '=' + i.superseded.date).join(', '));
+  ok('an abbreviation keeps its capitals mid-sentence',
+    overtaken.some((i) => /but NAV INV/.test(i.supersededReason)),
+    overtaken.map((i) => i.supersededReason).slice(0, 2).join(' | '));
+
+  // Chasing a collection date is pointless once the goods have been delivered,
+  // but chasing a lot number is not — the record still needs it.
+  const collectionRule = AMI.FOLLOW_UP_RULES.find((r) => r.id === 'collection');
+  const lotRule = AMI.FOLLOW_UP_RULES.find((r) => r.id === 'lot-number');
+  ok('a delivery supersedes the collection chase',
+    collectionRule.supersededBy.some((re) => re.test('Delivery date to CDG')));
+  ok('but not the lot-number chase',
+    !lotRule.supersededBy.some((re) => re.test('Delivery date to CDG')));
+  ok('which only an invoice closes out', lotRule.supersededBy.some((re) => re.test('NAV INV #')));
+  ok('every rule declares what would overtake it',
+    AMI.FOLLOW_UP_RULES.every((r) => Array.isArray(r.supersededBy) && r.supersededBy.length));
+
   /* ---------------- Email ---------------- */
   console.log('\nEmail generation');
   const tableRows = [

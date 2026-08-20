@@ -50,16 +50,35 @@ function memoryStore(seed) {
 
 (async () => {
   console.log('\nPipeline definition');
-  check('five stages, invoiced before closed', AMI.ORDER_STATUSES.map((s) => s.id),
-    ['placed', 'transit', 'delivered', 'invoiced', 'closed']);
-  check('steps run 1..5', AMI.ORDER_STATUSES.map((s) => s.step), [1, 2, 3, 4, 5]);
-  check('everything short of closed is open', AMI.ORDER_STATUSES.filter((s) => s.open).map((s) => s.id),
+  check('four stages, ending at invoiced and closed', AMI.ORDER_STATUSES.map((s) => s.id),
     ['placed', 'transit', 'delivered', 'invoiced']);
-  ok('closed is the only terminal stage', !AMI.isOpenStatus('closed'));
-  ok('an invoiced order still counts as open until it is closed', AMI.isOpenStatus('invoiced'));
+  check('steps run 1..4', AMI.ORDER_STATUSES.map((s) => s.step), [1, 2, 3, 4]);
+  check('everything short of invoicing is open', AMI.ORDER_STATUSES.filter((s) => s.open).map((s) => s.id),
+    ['placed', 'transit', 'delivered']);
+  ok('invoicing ends the order', !AMI.isOpenStatus('invoiced'));
+  check('and says so in its label', AMI.statusById('invoiced').label, 'Invoiced and Closed');
   ok('an unknown status is treated as open rather than dropped', AMI.isOpenStatus('nonsense'));
   ok('every stage explains itself', AMI.ORDER_STATUSES.every((s) => s.hint && s.label && s.short));
-  ok('closed says it cannot be derived', /not derivable/i.test(AMI.statusById('closed').hint));
+
+  console.log('\nStages are separable without colour');
+  check('each stage carries its own weave', AMI.ORDER_STATUSES.map((s) => s.pattern),
+    ['solid', 'diagonal', 'horizontal', 'vertical']);
+  ok('no two stages share a weave',
+    new Set(AMI.ORDER_STATUSES.map((s) => s.pattern)).size === AMI.ORDER_STATUSES.length);
+
+  console.log('\nStatuses recorded before the terminal stages merged');
+  check('"closed" now resolves to the merged stage', AMI.canonicalStatusId('closed'), 'invoiced');
+  check('and finds the same stage object', AMI.statusById('closed').id, 'invoiced');
+  ok('an ordinary id is left alone', AMI.canonicalStatusId('transit') === 'transit');
+  const legacyDoc = AMI.emptyStatusDoc();
+  legacyDoc.entries['a/b/c'] = { status: 'closed', updated: '2026-05-01T00:00:00.000Z', updatedBy: 'Bo Price' };
+  const legacy = AMI.effectiveStatus({ key: 'a/b/c', derived: null }, legacyDoc);
+  check('an order stored as closed reads as invoiced and closed', legacy.statusId, 'invoiced');
+  check('and is still attributed to the person', legacy.source, 'set');
+  ok('the reason says the record predates the merge',
+    /before invoiced and closed became one stage/.test(legacy.reason), legacy.reason);
+  const written = AMI.setStatus(AMI.emptyStatusDoc(), 'k', 'closed', 'Bo');
+  check('writing "closed" stores the merged id', written.entries.k.status, 'invoiced');
 
   console.log('\nReading orders from a real tracker');
   const wb = await AMI.Workbook.load(new Uint8Array(fs.readFileSync(fixture(/Tracking_Chart.*\.xlsx$/i))));
@@ -121,37 +140,30 @@ function memoryStore(seed) {
   try { AMI.setStatus(doc, 'a/b/c', 'shipped-ish', 'X'); } catch (e) { threw = e; }
   ok('an unknown status is refused', threw && /Unknown status/.test(threw.message), String(threw));
 
-  console.log('\nThe rule that closes invoiced orders');
+  console.log('\nInvoicing closes the order');
   const ruleDoc = AMI.emptyStatusDoc();
   const invoicedOrder = orders[0];
-  check('without the rule, the tracker says invoiced',
-    AMI.effectiveStatus(invoicedOrder, ruleDoc, {}).statusId, 'invoiced');
-  const ruled = AMI.effectiveStatus(invoicedOrder, ruleDoc, { autoCloseInvoiced: true });
-  check('with the rule, it reads as closed', ruled.statusId, 'closed');
-  check('and is marked as neither set nor plainly derived', ruled.source, 'auto');
-  ok('the reason names the rule and the evidence',
-    /NAV invoice number/.test(ruled.reason) && /treats invoiced orders as closed/.test(ruled.reason),
-    ruled.reason);
+  const ruled = AMI.effectiveStatus(invoicedOrder, ruleDoc);
+  check('a NAV invoice number puts the order at the terminal stage', ruled.statusId, 'invoiced');
+  check('read from the tracker, not invented', ruled.source, 'derived');
+  ok('and the reason says the invoice closes it',
+    /NAV invoice number/.test(ruled.reason) && /closes the order/.test(ruled.reason), ruled.reason);
 
-  const earlier = AMI.effectiveStatus(orders[orders.length - 1], ruleDoc, { autoCloseInvoiced: true });
-  check('an order short of invoiced is untouched by the rule', earlier.statusId, 'placed');
+  const earlier = AMI.effectiveStatus(orders[orders.length - 1], ruleDoc);
+  check('an order short of invoicing is unaffected', earlier.statusId, 'placed');
   check('and keeps its ordinary source', earlier.source, 'derived');
 
-  const heldDoc = AMI.emptyStatusDoc();
-  AMI.setStatus(heldDoc, invoicedOrder.key, 'invoiced', 'Bo Price');
-  const held = AMI.effectiveStatus(invoicedOrder, heldDoc, { autoCloseInvoiced: true });
-  check('choosing Invoiced by hand overrides the rule', held.statusId, 'invoiced');
-  check('and stays attributed to the person', held.source, 'set');
-
   const ruleDay = new Date(2026, 7, 12);
-  const ruledCounts = AMI.countByStatus(AMI.decorate(orders, ruleDoc, ruleDay, { autoCloseInvoiced: true }));
-  const plainCounts = AMI.countByStatus(AMI.decorate(orders, ruleDoc, ruleDay, {}));
-  ok('the rule moves the whole invoiced column into closed',
-    ruledCounts.invoiced === 0 && ruledCounts.closed === plainCounts.invoiced,
-    JSON.stringify({ ruledCounts, plainCounts }));
-  ok('and takes them out of the open count',
-    AMI.decorate(orders, ruleDoc, ruleDay, { autoCloseInvoiced: true }).filter((o) => o.isOpen).length
-      < AMI.decorate(orders, ruleDoc, ruleDay, {}).filter((o) => o.isOpen).length);
+  const ruledOrders = AMI.decorate(orders, ruleDoc, ruleDay);
+  const ruledCounts = AMI.countByStatus(ruledOrders);
+  ok('invoiced orders exist on this tracker', ruledCounts.invoiced > 0, JSON.stringify(ruledCounts));
+  ok('and none of them counts as open',
+    ruledOrders.filter((o) => o.status.statusId === 'invoiced').every((o) => o.isOpen === false));
+
+  const split = AMI.partitionClosed(ruledOrders);
+  check('splitting finished from live covers every order',
+    split.closed.length + split.open.length, ruledOrders.length);
+  check('the finished set is exactly the invoiced one', split.closed.length, ruledCounts.invoiced);
 
   console.log('\nImplausible dates in the tracker');
   const badRow = orders.find((o) => o.dateIssues.length);
@@ -179,15 +191,16 @@ function memoryStore(seed) {
     decorated.filter((o) => o.ageDays < 0).map((o) => o.po + ':' + o.ageDays).join(', '));
   const counts = AMI.countByStatus(decorated);
   check('counts cover every stage plus unset',
-    Object.keys(counts).sort(), ['closed', 'delivered', 'invoiced', 'placed', 'transit', 'unset'].sort());
+    Object.keys(counts).sort(), ['delivered', 'invoiced', 'placed', 'transit', 'unset'].sort());
   check('the counts add up', Object.values(counts).reduce((a, b) => a + b, 0), 12);
 
   const invoicedDoc = AMI.emptyStatusDoc();
   AMI.setStatus(invoicedDoc, orders[0].key, 'invoiced', 'Bo');
   AMI.setStatus(invoicedDoc, orders[1].key, 'closed', 'Bo');
   const openness = AMI.decorate([orders[0], orders[1]], invoicedDoc, today);
-  ok('an invoiced order is counted among the open ones', openness[0].isOpen === true);
-  ok('a closed order is not', openness[1].isOpen === false);
+  ok('an invoiced order is finished', openness[0].isOpen === false);
+  ok('and one stored as closed lands in the same place',
+    openness[1].isOpen === false && openness[1].status.statusId === 'invoiced');
 
   const account = { id: 'aeromexico', name: 'Aeromexico', divisionId: 'europe' };
   const healthy = AMI.summariseAccount(account, 'Europe', AMI.decorate(
@@ -223,10 +236,10 @@ function memoryStore(seed) {
   const mine = await AMI.loadStatuses(store);
   const theirs = await AMI.loadStatuses(store);
   AMI.setStatus(mine, 'a/b/2', 'delivered', 'Me');
-  AMI.setStatus(theirs, 'a/b/3', 'closed', 'Them');
+  AMI.setStatus(theirs, 'a/b/3', 'invoiced', 'Them');
   await AMI.saveStatuses(store, theirs, { by: 'Them' });
   const afterBoth = await AMI.saveStatuses(store, mine, { by: 'Me' });
-  check('a colleague\'s other edits are not lost', afterBoth.entries['a/b/3'].status, 'closed');
+  check('a colleague\'s other edits are not lost', afterBoth.entries['a/b/3'].status, 'invoiced');
   check('and neither are mine', afterBoth.entries['a/b/2'].status, 'delivered');
   check('the untouched entry stays', afterBoth.entries['a/b/1'].status, 'transit');
 
@@ -271,29 +284,53 @@ function memoryStore(seed) {
   ok('tips are attached for the hover layer', /data-tip="across 2 trackers"/.test(tiles));
 
   const bar = AMI.stackedBar([
-    { label: 'In transit', value: 6, color: 'var(--stage-2)' },
-    { label: 'Delivered', value: 2, color: 'var(--stage-3)' },
+    { label: 'In transit', value: 6, step: 2 },
+    { label: 'Delivered', value: 2, step: 3 },
   ]);
   ok('segments are proportional', /flex:6/.test(bar) && /flex:2/.test(bar));
   ok('each segment describes itself on hover', /data-tip="In transit: 6 of 8 \(75%\)"/.test(bar), bar);
   ok('the dominant segment is labelled in place', /bar-inline/.test(bar));
-  const inked = AMI.stackedBar([{ label: 'Invoiced', value: 9, color: 'var(--stage-5)', ink: 'var(--stage-fg-5)' }]);
-  ok('an in-bar number takes the ink matched to its fill',
-    /--ink:var\(--stage-fg-5\)/.test(inked), inked);
+  ok('each segment is painted by its stage class, not an inline colour',
+    /stage-fill stage-2/.test(bar) && /stage-fill stage-3/.test(bar) && !/background:/.test(bar), bar);
+  const patterned = AMI.stackedBar([{ label: 'Invoiced and Closed', value: 9, step: 4 }]);
+  ok('a number sitting on a weave gets its own ground',
+    /bar-inline on-pattern/.test(patterned), patterned);
+  const plain = AMI.stackedBar([{ label: 'Awaiting shipment', value: 9, step: 1 }]);
+  ok('but a number on the solid stage does not need one',
+    /bar-inline"/.test(plain) && !/on-pattern/.test(plain), plain);
+  const drillable = AMI.stackedBar([{ label: 'In transit', value: 3, step: 2, key: 'stage:transit' }]);
+  ok('a segment given a key can be drilled into',
+    /data-drill="stage:transit"/.test(drillable) && /role="button"/.test(drillable), drillable);
+  ok('and one without a key is inert', !/data-drill/.test(bar));
   ok('an empty bar says so instead of rendering nothing',
-    /Nothing to show/.test(AMI.stackedBar([{ label: 'x', value: 0, color: 'red' }])));
+    /Nothing to show/.test(AMI.stackedBar([{ label: 'x', value: 0, step: 1 }])));
 
   const legend = AMI.statusLegend(AMI.ORDER_STATUSES, counts);
   ok('a legend is always present for the ramp',
     AMI.ORDER_STATUSES.every((s) => legend.includes(s.short)));
-  ok('legend swatches use the stage ramp variables', /var\(--stage-1\)/.test(legend));
+  ok('legend swatches are painted by their stage class', /swatch stage-fill stage-1/.test(legend), legend);
+  ok('and the weave is named as well as shown',
+    /diagonal stripes/.test(legend) && /horizontal stripes/.test(legend) && /vertical stripes/.test(legend), legend);
+  ok('so the key still works read aloud or printed in grey',
+    AMI.ORDER_STATUSES.every((st) => legend.includes(AMI.patternWord(st))));
 
   const list = AMI.barList([
-    { label: 'Aeromexico', sub: 'Europe', segments: [{ label: 'a', value: 3, color: 'var(--stage-1)' }], meta: '3 open' },
+    { label: 'Aeromexico', sub: 'Europe', segments: [{ label: 'a', value: 3, step: 1 }], meta: '3 open' },
   ]);
   ok('rows keep a text label so colour never carries identity', /Aeromexico/.test(list));
   ok('and a sub-label for the division', /Europe/.test(list));
   ok('empty lists explain themselves', /Nothing to show/.test(AMI.barList([])));
+
+  const aged = AMI.barList([{ label: 'PO 1', value: 60, tone: 'critical', key: 'order:1' }]);
+  ok('a row measuring an age takes the status palette, not a stage weave',
+    /bar-tone-critical/.test(aged) && !/stage-fill/.test(aged), aged);
+  ok('and can still be drilled into', /data-drill="order:1"/.test(aged));
+
+  const svgDefs = AMI.stagePatternDefs();
+  ok('svg gets one pattern per stage',
+    AMI.ORDER_STATUSES.every((st) => svgDefs.includes('stagepat-' + st.step)), svgDefs.slice(0, 120));
+  ok('and they reference the same tokens as the css', /var\(--stage-ink-2\)/.test(svgDefs));
+  check('a stage paints from its own pattern', AMI.stagePaint(3), 'url(#stagepat-3)');
 
   const series = AMI.monthlySeries([
     { date: new Date(2026, 6, 3), value: 5 },
@@ -306,7 +343,9 @@ function memoryStore(seed) {
   check('values land in their month', series[10].value, 12);
   check('out-of-range dates are dropped, not clamped', series.reduce((a, b) => a + b.value, 0), 14);
 
+  series[10].key = 'month:2026-6';
   const chart = AMI.columnChart(series, { unit: 'cases' });
+  ok('a column given a key can be drilled into', /data-drill="month:2026-6"/.test(chart), chart.slice(0, 300));
   ok('the chart is an svg with an accessible name', /<svg[^>]*role="img"/.test(chart) && /aria-label=/.test(chart));
   ok('columns carry hover text', /data-tip="Jul 2026: 12 cases"/.test(chart), chart.slice(0, 200));
   ok('labels are selective, not one per column',

@@ -16,40 +16,48 @@
   const STATUS_PATH = 'order-status.json';
 
   /**
-   * The pipeline, in order. `step` drives the ordinal colour ramp and the
-   * kanban column order; `open` marks the stages that still need work.
+   * The pipeline, in order. `step` drives the ordinal ramp and the kanban column
+   * order; `open` marks the stages that still need work; `pattern` is the fill
+   * that carries the stage without relying on hue.
+   *
+   * Invoicing ends the order. This workspace draws no line between billed and
+   * reconciled, so the two are one terminal stage rather than a rule that moves
+   * orders from one to the other.
    */
   const ORDER_STATUSES = [
     {
-      id: 'placed', step: 1, open: true,
+      id: 'placed', step: 1, open: true, pattern: 'solid',
       label: 'Order placed – awaiting shipment', short: 'Awaiting shipment',
       hint: 'Sent to the winery; nothing has been collected yet.',
     },
     {
-      id: 'transit', step: 2, open: true,
+      id: 'transit', step: 2, open: true, pattern: 'diagonal',
       label: 'In transit', short: 'In transit',
       hint: 'Collected from the cellars, not yet delivered.',
     },
     {
-      id: 'delivered', step: 3, open: true,
+      id: 'delivered', step: 3, open: true, pattern: 'horizontal',
       label: 'Delivered', short: 'Delivered',
-      hint: 'Arrived at the delivery point; paperwork may still be open.',
+      hint: 'Arrived at the delivery point, not yet invoiced.',
     },
     {
-      id: 'invoiced', step: 4, open: true,
-      label: 'Invoiced', short: 'Invoiced',
-      hint: 'Billed out. Still open until it is reconciled and closed.',
-    },
-    {
-      id: 'closed', step: 5, open: false,
-      label: 'Closed', short: 'Closed',
-      hint: 'Received, invoiced and reconciled — the end of the line. '
-        + 'Not derivable from the tracker, so it only ever comes from a person.',
+      id: 'invoiced', step: 4, open: false, pattern: 'vertical', terminal: true,
+      label: 'Invoiced and Closed', short: 'Invoiced and Closed',
+      hint: 'Billed out, and closed by that fact — an invoiced order is finished here.',
     },
   ];
 
-  const statusById = (id) => ORDER_STATUSES.find((s) => s.id === id) || null;
+  /* Statuses stored before the two terminal stages became one. */
+  const LEGACY_STATUS_IDS = { closed: 'invoiced' };
+
+  const canonicalStatusId = (id) => {
+    const s = String(id == null ? '' : id);
+    return Object.prototype.hasOwnProperty.call(LEGACY_STATUS_IDS, s) ? LEGACY_STATUS_IDS[s] : s;
+  };
+
+  const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
+  const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
 
   /* ------------------------------------------------------------------ *
    * Store
@@ -109,7 +117,7 @@
   function setStatus(doc, key, statusId, by, note) {
     if (!statusById(statusId)) throw new Error('Unknown status "' + statusId + '".');
     doc.entries[key] = {
-      status: statusId,
+      status: canonicalStatusId(statusId),
       updated: new Date().toISOString(),
       updatedBy: by || '',
       note: note || '',
@@ -128,7 +136,7 @@
 
   /* Tracker columns the status model reads, most advanced stage first. */
   const STAGE_COLUMNS = [
-    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded' },
+    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded, which closes the order' },
     { statusId: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, reason: 'a delivery date is recorded' },
     { statusId: 'transit', re: /^Actual Collection Date/i, reason: 'a collection date is recorded' },
     { statusId: 'placed', re: /^PO date sent to winery/i, reason: 'the PO has been sent to the winery' },
@@ -244,27 +252,22 @@
    * A person's selection always beats the tracker's implication, and the source
    * is reported so the interface can show which of the two it is.
    */
-  function effectiveStatus(order, statusDoc, options) {
-    const opts = options || {};
+  function effectiveStatus(order, statusDoc) {
     const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
     if (entry && statusById(entry.status)) {
+      // A status recorded as "closed" before the terminal stages merged reads as
+      // the merged stage now, so old records keep meaning what they meant.
+      const canonical = canonicalStatusId(entry.status);
+      const renamed = canonical !== entry.status;
       return {
-        statusId: entry.status, source: 'set',
+        statusId: canonical, source: 'set',
         updated: entry.updated || '', updatedBy: entry.updatedBy || '', note: entry.note || '',
-        reason: 'set by ' + (entry.updatedBy || 'someone') + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : ''),
+        reason: 'set by ' + (entry.updatedBy || 'someone')
+          + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '')
+          + (renamed ? ' (recorded as “closed”, before invoiced and closed became one stage)' : ''),
       };
     }
     if (order.derived) {
-      // A workspace rule may carry an invoiced order straight to closed. It only
-      // ever applies to a stage the tracker implied — an explicit choice stands.
-      if (opts.autoCloseInvoiced && order.derived.statusId === 'invoiced') {
-        return {
-          statusId: 'closed', source: 'auto',
-          updated: '', updatedBy: '', note: '',
-          reason: 'From the tracker: ' + order.derived.reason
-            + '. Closed automatically, because this workspace treats invoiced orders as closed.',
-        };
-      }
       return {
         statusId: order.derived.statusId, source: 'derived',
         updated: '', updatedBy: '', note: '',
@@ -291,10 +294,10 @@
   }
 
   /** Attach the effective status and aging to each order. */
-  function decorate(orders, statusDoc, today, options) {
+  function decorate(orders, statusDoc, today) {
     const now = today || new Date();
     return orders.map((o) => {
-      const status = effectiveStatus(o, statusDoc, options);
+      const status = effectiveStatus(o, statusDoc);
       return Object.assign({}, o, {
         status,
         isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
@@ -306,10 +309,23 @@
   function countByStatus(orders) {
     const counts = emptyCounts();
     for (const o of orders) {
-      if (!o.status.statusId) counts.unset++;
-      else counts[o.status.statusId]++;
+      const id = canonicalStatusId(o.status.statusId);
+      if (!id || !(id in counts)) counts.unset++;
+      else counts[id]++;
     }
     return counts;
+  }
+
+  /**
+   * Split orders by whether they are finished, so a view can leave the finished
+   * ones out. Kept here rather than in the interface, because "finished" is a
+   * property of the pipeline, not of any one page.
+   */
+  function partitionClosed(orders) {
+    const closed = [];
+    const rest = [];
+    for (const o of orders) (o.isOpen === false ? closed : rest).push(o);
+    return { closed, open: rest };
   }
 
   /* Thresholds are stated in the interface, so "attention" is never a black box. */
@@ -432,11 +448,11 @@
   }
 
   Object.assign(AMI, {
-    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS,
-    statusById, isOpenStatus, statusKey,
+    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS,
+    statusById, isOpenStatus, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
     deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
-    summariseAccount, buildAccountSummary, daysSince,
+    partitionClosed, summariseAccount, buildAccountSummary, daysSince,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

@@ -37,18 +37,26 @@
   --critical-ink: #94211f;
   --info-soft: #eef1f6;
 
-  /* order-stage ordinal ramp (validated light→dark, single hue) */
-  --stage-1: #86b6ef;
-  --stage-2: #5598e7;
-  --stage-3: #2a78d6;
-  --stage-4: #1c5cab;
-  --stage-5: #104281;
+  /* Order-stage ordinal ramp: single hue, light→dark.
+   *
+   * Hue is the weakest of the three signals here and is never asked to work
+   * alone. Every stage mark also carries a fill pattern (--stage-pat-N) and a
+   * written label, so the pipeline reads correctly without colour vision:
+   * solid, diagonal, horizontal, vertical, in pipeline order. */
+  --stage-1: #a8c8f0;
+  --stage-2: #4f8ede;
+  --stage-3: #1c5fae;
+  --stage-4: #0d3a70;
   /* Ink chosen per stage so an in-bar number always clears its fill. */
-  --stage-fg-1: #0d3a6e;
+  --stage-fg-1: #0c3564;
   --stage-fg-2: #08243f;
   --stage-fg-3: #ffffff;
   --stage-fg-4: #ffffff;
-  --stage-fg-5: #ffffff;
+  /* Pattern ink: dark over the pale stages, light over the deep ones. */
+  --stage-ink-1: rgba(12, 53, 100, .40);
+  --stage-ink-2: rgba(8, 36, 63, .36);
+  --stage-ink-3: rgba(255, 255, 255, .42);
+  --stage-ink-4: rgba(255, 255, 255, .40);
 
   --shadow-1: 0 1px 1px rgba(0, 0, 0, .05), 0 0 1px rgba(0, 0, 0, .08);
   --shadow-2: 0 2px 6px rgba(16, 24, 40, .08), 0 0 1px rgba(0, 0, 0, .1);
@@ -85,16 +93,18 @@
     --critical-soft: #341616;
     --critical-ink: #f08b80;
     --info-soft: #1e242c;
-    --stage-1: #184f95;
-    --stage-2: #256abf;
-    --stage-3: #3987e5;
-    --stage-4: #6da7ec;
-    --stage-5: #9ec5f4;
+    --stage-1: #17508f;
+    --stage-2: #2b74c9;
+    --stage-3: #5a9ceb;
+    --stage-4: #a3c9f6;
     --stage-fg-1: #ffffff;
     --stage-fg-2: #ffffff;
-    --stage-fg-3: #08203c;
-    --stage-fg-4: #08203c;
-    --stage-fg-5: #08203c;
+    --stage-fg-3: #06203c;
+    --stage-fg-4: #06203c;
+    --stage-ink-1: rgba(255, 255, 255, .40);
+    --stage-ink-2: rgba(255, 255, 255, .36);
+    --stage-ink-3: rgba(6, 32, 60, .36);
+    --stage-ink-4: rgba(6, 32, 60, .42);
     --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
     --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
     --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
@@ -123,16 +133,18 @@
   --critical-soft: #341616;
   --critical-ink: #f08b80;
   --info-soft: #1e242c;
-  --stage-1: #184f95;
-  --stage-2: #256abf;
-  --stage-3: #3987e5;
-  --stage-4: #6da7ec;
-  --stage-5: #9ec5f4;
+  --stage-1: #17508f;
+  --stage-2: #2b74c9;
+  --stage-3: #5a9ceb;
+  --stage-4: #a3c9f6;
   --stage-fg-1: #ffffff;
   --stage-fg-2: #ffffff;
-  --stage-fg-3: #08203c;
-  --stage-fg-4: #08203c;
-  --stage-fg-5: #08203c;
+  --stage-fg-3: #06203c;
+  --stage-fg-4: #06203c;
+  --stage-ink-1: rgba(255, 255, 255, .40);
+  --stage-ink-2: rgba(255, 255, 255, .36);
+  --stage-ink-3: rgba(6, 32, 60, .36);
+  --stage-ink-4: rgba(6, 32, 60, .42);
   --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
   --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
   --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
@@ -185,7 +197,7 @@ header.app {
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: linear-gradient(150deg, var(--accent), var(--stage-5));
+  background: linear-gradient(150deg, var(--accent), var(--stage-4));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
   flex: none;
 }
@@ -448,7 +460,12 @@ label.field > span { display: block; font-size: 11.5px; font-weight: 600; color:
   line-height: 1.6;
 }
 
-.pill-stage { background: var(--pill); color: #fff; }
+.pill-stage {
+  background-color: var(--fill-color);
+  background-image: var(--fill-pattern, none);
+  color: var(--fill-ink, #fff);
+  text-shadow: 0 0 3px var(--fill-color), 0 0 3px var(--fill-color);
+}
 .pill-unset { background: var(--info-soft); color: var(--muted); border: 1px dashed var(--border-strong); }
 
 .health {
@@ -584,6 +601,57 @@ table.data td.mono { white-space: nowrap; }
 .bar-track.empty { align-items: center; justify-content: center; }
 .bar-empty { font-size: 11.5px; color: var(--faint); }
 
+/* ---------- stage fills ----------
+ *
+ * One class per pipeline stage, carrying both the hue and a distinct weave.
+ * The weave is the primary signal: solid, diagonal, horizontal, vertical, in
+ * pipeline order, so the four stages stay apart for a reader who cannot
+ * separate the blues. Anything that shows a stage uses these — bar segments,
+ * legend swatches, kanban headings, pills.
+ */
+
+.stage-fill { background-color: var(--fill-color); background-image: var(--fill-pattern, none); }
+
+.stage-1 {
+  --fill-color: var(--stage-1);
+  --fill-pattern: none;
+  --fill-ink: var(--stage-fg-1);
+}
+
+.stage-2 {
+  --fill-color: var(--stage-2);
+  --fill-pattern: repeating-linear-gradient(45deg,
+    transparent 0 4px, var(--stage-ink-2) 4px 8px);
+  --fill-ink: var(--stage-fg-2);
+}
+
+.stage-3 {
+  --fill-color: var(--stage-3);
+  --fill-pattern: repeating-linear-gradient(180deg,
+    transparent 0 3px, var(--stage-ink-3) 3px 6px);
+  --fill-ink: var(--stage-fg-3);
+}
+
+.stage-4 {
+  --fill-color: var(--stage-4);
+  --fill-pattern: repeating-linear-gradient(90deg,
+    transparent 0 3px, var(--stage-ink-4) 3px 6px);
+  --fill-ink: var(--stage-fg-4);
+}
+
+/* Rows measuring an age or a count, not a pipeline position. */
+.bar-tone-critical { background: var(--critical); }
+.bar-tone-warning { background: var(--warning); }
+.bar-tone-neutral { background: var(--stage-2); }
+
+/* A number sitting on a pattern needs its own ground to stay readable. */
+.bar-inline.on-pattern {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--fill-color);
+  box-shadow: 0 0 0 2px var(--fill-color);
+}
+
 .bar-seg {
   display: grid;
   place-items: center;
@@ -595,7 +663,7 @@ table.data td.mono { white-space: nowrap; }
 .bar-seg:first-child { border-radius: 4px 3px 3px 4px; }
 .bar-seg:last-child { border-radius: 3px 4px 4px 3px; }
 .bar-seg:hover { filter: brightness(1.12); }
-.bar-inline { font-size: 11px; font-weight: 700; color: var(--ink, #fff); }
+.bar-inline { font-size: 11px; font-weight: 700; color: var(--fill-ink, #fff); }
 
 .bar-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -624,8 +692,15 @@ ul.legend {
 }
 
 ul.legend li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, .16);
+}
 .legend-label { color: var(--muted); }
+.legend-pattern { color: var(--faint); font-size: 10.5px; font-style: italic; }
 .legend-value { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* ---------- svg charts ---------- */
@@ -661,15 +736,27 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 
 .kan-col.drop-target { border-color: var(--accent); background: var(--accent-soft); }
 
+/* The heading is painted with its stage's fill and weave, so the columns are
+ * told apart by texture first and shade second. */
 .kan-head {
   padding: 9px 11px;
   border-bottom: 1px solid var(--border);
-  border-top: 3px solid var(--stage);
   border-radius: var(--radius) var(--radius) 0 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
+  color: var(--fill-ink, var(--text));
 }
+
+.kan-head .kan-title { text-shadow: 0 0 3px var(--fill-color), 0 0 3px var(--fill-color); }
+
+.kan-head-unset {
+  background: var(--surface-2);
+  border-top: 3px solid var(--border-strong);
+  color: var(--text);
+}
+
+.kan-head-unset .kan-title { text-shadow: none; }
 
 .kan-title { font-size: 11.5px; font-weight: 700; letter-spacing: .01em; }
 .kan-count {
@@ -696,14 +783,29 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 }
 
 .kan-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--stage);
+  border-left: 0;
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 8px 10px 8px 13px;
   box-shadow: var(--shadow-1);
   cursor: grab;
   font-size: 12px;
+}
+
+/* The rail repeats the column's weave, so a card dragged out of place still
+ * says which stage it belongs to. */
+.kan-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background-color: var(--fill-color, var(--border-strong));
+  background-image: var(--fill-pattern, none);
 }
 
 .kan-card:hover { box-shadow: var(--shadow-2); }
@@ -775,6 +877,17 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 .po-card.excluded { opacity: .5; }
 
 details.raw > summary { cursor: pointer; font-size: 12px; color: var(--accent); padding: 6px 0; }
+
+details.fold > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--accent);
+  padding: 7px 0;
+  user-select: none;
+}
+
+details.fold > summary:hover { color: var(--accent-hover); }
+details.fold[open] > summary { margin-bottom: 8px; }
 details.raw pre {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -908,3 +1021,82 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   body { background: #fff; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* ---------- overlay ----------
+ *
+ * Used for enlarging a chart and for the order list behind a mark. It sits over
+ * the page rather than replacing it, so the reader keeps their place.
+ */
+
+body.overlay-open { overflow: hidden; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(12, 16, 22, .55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.overlay-panel {
+  width: min(880px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+}
+
+.overlay-panel.wide { width: min(1180px, 100%); }
+
+.overlay-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overlay-head h2 { margin: 0; font-size: 15px; }
+.overlay-sub { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.overlay-body { padding: 18px; overflow-y: auto; }
+.overlay-body .bar-row { grid-template-columns: minmax(180px, 280px) 1fr auto; }
+.overlay-body svg.chart { min-height: 300px; }
+
+/* A mark that can be drilled into says so on hover and on focus. */
+[data-drill] { cursor: pointer; }
+[data-drill]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.chart .col[data-drill]:hover { filter: brightness(1.15); }
+
+.chart-actions { display: flex; gap: 6px; align-items: center; }
+
+.drill-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.faint { color: var(--faint); }
+
+/* ---------- attachments ---------- */
+
+.attach-list { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
+
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.attach-row .note { margin-left: auto; }
+.attach-row button { margin-left: 8px; }

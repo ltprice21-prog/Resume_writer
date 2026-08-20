@@ -21,6 +21,7 @@
 
   const CONFIG_PATH = 'workspace.json';
   const TEMPLATE_DIR = 'templates';
+  const ATTACH_DIR = 'attachments';
   const SCHEMA_VERSION = 1;
 
   /** The counterparties a template can address. */
@@ -62,13 +63,18 @@
       ],
       users: [],
       accounts: [],
-      settings: { autoCloseInvoiced: true },
+      settings: { excludeClosed: false },
     };
   }
 
   function normaliseWorkspace(raw) {
     const ws = Object.assign(defaultWorkspace(), raw || {});
-    ws.settings = Object.assign({ autoCloseInvoiced: true }, ws.settings || {});
+    // `autoCloseInvoiced` was a rule that moved invoiced orders to a separate
+    // closed stage. The two stages are now one, so the rule has nothing to do —
+    // the key is dropped rather than honoured, and old files still load.
+    const settings = Object.assign({}, ws.settings || {});
+    delete settings.autoCloseInvoiced;
+    ws.settings = Object.assign({ excludeClosed: false }, settings);
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => ({
       id: slug(u.id || u.name),
@@ -103,6 +109,15 @@
           trackerPath: it.trackerPath || '',
           sheet: it.sheet || '',
           contacts: Object.assign({ vendor: {}, trucker: {}, customer: {}, internal: {} }, it.contacts || {}),
+          // Files that go on every message for this item — a spec sheet, a
+          // customs form. `roles` empty means every kind of message.
+          attachments: (it.attachments || []).map((f) => ({
+            path: f.path || '',
+            name: f.name || (f.path || '').split('/').pop(),
+            roles: Array.isArray(f.roles) ? f.roles.slice() : [],
+            addedBy: f.addedBy || '',
+            addedAt: f.addedAt || '',
+          })).filter((f) => f.path),
           notes: it.notes || '',
         };
       });
@@ -117,6 +132,7 @@
           trackerPath: a.trackerPath || '',
           sheet: a.sheet || '',
           contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+          attachments: [],
           notes: '',
         });
       }
@@ -233,6 +249,7 @@
       name: name || '',
       product: '', navCode: '', trackerPath: '', sheet: '',
       contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+      attachments: [],
       notes: '',
     };
     account.items.push(item);
@@ -329,6 +346,16 @@
       html: s.slice(end + META_CLOSE.length).replace(/^\r?\n/, ''),
     });
   }
+
+  /**
+   * Standing attachments live in the shared folder beside the templates, so a
+   * colleague opening the same workspace sends the same files.
+   */
+  const attachDirFor = (accountId, itemId) => ATTACH_DIR + '/' + accountId + '/' + itemId;
+
+  /** The standing attachments that apply to one kind of message. */
+  const attachmentsForRole = (item, role) => ((item && item.attachments) || [])
+    .filter((f) => !f.roles.length || f.roles.includes(role));
 
   const templateDirFor = (accountId) => TEMPLATE_DIR + '/' + accountId;
   const templatePathFor = (accountId, templateId) => templateDirFor(accountId) + '/' + templateId + '.html';
@@ -509,7 +536,8 @@
   }
 
   Object.assign(AMI, {
-    CONFIG_PATH, TEMPLATE_DIR, ROLES, SCHEMA_VERSION,
+    CONFIG_PATH, TEMPLATE_DIR, ATTACH_DIR, ROLES, SCHEMA_VERSION,
+    attachDirFor, attachmentsForRole,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,
     accountItems, findItem, addItem, matchItemForPo,

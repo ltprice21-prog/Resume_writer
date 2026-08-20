@@ -206,10 +206,15 @@ async function makeDocx(paragraphs) {
   check('the new item starts with no tracker', added.trackerPath, '');
   ws.accounts[0].items = ws.accounts[0].items.filter((i) => i !== added);
 
-  check('the invoiced-closes rule is on unless turned off',
-    AMI.normaliseWorkspace({}).settings.autoCloseInvoiced, true);
-  check('an explicit no is respected',
-    AMI.normaliseWorkspace({ settings: { autoCloseInvoiced: false } }).settings.autoCloseInvoiced, false);
+  // The old auto-close rule moved invoiced orders to a separate closed stage.
+  // The stages are one now, so a workspace file carrying the flag must not
+  // resurrect a rule that no longer has anything to do.
+  ok('the retired auto-close flag is dropped, not honoured',
+    !('autoCloseInvoiced' in AMI.normaliseWorkspace({ settings: { autoCloseInvoiced: false } }).settings));
+  check('finished orders are shown unless someone hides them',
+    AMI.normaliseWorkspace({}).settings.excludeClosed, false);
+  check('and that choice round-trips',
+    AMI.normaliseWorkspace({ settings: { excludeClosed: true } }).settings.excludeClosed, true);
 
   console.log('\nLegacy single-tracker migration');
   const legacy = AMI.normaliseWorkspace({
@@ -350,7 +355,7 @@ async function makeDocx(paragraphs) {
   ok('config written', wsStore.files.has('workspace.json'));
   const reread = await AMI.loadWorkspace(wsStore);
   check('accounts survive the round trip', reread.workspace.accounts.map((a) => a.id), ['aeromexico', 'delta', 'ba']);
-  check('workspace rules survive too', reread.workspace.settings.autoCloseInvoiced, true);
+  check('workspace settings survive too', reread.workspace.settings.excludeClosed, false);
   check('author recorded', JSON.parse(new TextDecoder().decode(wsStore.files.get('workspace.json'))).updatedBy, 'Bo Price');
 
   let stale = null;

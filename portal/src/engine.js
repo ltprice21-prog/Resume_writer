@@ -1350,9 +1350,19 @@
    * Follow-up rules
    * ------------------------------------------------------------------ */
 
+  /**
+   * What to chase, and when to stop chasing.
+   *
+   * `missing` is the column that should have been filled; `after` is the dated
+   * column the grace period counts from. `supersededBy` names the columns whose
+   * presence makes the chase pointless — the work moved on without the answer.
+   * A superseded item is reported, not discarded: a gap in the tracker is worth
+   * seeing even once it stops being urgent.
+   */
   const FOLLOW_UP_RULES = [
     {
       id: 'winery-confirm',
+      supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Winery Confirmed Available Date/i,
       after: /^PO date sent to winery/i,
@@ -1362,6 +1372,7 @@
     },
     {
       id: 'bottling-date',
+      supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Bottling Date Confirmed/i,
       after: /^PO date sent to winery/i,
@@ -1371,6 +1382,7 @@
     },
     {
       id: 'lot-number',
+      supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Lot Number/i,
       after: /^Actual Collection Date/i,
@@ -1380,6 +1392,7 @@
     },
     {
       id: 'collection',
+      supersededBy: [/^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'forwarder',
       missing: /^Actual Collection Date/i,
       after: /^AMI Requested\s+Collection Date/i,
@@ -1389,6 +1402,7 @@
     },
     {
       id: 'delivery',
+      supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^(Delivery date to CDG|Actual delivery date)/i,
       after: /^Actual Collection Date/i,
@@ -1398,6 +1412,7 @@
     },
     {
       id: 'winery-invoice',
+      supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Winery invoice received/i,
       after: /^Actual Collection Date/i,
@@ -1407,6 +1422,7 @@
     },
     {
       id: 'proof-of-export',
+      supersededBy: [/^NAV INV/i],
       party: 'internal',
       missing: /^Proof of [Ee]xport/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -1417,6 +1433,7 @@
     },
     {
       id: 'forwarder-invoice',
+      supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^Forwarder's invoice$/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -1431,7 +1448,35 @@
     return c ? c.col : null;
   }
 
-  /** Walk the tracker and list every open item that is past its grace period. */
+  /**
+   * Whether the workflow has already moved past the point of chasing this.
+   * Returns the evidence, so the interface can say what overtook it rather than
+   * simply dropping the item.
+   */
+  function supersededBy(sheet, header, row, rule) {
+    for (const re of rule.supersededBy || []) {
+      const col = findCol(header, re);
+      if (!col) continue;
+      const cell = sheet.cell(row, col);
+      if (!cell) continue;
+      const text = String(cell.text || '').trim();
+      if (!text || /^to fill$/i.test(text)) continue;
+      const column = header.columns.find((c) => c.col === col);
+      const heading = column ? column.header : '';
+      // An invoice number is numeric too. Only read a serial as a date when the
+      // column says it is one, or "NAV INV 12345" becomes a day in 1926.
+      const date = /date/i.test(heading) && cell.num != null && Number.isFinite(cell.num) && cell.num > 1
+        ? serialToDate(cell.num) : null;
+      return { header: heading, value: text, date };
+    }
+    return null;
+  }
+
+  /**
+   * Walk the tracker and list every open item that is past its grace period.
+   * Items the workflow has overtaken come back marked `superseded` rather than
+   * missing, so a caller can set them aside without losing them.
+   */
   function findOpenItems(sheet, header, today, rules) {
     const active = rules || FOLLOW_UP_RULES;
     const rows = dataRows(sheet, header);
@@ -1457,6 +1502,7 @@
         const age = daysBetween(anchor, now);
         if (age < rule.graceDays) continue;
 
+        const overtaken = supersededBy(sheet, header, r, rule);
         out.push({
           row: r, po, ruleId: rule.id, party: rule.party,
           missingHeader: header.columns.find((c) => c.col === missingCol).header,
@@ -1464,12 +1510,27 @@
           anchorDate: anchor, ageDays: age,
           subject: rule.subject, ask: rule.ask,
           placeholder: treatBlank ? text : '',
+          superseded: overtaken,
+          supersededReason: overtaken
+            ? 'still blank, but ' + lower(overtaken.header) + ' is recorded'
+              + (overtaken.date ? ' (' + formatShort(overtaken.date) + ')' : '')
+              + ' — the order moved on without it'
+            : '',
         });
       }
     }
-    out.sort((a, b) => b.ageDays - a.ageDays);
+    // Live chases first, oldest at the top; overtaken ones fall to the end.
+    out.sort((a, b) => (!!a.superseded - !!b.superseded) || (b.ageDays - a.ageDays));
     return out;
   }
+
+  /** Lower-case a tracker heading for use inside a sentence. */
+  const lower = (s) => {
+    const t = String(s || '').trim();
+    // A heading with no lower-case letters is an abbreviation — NAV INV #,
+    // EMCS — and must keep its capitals.
+    return /[a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  };
 
   /* ------------------------------------------------------------------ *
    * Email generation
@@ -1604,7 +1665,7 @@
     planRow, computePlanFormulas, renderRowXml, appendRow, validatePlan, shiftFormula, planPoNumber,
     evaluateFormula, SOURCE, PDF_COLUMN_MAP,
     // follow-ups
-    FOLLOW_UP_RULES, findOpenItems,
+    FOLLOW_UP_RULES, findOpenItems, supersededBy,
     // email
     buildEml, orderTableHtml, fillTemplate, poGroups, TABLE_COLUMNS, b64,
   };

@@ -43,18 +43,26 @@
   --critical-ink: #94211f;
   --info-soft: #eef1f6;
 
-  /* order-stage ordinal ramp (validated light→dark, single hue) */
-  --stage-1: #86b6ef;
-  --stage-2: #5598e7;
-  --stage-3: #2a78d6;
-  --stage-4: #1c5cab;
-  --stage-5: #104281;
+  /* Order-stage ordinal ramp: single hue, light→dark.
+   *
+   * Hue is the weakest of the three signals here and is never asked to work
+   * alone. Every stage mark also carries a fill pattern (--stage-pat-N) and a
+   * written label, so the pipeline reads correctly without colour vision:
+   * solid, diagonal, horizontal, vertical, in pipeline order. */
+  --stage-1: #a8c8f0;
+  --stage-2: #4f8ede;
+  --stage-3: #1c5fae;
+  --stage-4: #0d3a70;
   /* Ink chosen per stage so an in-bar number always clears its fill. */
-  --stage-fg-1: #0d3a6e;
+  --stage-fg-1: #0c3564;
   --stage-fg-2: #08243f;
   --stage-fg-3: #ffffff;
   --stage-fg-4: #ffffff;
-  --stage-fg-5: #ffffff;
+  /* Pattern ink: dark over the pale stages, light over the deep ones. */
+  --stage-ink-1: rgba(12, 53, 100, .40);
+  --stage-ink-2: rgba(8, 36, 63, .36);
+  --stage-ink-3: rgba(255, 255, 255, .42);
+  --stage-ink-4: rgba(255, 255, 255, .40);
 
   --shadow-1: 0 1px 1px rgba(0, 0, 0, .05), 0 0 1px rgba(0, 0, 0, .08);
   --shadow-2: 0 2px 6px rgba(16, 24, 40, .08), 0 0 1px rgba(0, 0, 0, .1);
@@ -91,16 +99,18 @@
     --critical-soft: #341616;
     --critical-ink: #f08b80;
     --info-soft: #1e242c;
-    --stage-1: #184f95;
-    --stage-2: #256abf;
-    --stage-3: #3987e5;
-    --stage-4: #6da7ec;
-    --stage-5: #9ec5f4;
+    --stage-1: #17508f;
+    --stage-2: #2b74c9;
+    --stage-3: #5a9ceb;
+    --stage-4: #a3c9f6;
     --stage-fg-1: #ffffff;
     --stage-fg-2: #ffffff;
-    --stage-fg-3: #08203c;
-    --stage-fg-4: #08203c;
-    --stage-fg-5: #08203c;
+    --stage-fg-3: #06203c;
+    --stage-fg-4: #06203c;
+    --stage-ink-1: rgba(255, 255, 255, .40);
+    --stage-ink-2: rgba(255, 255, 255, .36);
+    --stage-ink-3: rgba(6, 32, 60, .36);
+    --stage-ink-4: rgba(6, 32, 60, .42);
     --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
     --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
     --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
@@ -129,16 +139,18 @@
   --critical-soft: #341616;
   --critical-ink: #f08b80;
   --info-soft: #1e242c;
-  --stage-1: #184f95;
-  --stage-2: #256abf;
-  --stage-3: #3987e5;
-  --stage-4: #6da7ec;
-  --stage-5: #9ec5f4;
+  --stage-1: #17508f;
+  --stage-2: #2b74c9;
+  --stage-3: #5a9ceb;
+  --stage-4: #a3c9f6;
   --stage-fg-1: #ffffff;
   --stage-fg-2: #ffffff;
-  --stage-fg-3: #08203c;
-  --stage-fg-4: #08203c;
-  --stage-fg-5: #08203c;
+  --stage-fg-3: #06203c;
+  --stage-fg-4: #06203c;
+  --stage-ink-1: rgba(255, 255, 255, .40);
+  --stage-ink-2: rgba(255, 255, 255, .36);
+  --stage-ink-3: rgba(6, 32, 60, .36);
+  --stage-ink-4: rgba(6, 32, 60, .42);
   --shadow-1: 0 1px 1px rgba(0, 0, 0, .4);
   --shadow-2: 0 2px 8px rgba(0, 0, 0, .45);
   --shadow-3: 0 10px 28px rgba(0, 0, 0, .55);
@@ -191,7 +203,7 @@ header.app {
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: linear-gradient(150deg, var(--accent), var(--stage-5));
+  background: linear-gradient(150deg, var(--accent), var(--stage-4));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
   flex: none;
 }
@@ -454,7 +466,12 @@ label.field > span { display: block; font-size: 11.5px; font-weight: 600; color:
   line-height: 1.6;
 }
 
-.pill-stage { background: var(--pill); color: #fff; }
+.pill-stage {
+  background-color: var(--fill-color);
+  background-image: var(--fill-pattern, none);
+  color: var(--fill-ink, #fff);
+  text-shadow: 0 0 3px var(--fill-color), 0 0 3px var(--fill-color);
+}
 .pill-unset { background: var(--info-soft); color: var(--muted); border: 1px dashed var(--border-strong); }
 
 .health {
@@ -590,6 +607,57 @@ table.data td.mono { white-space: nowrap; }
 .bar-track.empty { align-items: center; justify-content: center; }
 .bar-empty { font-size: 11.5px; color: var(--faint); }
 
+/* ---------- stage fills ----------
+ *
+ * One class per pipeline stage, carrying both the hue and a distinct weave.
+ * The weave is the primary signal: solid, diagonal, horizontal, vertical, in
+ * pipeline order, so the four stages stay apart for a reader who cannot
+ * separate the blues. Anything that shows a stage uses these — bar segments,
+ * legend swatches, kanban headings, pills.
+ */
+
+.stage-fill { background-color: var(--fill-color); background-image: var(--fill-pattern, none); }
+
+.stage-1 {
+  --fill-color: var(--stage-1);
+  --fill-pattern: none;
+  --fill-ink: var(--stage-fg-1);
+}
+
+.stage-2 {
+  --fill-color: var(--stage-2);
+  --fill-pattern: repeating-linear-gradient(45deg,
+    transparent 0 4px, var(--stage-ink-2) 4px 8px);
+  --fill-ink: var(--stage-fg-2);
+}
+
+.stage-3 {
+  --fill-color: var(--stage-3);
+  --fill-pattern: repeating-linear-gradient(180deg,
+    transparent 0 3px, var(--stage-ink-3) 3px 6px);
+  --fill-ink: var(--stage-fg-3);
+}
+
+.stage-4 {
+  --fill-color: var(--stage-4);
+  --fill-pattern: repeating-linear-gradient(90deg,
+    transparent 0 3px, var(--stage-ink-4) 3px 6px);
+  --fill-ink: var(--stage-fg-4);
+}
+
+/* Rows measuring an age or a count, not a pipeline position. */
+.bar-tone-critical { background: var(--critical); }
+.bar-tone-warning { background: var(--warning); }
+.bar-tone-neutral { background: var(--stage-2); }
+
+/* A number sitting on a pattern needs its own ground to stay readable. */
+.bar-inline.on-pattern {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--fill-color);
+  box-shadow: 0 0 0 2px var(--fill-color);
+}
+
 .bar-seg {
   display: grid;
   place-items: center;
@@ -601,7 +669,7 @@ table.data td.mono { white-space: nowrap; }
 .bar-seg:first-child { border-radius: 4px 3px 3px 4px; }
 .bar-seg:last-child { border-radius: 3px 4px 4px 3px; }
 .bar-seg:hover { filter: brightness(1.12); }
-.bar-inline { font-size: 11px; font-weight: 700; color: var(--ink, #fff); }
+.bar-inline { font-size: 11px; font-weight: 700; color: var(--fill-ink, #fff); }
 
 .bar-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -630,8 +698,15 @@ ul.legend {
 }
 
 ul.legend li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, .16);
+}
 .legend-label { color: var(--muted); }
+.legend-pattern { color: var(--faint); font-size: 10.5px; font-style: italic; }
 .legend-value { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* ---------- svg charts ---------- */
@@ -667,15 +742,27 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 
 .kan-col.drop-target { border-color: var(--accent); background: var(--accent-soft); }
 
+/* The heading is painted with its stage's fill and weave, so the columns are
+ * told apart by texture first and shade second. */
 .kan-head {
   padding: 9px 11px;
   border-bottom: 1px solid var(--border);
-  border-top: 3px solid var(--stage);
   border-radius: var(--radius) var(--radius) 0 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
+  color: var(--fill-ink, var(--text));
 }
+
+.kan-head .kan-title { text-shadow: 0 0 3px var(--fill-color), 0 0 3px var(--fill-color); }
+
+.kan-head-unset {
+  background: var(--surface-2);
+  border-top: 3px solid var(--border-strong);
+  color: var(--text);
+}
+
+.kan-head-unset .kan-title { text-shadow: none; }
 
 .kan-title { font-size: 11.5px; font-weight: 700; letter-spacing: .01em; }
 .kan-count {
@@ -702,14 +789,29 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 }
 
 .kan-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--stage);
+  border-left: 0;
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 8px 10px 8px 13px;
   box-shadow: var(--shadow-1);
   cursor: grab;
   font-size: 12px;
+}
+
+/* The rail repeats the column's weave, so a card dragged out of place still
+ * says which stage it belongs to. */
+.kan-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background-color: var(--fill-color, var(--border-strong));
+  background-image: var(--fill-pattern, none);
 }
 
 .kan-card:hover { box-shadow: var(--shadow-2); }
@@ -781,6 +883,17 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 .po-card.excluded { opacity: .5; }
 
 details.raw > summary { cursor: pointer; font-size: 12px; color: var(--accent); padding: 6px 0; }
+
+details.fold > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--accent);
+  padding: 7px 0;
+  user-select: none;
+}
+
+details.fold > summary:hover { color: var(--accent-hover); }
+details.fold[open] > summary { margin-bottom: 8px; }
 details.raw pre {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -914,6 +1027,85 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   body { background: #fff; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* ---------- overlay ----------
+ *
+ * Used for enlarging a chart and for the order list behind a mark. It sits over
+ * the page rather than replacing it, so the reader keeps their place.
+ */
+
+body.overlay-open { overflow: hidden; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(12, 16, 22, .55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.overlay-panel {
+  width: min(880px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+}
+
+.overlay-panel.wide { width: min(1180px, 100%); }
+
+.overlay-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overlay-head h2 { margin: 0; font-size: 15px; }
+.overlay-sub { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.overlay-body { padding: 18px; overflow-y: auto; }
+.overlay-body .bar-row { grid-template-columns: minmax(180px, 280px) 1fr auto; }
+.overlay-body svg.chart { min-height: 300px; }
+
+/* A mark that can be drilled into says so on hover and on focus. */
+[data-drill] { cursor: pointer; }
+[data-drill]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.chart .col[data-drill]:hover { filter: brightness(1.15); }
+
+.chart-actions { display: flex; gap: 6px; align-items: center; }
+
+.drill-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.faint { color: var(--faint); }
+
+/* ---------- attachments ---------- */
+
+.attach-list { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
+
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.attach-row .note { margin-left: auto; }
+.attach-row button { margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -2375,9 +2567,19 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
    * Follow-up rules
    * ------------------------------------------------------------------ */
 
+  /**
+   * What to chase, and when to stop chasing.
+   *
+   * `missing` is the column that should have been filled; `after` is the dated
+   * column the grace period counts from. `supersededBy` names the columns whose
+   * presence makes the chase pointless — the work moved on without the answer.
+   * A superseded item is reported, not discarded: a gap in the tracker is worth
+   * seeing even once it stops being urgent.
+   */
   const FOLLOW_UP_RULES = [
     {
       id: 'winery-confirm',
+      supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Winery Confirmed Available Date/i,
       after: /^PO date sent to winery/i,
@@ -2387,6 +2589,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'bottling-date',
+      supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Bottling Date Confirmed/i,
       after: /^PO date sent to winery/i,
@@ -2396,6 +2599,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'lot-number',
+      supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Lot Number/i,
       after: /^Actual Collection Date/i,
@@ -2405,6 +2609,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'collection',
+      supersededBy: [/^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'forwarder',
       missing: /^Actual Collection Date/i,
       after: /^AMI Requested\s+Collection Date/i,
@@ -2414,6 +2619,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'delivery',
+      supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^(Delivery date to CDG|Actual delivery date)/i,
       after: /^Actual Collection Date/i,
@@ -2423,6 +2629,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'winery-invoice',
+      supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Winery invoice received/i,
       after: /^Actual Collection Date/i,
@@ -2432,6 +2639,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'proof-of-export',
+      supersededBy: [/^NAV INV/i],
       party: 'internal',
       missing: /^Proof of [Ee]xport/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -2442,6 +2650,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     },
     {
       id: 'forwarder-invoice',
+      supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^Forwarder's invoice$/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -2456,7 +2665,35 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     return c ? c.col : null;
   }
 
-  /** Walk the tracker and list every open item that is past its grace period. */
+  /**
+   * Whether the workflow has already moved past the point of chasing this.
+   * Returns the evidence, so the interface can say what overtook it rather than
+   * simply dropping the item.
+   */
+  function supersededBy(sheet, header, row, rule) {
+    for (const re of rule.supersededBy || []) {
+      const col = findCol(header, re);
+      if (!col) continue;
+      const cell = sheet.cell(row, col);
+      if (!cell) continue;
+      const text = String(cell.text || '').trim();
+      if (!text || /^to fill$/i.test(text)) continue;
+      const column = header.columns.find((c) => c.col === col);
+      const heading = column ? column.header : '';
+      // An invoice number is numeric too. Only read a serial as a date when the
+      // column says it is one, or "NAV INV 12345" becomes a day in 1926.
+      const date = /date/i.test(heading) && cell.num != null && Number.isFinite(cell.num) && cell.num > 1
+        ? serialToDate(cell.num) : null;
+      return { header: heading, value: text, date };
+    }
+    return null;
+  }
+
+  /**
+   * Walk the tracker and list every open item that is past its grace period.
+   * Items the workflow has overtaken come back marked `superseded` rather than
+   * missing, so a caller can set them aside without losing them.
+   */
   function findOpenItems(sheet, header, today, rules) {
     const active = rules || FOLLOW_UP_RULES;
     const rows = dataRows(sheet, header);
@@ -2482,6 +2719,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         const age = daysBetween(anchor, now);
         if (age < rule.graceDays) continue;
 
+        const overtaken = supersededBy(sheet, header, r, rule);
         out.push({
           row: r, po, ruleId: rule.id, party: rule.party,
           missingHeader: header.columns.find((c) => c.col === missingCol).header,
@@ -2489,12 +2727,27 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
           anchorDate: anchor, ageDays: age,
           subject: rule.subject, ask: rule.ask,
           placeholder: treatBlank ? text : '',
+          superseded: overtaken,
+          supersededReason: overtaken
+            ? 'still blank, but ' + lower(overtaken.header) + ' is recorded'
+              + (overtaken.date ? ' (' + formatShort(overtaken.date) + ')' : '')
+              + ' — the order moved on without it'
+            : '',
         });
       }
     }
-    out.sort((a, b) => b.ageDays - a.ageDays);
+    // Live chases first, oldest at the top; overtaken ones fall to the end.
+    out.sort((a, b) => (!!a.superseded - !!b.superseded) || (b.ageDays - a.ageDays));
     return out;
   }
+
+  /** Lower-case a tracker heading for use inside a sentence. */
+  const lower = (s) => {
+    const t = String(s || '').trim();
+    // A heading with no lower-case letters is an abbreviation — NAV INV #,
+    // EMCS — and must keep its capitals.
+    return /[a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  };
 
   /* ------------------------------------------------------------------ *
    * Email generation
@@ -2629,7 +2882,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     planRow, computePlanFormulas, renderRowXml, appendRow, validatePlan, shiftFormula, planPoNumber,
     evaluateFormula, SOURCE, PDF_COLUMN_MAP,
     // follow-ups
-    FOLLOW_UP_RULES, findOpenItems,
+    FOLLOW_UP_RULES, findOpenItems, supersededBy,
     // email
     buildEml, orderTableHtml, fillTemplate, poGroups, TABLE_COLUMNS, b64,
   };
@@ -3241,6 +3494,77 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   }
 
   /* ------------------------------------------------------------------ *
+   * Internal notes
+   * ------------------------------------------------------------------ */
+
+  /* A note to whoever files the template — "Use: Aeromexico" — not part of the
+   * message. It sits at the end, and everything after it is the same kind of
+   * annotation. */
+  const USE_NOTE = /(?:^|\n)\s*(?:<[^>]*>\s*)*use\s*[:\-–]/i;
+
+  /**
+   * Strip the trailing internal note from an imported template.
+   *
+   * Only the imported copy is changed; the file on disk is never written to, so
+   * the original .msg or .docx keeps its note. What was removed is returned, so
+   * the interface can show it and put it back if the guess was wrong.
+   */
+  function stripInternalNote(html) {
+    const text = String(html || '');
+
+    // Work on the text with tags flattened, so a note wrapped in <p> or <span>
+    // is found at the same place as a bare one.
+    const plain = text.replace(/<[^>]*>/g, '\n');
+    const at = plain.search(USE_NOTE);
+    if (at < 0) return { html: text, removed: '', found: false };
+
+    // Map the position in the flattened text back to the source by counting the
+    // visible characters, since flattening only ever replaces tags with "\n".
+    let seen = 0;
+    let cut = -1;
+    let inTag = false;
+    let tagStart = -1;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '<') { inTag = true; tagStart = i; continue; }
+      if (inTag) {
+        if (ch === '>') { inTag = false; seen++; if (seen > at && cut < 0) cut = tagStart; }
+        continue;
+      }
+      if (seen >= at && cut < 0) cut = i;
+      seen++;
+    }
+    if (cut < 0) return { html: text, removed: '', found: false };
+
+    const removed = text.slice(cut).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!removed) return { html: text, removed: '', found: false };
+
+    // Close anything the cut left open, so the kept part is still valid markup.
+    const kept = text.slice(0, cut);
+    return { html: balanceTags(kept).trim(), removed, found: true };
+  }
+
+  const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link', 'col', 'area', 'base']);
+
+  /** Close any tags left open by a cut, innermost first. */
+  function balanceTags(html) {
+    const open = [];
+    const re = /<(\/?)([a-zA-Z][\w-]*)[^>]*?(\/?)>/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      const name = m[2].toLowerCase();
+      if (VOID_TAGS.has(name) || m[3] === '/') continue;
+      if (m[1]) {
+        const at = open.lastIndexOf(name);
+        if (at >= 0) open.splice(at, 1);
+      } else {
+        open.push(name);
+      }
+    }
+    return html + open.reverse().map((t) => '</' + t + '>').join('');
+  }
+
+  /* ------------------------------------------------------------------ *
    * Placeholder discovery
    * ------------------------------------------------------------------ */
 
@@ -3281,6 +3605,262 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     readCfb, isCfb, decompressRtf, deEncapsulateHtml, rtfToText,
     textToHtml, innerBody, decodeRfc2047,
     templatePlaceholders, suggestPlaceholders, applyPlaceholderSuggestions,
+    stripInternalNote, balanceTags,
+  });
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>/* Airport codes, for templates that quote one.
+ *
+ * A purchase order names a delivery point in words — "AEROPUERTO INTERNACIONAL
+ * CIUDAD DE MEXICO" — while a trucker's template wants "MEX". Reading the code
+ * off the address is a lookup, not a guess, and this file is the lookup table.
+ *
+ * Two rules keep it honest:
+ *
+ *   1. A code already printed on the PO always wins. Nothing is derived when
+ *      the document already says it.
+ *   2. Where a city has more than one airport, nothing is chosen. The caller is
+ *      told the alternatives and a person picks. Silently sending wine to
+ *      Gatwick because the address said "London" is exactly the failure this
+ *      table exists to prevent.
+ *
+ * Every result reports where it came from, so a derived code can be shown as
+ * derived and never passed off as printed.
+ *
+ * Extends the global `AMI` namespace.
+ */
+(function (global) {
+  'use strict';
+
+  const AMI = global.AMI || (global.AMI = {});
+
+  /**
+   * `names` are fragments of the airport's own name as it appears on paperwork;
+   * `city` is the settlement it serves. A city listed against more than one
+   * airport is ambiguous by construction — no tie-break is attempted.
+   */
+  const AIRPORTS = [
+    // — Europe —
+    { code: 'CDG', city: 'Paris', country: 'FR', names: ['charles de gaulle', 'roissy'] },
+    { code: 'ORY', city: 'Paris', country: 'FR', names: ['orly'] },
+    { code: 'LHR', city: 'London', country: 'GB', names: ['heathrow'] },
+    { code: 'LGW', city: 'London', country: 'GB', names: ['gatwick'] },
+    { code: 'STN', city: 'London', country: 'GB', names: ['stansted'] },
+    { code: 'LTN', city: 'London', country: 'GB', names: ['luton'] },
+    { code: 'LCY', city: 'London', country: 'GB', names: ['london city airport'] },
+    { code: 'AMS', city: 'Amsterdam', country: 'NL', names: ['schiphol'] },
+    { code: 'FRA', city: 'Frankfurt', country: 'DE', names: ['frankfurt am main', 'rhein-main'] },
+    { code: 'MUC', city: 'Munich', country: 'DE', names: ['munich', 'münchen', 'franz josef strauss'] },
+    { code: 'BER', city: 'Berlin', country: 'DE', names: ['brandenburg', 'berlin brandenburg'] },
+    { code: 'DUS', city: 'Dusseldorf', country: 'DE', names: ['düsseldorf', 'dusseldorf'] },
+    { code: 'MAD', city: 'Madrid', country: 'ES', names: ['barajas', 'adolfo suárez', 'adolfo suarez'] },
+    { code: 'BCN', city: 'Barcelona', country: 'ES', names: ['el prat', 'josep tarradellas'] },
+    { code: 'LIS', city: 'Lisbon', country: 'PT', names: ['humberto delgado', 'portela', 'lisboa'] },
+    { code: 'OPO', city: 'Porto', country: 'PT', names: ['francisco sá carneiro', 'francisco sa carneiro'] },
+    { code: 'FCO', city: 'Rome', country: 'IT', names: ['fiumicino', 'leonardo da vinci'] },
+    { code: 'CIA', city: 'Rome', country: 'IT', names: ['ciampino'] },
+    { code: 'MXP', city: 'Milan', country: 'IT', names: ['malpensa'] },
+    { code: 'LIN', city: 'Milan', country: 'IT', names: ['linate'] },
+    { code: 'VCE', city: 'Venice', country: 'IT', names: ['marco polo'] },
+    { code: 'ZRH', city: 'Zurich', country: 'CH', names: ['zurich', 'zürich', 'kloten'] },
+    { code: 'GVA', city: 'Geneva', country: 'CH', names: ['geneva', 'genève', 'cointrin'] },
+    { code: 'VIE', city: 'Vienna', country: 'AT', names: ['schwechat', 'wien'] },
+    { code: 'BRU', city: 'Brussels', country: 'BE', names: ['zaventem', 'brussels airport'] },
+    { code: 'CPH', city: 'Copenhagen', country: 'DK', names: ['kastrup', 'københavn'] },
+    { code: 'ARN', city: 'Stockholm', country: 'SE', names: ['arlanda'] },
+    { code: 'OSL', city: 'Oslo', country: 'NO', names: ['gardermoen'] },
+    { code: 'HEL', city: 'Helsinki', country: 'FI', names: ['vantaa'] },
+    { code: 'DUB', city: 'Dublin', country: 'IE', names: ['dublin airport'] },
+    { code: 'IST', city: 'Istanbul', country: 'TR', names: ['istanbul airport'] },
+    { code: 'SAW', city: 'Istanbul', country: 'TR', names: ['sabiha gökçen', 'sabiha gokcen'] },
+    { code: 'ATH', city: 'Athens', country: 'GR', names: ['eleftherios venizelos'] },
+    { code: 'WAW', city: 'Warsaw', country: 'PL', names: ['chopin'] },
+    { code: 'PRG', city: 'Prague', country: 'CZ', names: ['václav havel', 'vaclav havel', 'ruzyně'] },
+
+    // — North America —
+    { code: 'JFK', city: 'New York', country: 'US', names: ['john f kennedy', 'john f. kennedy', 'kennedy international'] },
+    { code: 'EWR', city: 'New York', country: 'US', names: ['newark'] },
+    { code: 'LGA', city: 'New York', country: 'US', names: ['laguardia', 'la guardia'] },
+    { code: 'ATL', city: 'Atlanta', country: 'US', names: ['hartsfield'] },
+    { code: 'ORD', city: 'Chicago', country: 'US', names: ["o'hare", 'ohare'] },
+    { code: 'MDW', city: 'Chicago', country: 'US', names: ['midway'] },
+    { code: 'LAX', city: 'Los Angeles', country: 'US', names: ['los angeles international'] },
+    { code: 'SFO', city: 'San Francisco', country: 'US', names: ['san francisco international'] },
+    { code: 'MIA', city: 'Miami', country: 'US', names: ['miami international'] },
+    { code: 'DFW', city: 'Dallas', country: 'US', names: ['dallas/fort worth', 'dallas fort worth'] },
+    { code: 'IAH', city: 'Houston', country: 'US', names: ['george bush intercontinental'] },
+    { code: 'HOU', city: 'Houston', country: 'US', names: ['william p hobby', 'hobby airport'] },
+    { code: 'IAD', city: 'Washington', country: 'US', names: ['dulles'] },
+    { code: 'DCA', city: 'Washington', country: 'US', names: ['reagan national', 'ronald reagan'] },
+    { code: 'BOS', city: 'Boston', country: 'US', names: ['logan'] },
+    { code: 'SEA', city: 'Seattle', country: 'US', names: ['seattle-tacoma', 'seattle tacoma', 'sea-tac'] },
+    { code: 'DEN', city: 'Denver', country: 'US', names: ['denver international'] },
+    { code: 'PHX', city: 'Phoenix', country: 'US', names: ['sky harbor'] },
+    { code: 'MSP', city: 'Minneapolis', country: 'US', names: ['minneapolis-saint paul', 'minneapolis st paul'] },
+    { code: 'DTW', city: 'Detroit', country: 'US', names: ['detroit metropolitan', 'wayne county'] },
+    { code: 'CLT', city: 'Charlotte', country: 'US', names: ['charlotte douglas'] },
+    { code: 'PHL', city: 'Philadelphia', country: 'US', names: ['philadelphia international'] },
+    { code: 'SLC', city: 'Salt Lake City', country: 'US', names: ['salt lake city international'] },
+    { code: 'MEX', city: 'Mexico City', country: 'MX', names: ['benito juárez', 'benito juarez', 'aeropuerto internacional ciudad de mexico', 'aeropuerto internacional de la ciudad de méxico', 'aicm'] },
+    { code: 'NLU', city: 'Mexico City', country: 'MX', names: ['felipe ángeles', 'felipe angeles', 'aifa'] },
+    { code: 'GDL', city: 'Guadalajara', country: 'MX', names: ['miguel hidalgo'] },
+    { code: 'MTY', city: 'Monterrey', country: 'MX', names: ['mariano escobedo'] },
+    { code: 'CUN', city: 'Cancun', country: 'MX', names: ['cancún', 'cancun'] },
+    { code: 'YYZ', city: 'Toronto', country: 'CA', names: ['pearson'] },
+    { code: 'YUL', city: 'Montreal', country: 'CA', names: ['trudeau', 'dorval'] },
+    { code: 'YVR', city: 'Vancouver', country: 'CA', names: ['vancouver international'] },
+
+    // — Rest of world —
+    { code: 'DXB', city: 'Dubai', country: 'AE', names: ['dubai international'] },
+    { code: 'DWC', city: 'Dubai', country: 'AE', names: ['al maktoum'] },
+    { code: 'AUH', city: 'Abu Dhabi', country: 'AE', names: ['zayed international', 'abu dhabi international'] },
+    { code: 'DOH', city: 'Doha', country: 'QA', names: ['hamad international'] },
+    { code: 'SIN', city: 'Singapore', country: 'SG', names: ['changi'] },
+    { code: 'HKG', city: 'Hong Kong', country: 'HK', names: ['chek lap kok', 'hong kong international'] },
+    { code: 'NRT', city: 'Tokyo', country: 'JP', names: ['narita'] },
+    { code: 'HND', city: 'Tokyo', country: 'JP', names: ['haneda'] },
+    { code: 'KIX', city: 'Osaka', country: 'JP', names: ['kansai'] },
+    { code: 'ITM', city: 'Osaka', country: 'JP', names: ['itami'] },
+    { code: 'ICN', city: 'Seoul', country: 'KR', names: ['incheon'] },
+    { code: 'GMP', city: 'Seoul', country: 'KR', names: ['gimpo', 'kimpo'] },
+    { code: 'PVG', city: 'Shanghai', country: 'CN', names: ['pudong'] },
+    { code: 'SHA', city: 'Shanghai', country: 'CN', names: ['hongqiao'] },
+    { code: 'PEK', city: 'Beijing', country: 'CN', names: ['beijing capital'] },
+    { code: 'PKX', city: 'Beijing', country: 'CN', names: ['daxing'] },
+    { code: 'BKK', city: 'Bangkok', country: 'TH', names: ['suvarnabhumi'] },
+    { code: 'DMK', city: 'Bangkok', country: 'TH', names: ['don mueang', 'don muang'] },
+    { code: 'DEL', city: 'Delhi', country: 'IN', names: ['indira gandhi'] },
+    { code: 'BOM', city: 'Mumbai', country: 'IN', names: ['chhatrapati shivaji'] },
+    { code: 'SYD', city: 'Sydney', country: 'AU', names: ['kingsford smith'] },
+    { code: 'MEL', city: 'Melbourne', country: 'AU', names: ['tullamarine'] },
+    { code: 'AKL', city: 'Auckland', country: 'NZ', names: ['auckland airport'] },
+    { code: 'GRU', city: 'Sao Paulo', country: 'BR', names: ['guarulhos', 'são paulo/guarulhos'] },
+    { code: 'CGH', city: 'Sao Paulo', country: 'BR', names: ['congonhas'] },
+    { code: 'GIG', city: 'Rio de Janeiro', country: 'BR', names: ['galeão', 'galeao', 'tom jobim'] },
+    { code: 'EZE', city: 'Buenos Aires', country: 'AR', names: ['ezeiza', 'ministro pistarini'] },
+    { code: 'AEP', city: 'Buenos Aires', country: 'AR', names: ['aeroparque', 'jorge newbery'] },
+    { code: 'SCL', city: 'Santiago', country: 'CL', names: ['arturo merino benítez', 'arturo merino benitez'] },
+    { code: 'BOG', city: 'Bogota', country: 'CO', names: ['el dorado'] },
+    { code: 'LIM', city: 'Lima', country: 'PE', names: ['jorge chávez', 'jorge chavez'] },
+    { code: 'PTY', city: 'Panama City', country: 'PA', names: ['tocumen'] },
+    { code: 'JNB', city: 'Johannesburg', country: 'ZA', names: ['o r tambo', 'oliver tambo', 'o.r. tambo'] },
+    { code: 'CPT', city: 'Cape Town', country: 'ZA', names: ['cape town international'] },
+    { code: 'CAI', city: 'Cairo', country: 'EG', names: ['cairo international'] },
+    { code: 'TLV', city: 'Tel Aviv', country: 'IL', names: ['ben gurion'] },
+  ];
+
+  const byCode = new Map(AIRPORTS.map((a) => [a.code, a]));
+
+  /* Cities served by more than one airport in the table above. */
+  const cityIndex = (() => {
+    const m = new Map();
+    for (const a of AIRPORTS) {
+      const key = a.city.toLowerCase();
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(a);
+    }
+    return m;
+  })();
+
+  const flatten = (address) => (Array.isArray(address) ? address.join(' ') : String(address || ''))
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  /**
+   * Words that look like an IATA code but are ordinary English or shipping
+   * shorthand. Without this "THE", "AIR" and "EUR" all read as airports.
+   */
+  const NOT_CODES = new Set([
+    'THE', 'AND', 'FOR', 'AIR', 'EUR', 'USD', 'GBP', 'VAT', 'CIF', 'FOB', 'EXW',
+    'DDP', 'DAP', 'ETA', 'ETD', 'PDF', 'INC', 'LLC', 'LTD', 'SAS', 'GMB', 'BOX',
+    'STE', 'AVE', 'RUE', 'VIA', 'KGS', 'PCS', 'NET', 'TEL', 'FAX', 'ATT', 'REF',
+    'COL', 'CON', 'DEL', 'LOS', 'LAS', 'SAN', 'NEW', 'ONE', 'TWO', 'SIX', 'TEN',
+  ]);
+
+  /**
+   * Find the airport for a delivery address.
+   *
+   * Returns `{ code, source, reason, choices }`. `source` is one of:
+   *   'printed'   — a code already in the address; nothing was derived
+   *   'name'      — the address names the airport
+   *   'city'      — the address names a city with exactly one airport
+   *   ''          — nothing found, or the city has several and none was chosen
+   *
+   * When several airports are possible, `code` is empty and `choices` lists
+   * them. The caller must ask; this function will not pick.
+   */
+  function airportForAddress(address) {
+    const text = flatten(address);
+    if (!text) return { code: '', source: '', reason: 'no delivery address to read', choices: [] };
+    const folded = fold(text);
+
+    // 1. A code already on the document beats anything derived from it.
+    for (const raw of text.toUpperCase().match(/\b[A-Z]{3}\b/g) || []) {
+      if (NOT_CODES.has(raw) || !byCode.has(raw)) continue;
+      const a = byCode.get(raw);
+      return {
+        code: a.code, source: 'printed', airport: a, choices: [],
+        reason: 'the address already carries the code ' + a.code,
+      };
+    }
+
+    // 2. The airport named in words.
+    const named = [];
+    for (const a of AIRPORTS) {
+      if (a.names.some((n) => folded.includes(fold(n)))) named.push(a);
+    }
+    if (named.length === 1) {
+      return {
+        code: named[0].code, source: 'name', airport: named[0], choices: [],
+        reason: 'the address names ' + named[0].city + ' ' + named[0].code,
+      };
+    }
+    if (named.length > 1) {
+      return {
+        code: '', source: '', airport: null, choices: named,
+        reason: 'the address matches more than one airport (' + named.map((a) => a.code).join(', ') + ')',
+      };
+    }
+
+    // 3. The city, but only where the city means one airport.
+    const hits = [];
+    for (const [city, list] of cityIndex) {
+      // Word-boundary match, so "Cork" never matches inside another word.
+      const re = new RegExp('(^|[^a-z])' + city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z]|$)');
+      if (re.test(folded)) hits.push(...list);
+    }
+    if (hits.length === 1) {
+      return {
+        code: hits[0].code, source: 'city', airport: hits[0], choices: [],
+        reason: 'the address is in ' + hits[0].city + ', served by ' + hits[0].code,
+      };
+    }
+    if (hits.length > 1) {
+      const city = hits[0].city;
+      return {
+        code: '', source: '', airport: null, choices: hits,
+        reason: city + ' has ' + hits.length + ' airports (' + hits.map((a) => a.code).join(', ')
+          + ') — the address does not say which',
+      };
+    }
+
+    return {
+      code: '', source: '', airport: null, choices: [],
+      reason: 'no airport in the table matches this address',
+    };
+  }
+
+  const airportByCode = (code) => byCode.get(String(code || '').trim().toUpperCase()) || null;
+
+  const airportLabel = (a) => (a ? a.code + ' — ' + (a.names[0] || a.city) + ', ' + a.city : '');
+
+  Object.assign(AMI, {
+    AIRPORTS, airportForAddress, airportByCode, airportLabel,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
@@ -3309,6 +3889,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
   const CONFIG_PATH = 'workspace.json';
   const TEMPLATE_DIR = 'templates';
+  const ATTACH_DIR = 'attachments';
   const SCHEMA_VERSION = 1;
 
   /** The counterparties a template can address. */
@@ -3350,13 +3931,18 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       ],
       users: [],
       accounts: [],
-      settings: { autoCloseInvoiced: true },
+      settings: { excludeClosed: false },
     };
   }
 
   function normaliseWorkspace(raw) {
     const ws = Object.assign(defaultWorkspace(), raw || {});
-    ws.settings = Object.assign({ autoCloseInvoiced: true }, ws.settings || {});
+    // `autoCloseInvoiced` was a rule that moved invoiced orders to a separate
+    // closed stage. The two stages are now one, so the rule has nothing to do —
+    // the key is dropped rather than honoured, and old files still load.
+    const settings = Object.assign({}, ws.settings || {});
+    delete settings.autoCloseInvoiced;
+    ws.settings = Object.assign({ excludeClosed: false }, settings);
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => ({
       id: slug(u.id || u.name),
@@ -3391,6 +3977,15 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
           trackerPath: it.trackerPath || '',
           sheet: it.sheet || '',
           contacts: Object.assign({ vendor: {}, trucker: {}, customer: {}, internal: {} }, it.contacts || {}),
+          // Files that go on every message for this item — a spec sheet, a
+          // customs form. `roles` empty means every kind of message.
+          attachments: (it.attachments || []).map((f) => ({
+            path: f.path || '',
+            name: f.name || (f.path || '').split('/').pop(),
+            roles: Array.isArray(f.roles) ? f.roles.slice() : [],
+            addedBy: f.addedBy || '',
+            addedAt: f.addedAt || '',
+          })).filter((f) => f.path),
           notes: it.notes || '',
         };
       });
@@ -3405,6 +4000,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
           trackerPath: a.trackerPath || '',
           sheet: a.sheet || '',
           contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+          attachments: [],
           notes: '',
         });
       }
@@ -3521,6 +4117,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       name: name || '',
       product: '', navCode: '', trackerPath: '', sheet: '',
       contacts: { vendor: {}, trucker: {}, customer: {}, internal: {} },
+      attachments: [],
       notes: '',
     };
     account.items.push(item);
@@ -3617,6 +4214,16 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       html: s.slice(end + META_CLOSE.length).replace(/^\r?\n/, ''),
     });
   }
+
+  /**
+   * Standing attachments live in the shared folder beside the templates, so a
+   * colleague opening the same workspace sends the same files.
+   */
+  const attachDirFor = (accountId, itemId) => ATTACH_DIR + '/' + accountId + '/' + itemId;
+
+  /** The standing attachments that apply to one kind of message. */
+  const attachmentsForRole = (item, role) => ((item && item.attachments) || [])
+    .filter((f) => !f.roles.length || f.roles.includes(role));
 
   const templateDirFor = (accountId) => TEMPLATE_DIR + '/' + accountId;
   const templatePathFor = (accountId, templateId) => templateDirFor(accountId) + '/' + templateId + '.html';
@@ -3797,7 +4404,8 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   }
 
   Object.assign(AMI, {
-    CONFIG_PATH, TEMPLATE_DIR, ROLES, SCHEMA_VERSION,
+    CONFIG_PATH, TEMPLATE_DIR, ATTACH_DIR, ROLES, SCHEMA_VERSION,
+    attachDirFor, attachmentsForRole,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,
     accountItems, findItem, addItem, matchItemForPo,
@@ -4019,40 +4627,48 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   const STATUS_PATH = 'order-status.json';
 
   /**
-   * The pipeline, in order. `step` drives the ordinal colour ramp and the
-   * kanban column order; `open` marks the stages that still need work.
+   * The pipeline, in order. `step` drives the ordinal ramp and the kanban column
+   * order; `open` marks the stages that still need work; `pattern` is the fill
+   * that carries the stage without relying on hue.
+   *
+   * Invoicing ends the order. This workspace draws no line between billed and
+   * reconciled, so the two are one terminal stage rather than a rule that moves
+   * orders from one to the other.
    */
   const ORDER_STATUSES = [
     {
-      id: 'placed', step: 1, open: true,
+      id: 'placed', step: 1, open: true, pattern: 'solid',
       label: 'Order placed – awaiting shipment', short: 'Awaiting shipment',
       hint: 'Sent to the winery; nothing has been collected yet.',
     },
     {
-      id: 'transit', step: 2, open: true,
+      id: 'transit', step: 2, open: true, pattern: 'diagonal',
       label: 'In transit', short: 'In transit',
       hint: 'Collected from the cellars, not yet delivered.',
     },
     {
-      id: 'delivered', step: 3, open: true,
+      id: 'delivered', step: 3, open: true, pattern: 'horizontal',
       label: 'Delivered', short: 'Delivered',
-      hint: 'Arrived at the delivery point; paperwork may still be open.',
+      hint: 'Arrived at the delivery point, not yet invoiced.',
     },
     {
-      id: 'invoiced', step: 4, open: true,
-      label: 'Invoiced', short: 'Invoiced',
-      hint: 'Billed out. Still open until it is reconciled and closed.',
-    },
-    {
-      id: 'closed', step: 5, open: false,
-      label: 'Closed', short: 'Closed',
-      hint: 'Received, invoiced and reconciled — the end of the line. '
-        + 'Not derivable from the tracker, so it only ever comes from a person.',
+      id: 'invoiced', step: 4, open: false, pattern: 'vertical', terminal: true,
+      label: 'Invoiced and Closed', short: 'Invoiced and Closed',
+      hint: 'Billed out, and closed by that fact — an invoiced order is finished here.',
     },
   ];
 
-  const statusById = (id) => ORDER_STATUSES.find((s) => s.id === id) || null;
+  /* Statuses stored before the two terminal stages became one. */
+  const LEGACY_STATUS_IDS = { closed: 'invoiced' };
+
+  const canonicalStatusId = (id) => {
+    const s = String(id == null ? '' : id);
+    return Object.prototype.hasOwnProperty.call(LEGACY_STATUS_IDS, s) ? LEGACY_STATUS_IDS[s] : s;
+  };
+
+  const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
+  const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
 
   /* ------------------------------------------------------------------ *
    * Store
@@ -4112,7 +4728,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   function setStatus(doc, key, statusId, by, note) {
     if (!statusById(statusId)) throw new Error('Unknown status "' + statusId + '".');
     doc.entries[key] = {
-      status: statusId,
+      status: canonicalStatusId(statusId),
       updated: new Date().toISOString(),
       updatedBy: by || '',
       note: note || '',
@@ -4131,7 +4747,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
   /* Tracker columns the status model reads, most advanced stage first. */
   const STAGE_COLUMNS = [
-    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded' },
+    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded, which closes the order' },
     { statusId: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, reason: 'a delivery date is recorded' },
     { statusId: 'transit', re: /^Actual Collection Date/i, reason: 'a collection date is recorded' },
     { statusId: 'placed', re: /^PO date sent to winery/i, reason: 'the PO has been sent to the winery' },
@@ -4247,27 +4863,22 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
    * A person's selection always beats the tracker's implication, and the source
    * is reported so the interface can show which of the two it is.
    */
-  function effectiveStatus(order, statusDoc, options) {
-    const opts = options || {};
+  function effectiveStatus(order, statusDoc) {
     const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
     if (entry && statusById(entry.status)) {
+      // A status recorded as "closed" before the terminal stages merged reads as
+      // the merged stage now, so old records keep meaning what they meant.
+      const canonical = canonicalStatusId(entry.status);
+      const renamed = canonical !== entry.status;
       return {
-        statusId: entry.status, source: 'set',
+        statusId: canonical, source: 'set',
         updated: entry.updated || '', updatedBy: entry.updatedBy || '', note: entry.note || '',
-        reason: 'set by ' + (entry.updatedBy || 'someone') + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : ''),
+        reason: 'set by ' + (entry.updatedBy || 'someone')
+          + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '')
+          + (renamed ? ' (recorded as “closed”, before invoiced and closed became one stage)' : ''),
       };
     }
     if (order.derived) {
-      // A workspace rule may carry an invoiced order straight to closed. It only
-      // ever applies to a stage the tracker implied — an explicit choice stands.
-      if (opts.autoCloseInvoiced && order.derived.statusId === 'invoiced') {
-        return {
-          statusId: 'closed', source: 'auto',
-          updated: '', updatedBy: '', note: '',
-          reason: 'From the tracker: ' + order.derived.reason
-            + '. Closed automatically, because this workspace treats invoiced orders as closed.',
-        };
-      }
       return {
         statusId: order.derived.statusId, source: 'derived',
         updated: '', updatedBy: '', note: '',
@@ -4294,10 +4905,10 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   }
 
   /** Attach the effective status and aging to each order. */
-  function decorate(orders, statusDoc, today, options) {
+  function decorate(orders, statusDoc, today) {
     const now = today || new Date();
     return orders.map((o) => {
-      const status = effectiveStatus(o, statusDoc, options);
+      const status = effectiveStatus(o, statusDoc);
       return Object.assign({}, o, {
         status,
         isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
@@ -4309,10 +4920,23 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   function countByStatus(orders) {
     const counts = emptyCounts();
     for (const o of orders) {
-      if (!o.status.statusId) counts.unset++;
-      else counts[o.status.statusId]++;
+      const id = canonicalStatusId(o.status.statusId);
+      if (!id || !(id in counts)) counts.unset++;
+      else counts[id]++;
     }
     return counts;
+  }
+
+  /**
+   * Split orders by whether they are finished, so a view can leave the finished
+   * ones out. Kept here rather than in the interface, because "finished" is a
+   * property of the pipeline, not of any one page.
+   */
+  function partitionClosed(orders) {
+    const closed = [];
+    const rest = [];
+    for (const o of orders) (o.isOpen === false ? closed : rest).push(o);
+    return { closed, open: rest };
   }
 
   /* Thresholds are stated in the interface, so "attention" is never a black box. */
@@ -4435,11 +5059,11 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   }
 
   Object.assign(AMI, {
-    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS,
-    statusById, isOpenStatus, statusKey,
+    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS,
+    statusById, isOpenStatus, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
     deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
-    summariseAccount, buildAccountSummary, daysSince,
+    partitionClosed, summariseAccount, buildAccountSummary, daysSince,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
@@ -4463,6 +5087,54 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const fmt = (n) => (n == null || !Number.isFinite(n) ? '—' : n.toLocaleString());
+
+  /* ------------------------------------------------------------------ *
+   * Stage fills
+   * ------------------------------------------------------------------ *
+   *
+   * A stage is drawn with a hue AND a weave, because hue alone excludes a
+   * reader with colour vision deficiency — and on this pipeline the four stages
+   * sit on one hue by design, which makes them the hardest case. The weave order
+   * is solid, diagonal, horizontal, vertical, matching pipeline order.
+   */
+
+  const PATTERN_WORD = {
+    solid: 'solid', diagonal: 'diagonal stripes',
+    horizontal: 'horizontal stripes', vertical: 'vertical stripes',
+  };
+
+  /** The class that paints a stage. Everything showing a stage uses this. */
+  const stageClass = (step) => 'stage-fill stage-' + step;
+
+  /** Spoken form of a stage's fill, for tooltips and screen readers. */
+  const patternWord = (status) => PATTERN_WORD[(status && status.pattern) || 'solid'] || 'solid';
+
+  /**
+   * SVG cannot reach the CSS gradients, so stage fills are declared once per
+   * chart as `<pattern>` elements referencing the same custom properties.
+   */
+  function stagePatternDefs(steps) {
+    const list = steps || [1, 2, 3, 4];
+    const body = list.map((n) => {
+      const ink = 'var(--stage-ink-' + n + ')';
+      const bg = '<rect width="8" height="8" fill="var(--stage-' + n + ')"/>';
+      if (n === 1) return pat(n, bg);
+      if (n === 2) {
+        return pat(n, bg + '<path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="' + ink
+          + '" stroke-width="3"/>');
+      }
+      if (n === 3) return pat(n, bg + '<rect y="4" width="8" height="3" fill="' + ink + '"/>');
+      return pat(n, bg + '<rect x="4" width="3" height="8" fill="' + ink + '"/>');
+    }).join('');
+    return '<defs>' + body + '</defs>';
+
+    function pat(n, inner) {
+      return '<pattern id="stagepat-' + n + '" patternUnits="userSpaceOnUse" width="8" height="8">'
+        + inner + '</pattern>';
+    }
+  }
+
+  const stagePaint = (step) => 'url(#stagepat-' + step + ')';
 
   /* ------------------------------------------------------------------ *
    * Stat tiles
@@ -4489,8 +5161,11 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
    * ------------------------------------------------------------------ */
 
   /**
-   * One stacked bar. Segments carry a 2px surface gap so adjacent stages stay
-   * separable without relying on hue contrast alone.
+   * One stacked bar. Segments carry a 2px surface gap and their own weave, so
+   * adjacent stages stay separable without relying on hue contrast.
+   *
+   * Each segment is `{ value, label, step, key }`; `key` makes the segment
+   * clickable for drill-down.
    */
   function stackedBar(segments, opts) {
     const o = opts || {};
@@ -4500,24 +5175,32 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     }
     const parts = segments.filter((s) => s.value > 0).map((s) => {
       const pct = (s.value / total) * 100;
+      const patterned = s.step && s.step !== 1;
       const label = pct >= (o.labelThreshold || 11)
-        ? '<span class="bar-inline"' + (s.ink ? ' style="--ink:' + s.ink + '"' : '') + '>'
-          + esc(s.value) + '</span>'
+        ? '<span class="bar-inline' + (patterned ? ' on-pattern' : '') + '">' + esc(s.value) + '</span>'
         : '';
-      return '<span class="bar-seg" style="flex:' + s.value + ';background:' + s.color + ';"'
-        + ' data-tip="' + esc(s.label + ': ' + fmt(s.value) + ' of ' + fmt(total)
-          + ' (' + Math.round(pct) + '%)') + '">' + label + '</span>';
+      const tip = s.label + ': ' + fmt(s.value) + ' of ' + fmt(total) + ' (' + Math.round(pct) + '%)'
+        + (s.patternWord ? ' · ' + s.patternWord : '');
+      return '<span class="bar-seg ' + esc(stageClass(s.step || 1)) + '"'
+        + ' style="flex:' + s.value + ';"'
+        + (s.key ? ' data-drill="' + esc(s.key) + '" tabindex="0" role="button"' : '')
+        + ' data-tip="' + esc(tip) + '">' + label + '</span>';
     }).join('');
     return '<div class="bar-track">' + parts + '</div>';
   }
 
-  /** Shared key for anything drawn with the status ramp. */
+  /**
+   * Shared key for anything drawn with the status ramp. Names the weave as well
+   * as showing it, so the key still works when read aloud or printed in grey.
+   */
   function statusLegend(statuses, counts) {
     return '<ul class="legend">' + statuses.map((s) => {
       const n = counts ? counts[s.id] : null;
-      return '<li data-tip="' + esc(s.hint) + '">'
-        + '<span class="swatch" style="background:var(--stage-' + s.step + ');"></span>'
+      const word = patternWord(s);
+      return '<li data-tip="' + esc(s.hint + ' Shown as ' + word + '.') + '">'
+        + '<span class="swatch ' + esc(stageClass(s.step)) + '" aria-hidden="true"></span>'
         + '<span class="legend-label">' + esc(s.short) + '</span>'
+        + '<span class="legend-pattern">' + esc(word) + '</span>'
         + (n != null ? '<span class="legend-value">' + fmt(n) + '</span>' : '')
         + '</li>';
     }).join('') + '</ul>';
@@ -4541,10 +5224,16 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     return '<div class="bar-list">' + rows.map((r) => {
       const total = r.segments ? r.segments.reduce((a, s) => a + s.value, 0) : (r.value || 0);
       const scale = max ? (total / max) * 100 : 0;
+      // A row that measures something other than pipeline position (an age, a
+      // count) takes the reserved status palette, never a stage weave — a weave
+      // there would claim a stage the row does not have.
+      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.step || 3);
       const inner = r.segments
         ? stackedBar(r.segments, { labelThreshold: 14 })
-        : '<div class="bar-track"><span class="bar-seg" style="flex:1;background:'
-          + (r.color || 'var(--stage-3)') + ';" data-tip="' + esc(r.tip || (r.label + ': ' + fmt(total))) + '"></span></div>';
+        : '<div class="bar-track"><span class="bar-seg ' + esc(paint) + '"'
+          + ' style="flex:1;"'
+          + (r.key ? ' data-drill="' + esc(r.key) + '" tabindex="0" role="button"' : '')
+          + ' data-tip="' + esc(r.tip || (r.label + ': ' + fmt(total))) + '"></span></div>';
       return '<div class="bar-row"' + (r.onclickKey ? ' data-row-key="' + esc(r.onclickKey) + '"' : '') + '>'
         + '<div class="bar-label">' + esc(r.label)
         + (r.sub ? '<span class="bar-sub">' + esc(r.sub) + '</span>' : '') + '</div>'
@@ -4595,6 +5284,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       const r = Math.min(4, barW / 2);
       return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1)
         + '" height="' + Math.max(h, p.value ? 2 : 0).toFixed(1) + '" rx="' + r + '" class="col"'
+        + (p.key && p.value ? ' data-drill="' + esc(p.key) + '" tabindex="0" role="button"' : '')
         + ' data-tip="' + esc(p.label + ': ' + fmt(p.value) + (o.unit ? ' ' + o.unit : '')) + '"/>'
         + (showLabel && p.value
           ? '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (y - 5).toFixed(1)
@@ -4631,8 +5321,9 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     if (!status || !status.id) {
       return '<span class="pill pill-unset"' + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>Not set</span>';
     }
-    return '<span class="pill pill-stage" style="--pill:var(--stage-' + status.step + ');"'
-      + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>' + esc(o.short ? status.short : status.label) + '</span>';
+    const tip = [o.tip, 'Shown as ' + patternWord(status) + '.'].filter(Boolean).join(' ');
+    return '<span class="pill pill-stage ' + esc(stageClass(status.step)) + '"'
+      + ' data-tip="' + esc(tip) + '">' + esc(o.short ? status.short : status.label) + '</span>';
   }
 
   /* ------------------------------------------------------------------ *
@@ -4665,6 +5356,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   Object.assign(AMI, {
     statTiles, stackedBar, statusLegend, barList, columnChart,
     healthPill, statusPill, monthlySeries, MONTH_SHORT,
+    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
@@ -4711,6 +5403,53 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     toastTimer = setTimeout(() => t.remove(), 5600);
   }
 
+  /* ------------------------------------------------------------------ *
+   * Overlay
+   * ------------------------------------------------------------------ *
+   *
+   * One modal, used for enlarging a chart and for listing the orders behind a
+   * mark. Closing is deliberately easy — Escape, the backdrop, or the button —
+   * because it only ever shows a bigger view of what is already on the page.
+   */
+
+  let closeOverlay = null;
+
+  function openOverlay(title, sub, buildBody, opts) {
+    const o = opts || {};
+    if (closeOverlay) closeOverlay();
+
+    const body = el('div', { class: 'overlay-body' });
+    const shell = el('div', { class: 'overlay-panel' + (o.wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [
+      el('div', { class: 'overlay-head' }, [
+        el('div', {}, [
+          el('h2', { text: title }),
+          sub ? el('p', { class: 'overlay-sub', text: sub }) : null,
+        ].filter(Boolean)),
+        el('span', { class: 'spacer' }),
+        ...(o.actions || []),
+        el('button', { class: 'btn small', text: 'Close', onclick: () => closeOverlay && closeOverlay() }),
+      ]),
+      body,
+    ]);
+    const back = el('div', { class: 'overlay' }, [shell]);
+
+    buildBody(body);
+
+    const onKey = (e) => { if (e.key === 'Escape') closeOverlay && closeOverlay(); };
+    back.addEventListener('mousedown', (e) => { if (e.target === back) closeOverlay && closeOverlay(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(back);
+    document.body.classList.add('overlay-open');
+
+    closeOverlay = () => {
+      document.removeEventListener('keydown', onKey);
+      back.remove();
+      document.body.classList.remove('overlay-open');
+      closeOverlay = null;
+    };
+    return closeOverlay;
+  }
+
   function download(bytes, name, mime) {
     const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: mime || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
@@ -4736,10 +5475,10 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   };
 
   /* How an order's stage was arrived at. */
-  const SOURCE_CHIP = { set: 'ok', derived: 'computed', auto: 'carried', none: 'manual' };
-  const SOURCE_SHORT = { set: 'set', derived: 'from tracker', auto: 'auto-closed', none: 'none' };
+  const SOURCE_CHIP = { set: 'ok', derived: 'computed', none: 'manual' };
+  const SOURCE_SHORT = { set: 'set', derived: 'from tracker', none: 'none' };
   const SOURCE_LONG = {
-    set: 'set by a person', derived: 'from tracker', auto: 'closed by rule', none: 'not set',
+    set: 'set by a person', derived: 'from tracker', none: 'not set',
   };
   const sourceChip = (s) => el('span', { class: 'chip ' + s, text: SOURCE_LABEL[s] || s });
 
@@ -4865,6 +5604,10 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     portfolio: null,          // [{ account, item, sheet, header, config, orders, followUps }]
     portfolioLoading: false,
     filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
+    excludeClosed: false,
+    lastStrippedNote: null,   // { templateId, text, html } after an import trimmed a note
+    draftAttachments: [],     // files added to the current draft only, never saved
+    drill: null,              // { title, sub, orders } while a chart detail is open
     summaryHtml: '',
     // Memory across closing the app
     rememberedFolder: null,
@@ -4885,11 +5628,32 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   const visibleAccounts = () => (state.workspace && state.userId ? AMI.accountsForUser(state.workspace, state.userId) : []);
   const itemState = (id) => state.itemStates.get(id) || null;
 
-  /** Workspace-wide rules that change how a stage is resolved. */
-  const statusOptions = () => ({
-    autoCloseInvoiced: !!(state.workspace && state.workspace.settings
-      && state.workspace.settings.autoCloseInvoiced),
-  });
+  /**
+   * Whether finished orders are being left out of the view. A per-person choice,
+   * not a workspace rule — hiding them changes what you look at, not what is true.
+   */
+  const excludingClosed = () => !!state.excludeClosed;
+
+  /** Drop the terminal stage when the view is set to hide it. */
+  const applyClosedFilter = (orders) => (excludingClosed() ? orders.filter((o) => o.isOpen) : orders);
+
+  function setExcludeClosed(on) {
+    state.excludeClosed = !!on;
+    saveLocal({ excludeClosed: state.excludeClosed });
+  }
+
+  /** The switch that hides finished orders, wired to re-render its own page. */
+  function closedToggle(rerender) {
+    const box = el('input', {
+      type: 'checkbox', checked: excludingClosed(),
+      onchange: (e) => { setExcludeClosed(e.target.checked); rerender(); },
+    });
+    return el('label', {
+      class: 'check-inline',
+      'data-tip': 'Leaves out orders at the Invoiced and Closed stage. Nothing is deleted — '
+        + 'the counts and totals on this page follow the switch.',
+    }, [box, document.createTextNode('Hide invoiced and closed')]);
+  }
 
   function poColumn(header) {
     const c = header.columns.find((x) => /^PO\s*#/i.test(x.header));
@@ -5058,6 +5822,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     }
 
     const saved = loadLocal();
+    state.excludeClosed = !!saved.excludeClosed;
     if (saved.userId && workspace.users.some((u) => u.id === saved.userId)) state.userId = saved.userId;
     else if (workspace.users.length === 1) state.userId = workspace.users[0].id;
 
@@ -5388,6 +6153,13 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
                     renderHeaderBar(); renderWorkspace(); renderEmail(); renderTemplates();
                   },
                 }),
+              // A wrong workbook or sheet shows up here first, so the fix lives
+              // here too rather than three tabs away.
+              el('button', {
+                class: 'btn small', text: 'Tracker',
+                'data-tip': 'Change which workbook and sheet this item posts into.',
+                onclick: () => editItemTracker(account.id, item.id),
+              }),
             ]),
           ]));
         }
@@ -5399,7 +6171,19 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
           if (st && st.error) {
             host.appendChild(el('div', { class: 'msg warn' }, [
               el('span', { class: 'icon', text: '!' }),
-              el('div', {}, [el('strong', { text: (item.name || item.id) + ': ' + st.error })]),
+              el('div', {}, [
+                el('strong', { text: (item.name || item.id) + ': ' + st.error }),
+                el('span', {
+                  class: 'detail',
+                  text: 'If the workbook moved or the wrong one was linked, point this item at the right one.',
+                }),
+                el('div', { class: 'btn-row' }, [
+                  el('button', {
+                    class: 'btn small', text: 'Change tracker',
+                    onclick: () => editItemTracker(account.id, item.id),
+                  }),
+                ]),
+              ]),
             ]));
           }
         }
@@ -5865,8 +6649,14 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
     const recipients = AMI.resolveRecipients(account, item, role, first, user);
 
+    // A template that quotes an airport code wants the delivery airport. The PO
+    // names it in words, so the code is looked up from the address — reported as
+    // derived, and refused outright where the city has more than one airport.
+    const deliveryLines = first ? (first.finalDeliveryTo.length ? first.finalDeliveryTo : first.shipToBlock) : [];
+    const airport = AMI.airportForAddress(deliveryLines);
+
     return {
-      rows, included, first, recipients, item,
+      rows, included, first, recipients, item, airport,
       vars: {
         account: account.name || '',
         item: item ? item.name : '',
@@ -5894,8 +6684,427 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         today: AMI.formatEmailDate(new Date()),
         table: AMI.orderTableHtml(rows),
         signature: user.signature || '',
+        airport: airport.code,
+        airportCode: airport.code,
+        airportName: airport.airport ? airport.airport.names[0] || airport.airport.city : '',
       },
     };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Placeholder audit
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Where each placeholder's value comes from. Stated per field rather than as
+   * one blanket claim, because a draft mixes values read off the PO with values
+   * computed from the tracker and values a person typed — and the difference
+   * matters when someone is checking a draft before it goes out.
+   */
+  const VAR_SOURCE = {
+    account: 'the account', item: 'the item', division: 'the account',
+    customer: 'the tracker', product: 'the PO', size: 'the PO',
+    vendorContact: 'the PO', recipientName: 'the saved contact', senderName: 'your profile',
+    poCount: 'the loaded POs', poGroups: 'the loaded POs', poList: 'the loaded POs',
+    docsEmail: 'the PO', finalDelivery: 'the PO', collectionAddress: 'the PO',
+    deliveryAddress: 'the PO', collectionDate: 'the tracker', totalPallets: 'computed',
+    totalCases: 'computed', totalWeight: 'computed', forwarder: 'the PO',
+    today: "today's date", table: 'the POs and the tracker', signature: 'your profile',
+    airport: 'the delivery address', airportCode: 'the delivery address',
+    airportName: 'the delivery address',
+  };
+
+  const isAirportField = (name) => /airport/i.test(name);
+
+  /**
+   * One row per placeholder the template uses: its value, where that came from,
+   * and whether anything is missing. Nothing is invented to fill a gap — a blank
+   * stays blank and is reported.
+   */
+  function auditPlaceholders(template, ctx) {
+    const used = AMI.templatePlaceholders((template.html || '') + ' ' + (template.subject || ''));
+    const manual = (state.emailOverrides.vars) || {};
+
+    return used.map((name) => {
+      const typed = manual[name];
+      if (typed != null && String(typed).trim() !== '') {
+        return { name, value: String(typed), source: 'you typed it', filled: true, manual: true };
+      }
+
+      const value = ctx.vars[name];
+      const filled = value != null && String(value).trim() !== '';
+
+      if (isAirportField(name) && !filled) {
+        return {
+          name, value: '', filled: false, airport: true,
+          source: 'the delivery address',
+          why: ctx.airport.reason,
+          choices: ctx.airport.choices || [],
+        };
+      }
+
+      return {
+        name,
+        value: filled ? String(value) : '',
+        filled,
+        source: VAR_SOURCE[name] || 'not a field this portal fills',
+        why: filled ? '' : (VAR_SOURCE[name]
+          ? 'nothing in ' + VAR_SOURCE[name] + ' supplies it'
+          : 'the template asks for a field the portal does not know'),
+        derived: isAirportField(name) && ctx.airport.source !== 'printed',
+        airport: isAirportField(name),
+      };
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Attachments
+   * ------------------------------------------------------------------ *
+   *
+   * Three sources, and the draft says which is which:
+   *   - the PO PDFs for this item, already in hand
+   *   - standing files kept on the item in the shared folder, so every message
+   *     for that item carries them and every colleague sends the same ones
+   *   - files added to this one draft, held in memory and never written anywhere
+   */
+
+  const MIME_BY_EXT = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', doc: 'application/msword', xls: 'application/vnd.ms-excel',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    csv: 'text/csv', txt: 'text/plain', zip: 'application/zip', xml: 'application/xml',
+  };
+
+  const mimeFor = (name) => MIME_BY_EXT[String(name).split('.').pop().toLowerCase()]
+    || 'application/octet-stream';
+
+  /** Everything that goes on this draft, read fresh so a replaced file is current. */
+  async function collectAttachments(item, role, poEntries) {
+    const out = (poEntries || []).map((i) => ({
+      name: i.fileName, mime: 'application/pdf', bytes: i.bytes,
+    }));
+
+    for (const f of AMI.attachmentsForRole(item, role)) {
+      const bytes = await state.store.read(f.path);
+      if (!bytes) {
+        throw new Error('"' + f.name + '" is set to go on every ' + role
+          + ' message but is missing from the shared folder. Remove it from the item, or put the file back.');
+      }
+      out.push({ name: f.name, mime: mimeFor(f.name), bytes });
+    }
+
+    for (const f of state.draftAttachments) out.push(f);
+    return out;
+  }
+
+  /** The attachment controls on a draft. */
+  function attachmentsPanel(account, item, standing, attachBox, included) {
+    const list = el('div', { class: 'attach-list' });
+
+    const redraw = () => {
+      clear(list);
+      for (const f of standing) {
+        list.appendChild(el('div', { class: 'attach-row' }, [
+          el('span', { class: 'chip ok', text: 'every message' }),
+          el('span', { class: 'mono', text: f.name }),
+          el('span', {
+            class: 'note',
+            text: f.roles.length ? 'on ' + f.roles.join(', ') + ' messages' : 'on every kind of message',
+          }),
+        ]));
+      }
+      for (const f of state.draftAttachments) {
+        list.appendChild(el('div', { class: 'attach-row' }, [
+          el('span', { class: 'chip edited', text: 'this draft' }),
+          el('span', { class: 'mono', text: f.name }),
+          el('span', { class: 'note', text: (f.bytes.length / 1024).toFixed(0) + ' KB' }),
+          el('button', {
+            class: 'btn small danger', text: 'Remove',
+            onclick: () => {
+              state.draftAttachments = state.draftAttachments.filter((x) => x !== f);
+              redraw();
+            },
+          }),
+        ]));
+      }
+      if (!standing.length && !state.draftAttachments.length) {
+        list.appendChild(el('p', { class: 'note', text: 'No extra files on this draft.' }));
+      }
+    };
+    redraw();
+
+    const picker = el('input', { type: 'file', multiple: true, hidden: true });
+    picker.addEventListener('change', async () => {
+      for (const file of Array.from(picker.files)) {
+        state.draftAttachments.push({
+          name: file.name, mime: file.type || mimeFor(file.name),
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        });
+      }
+      picker.value = '';
+      redraw();
+    });
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Attachments'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: 'PDFs, standing files, and anything added here' }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('label', { class: 'check-inline' }, [
+          attachBox,
+          document.createTextNode('Attach the ' + included.length + ' PO PDF(s) for ' + item.name),
+        ]),
+        list,
+        picker,
+        el('div', { class: 'btn-row' }, [
+          el('button', { class: 'btn small', text: 'Add a file to this draft', onclick: () => picker.click() }),
+          el('button', {
+            class: 'btn small', text: 'Manage files sent with every message',
+            onclick: () => editItemAttachments(account.id, item.id),
+          }),
+        ]),
+        el('p', {
+          class: 'help',
+          text: 'A file added to this draft is used once and never saved. A standing file lives in '
+            + 'the shared folder, so everyone working this item sends the same one.',
+        }),
+      ]),
+    ]);
+  }
+
+  /**
+   * Standing attachments for an item. Adding one copies it into the shared
+   * folder, because a link to somebody's desktop would break for everyone else.
+   */
+  function editItemAttachments(accountId, itemId) {
+    const account = state.workspace.accounts.find((a) => a.id === accountId);
+    const item = AMI.findItem(account, itemId);
+    if (!item) return;
+
+    openOverlay('Files sent with every message', account.name + ' → ' + (item.name || item.id), (host) => {
+      const body = el('div');
+
+      const draw = () => {
+        clear(body);
+        if (!item.attachments.length) {
+          body.appendChild(el('div', { class: 'empty', text: 'Nothing is sent automatically for this item.' }));
+        } else {
+          const table = el('table', { class: 'data' });
+          table.appendChild(el('thead', {}, [el('tr', {}, [
+            el('th', { text: 'File' }), el('th', { text: 'Goes on' }),
+            el('th', { text: 'Added' }), el('th', {}),
+          ])]));
+          const rows = el('tbody');
+          for (const f of item.attachments) {
+            const roleSel = el('select', { multiple: true, size: 4 },
+              AMI.ROLES.map((r) => el('option', {
+                value: r.id, selected: f.roles.includes(r.id), text: r.name,
+              })));
+            roleSel.addEventListener('change', async () => {
+              f.roles = Array.from(roleSel.selectedOptions).map((o) => o.value);
+              await persistWorkspace();
+            });
+            rows.appendChild(el('tr', {}, [
+              el('td', { class: 'mono', text: f.name }),
+              el('td', {}, [
+                roleSel,
+                el('div', { class: 'note', text: f.roles.length ? '' : 'none selected — goes on every kind' }),
+              ]),
+              el('td', { class: 'note', text: (f.addedBy || 'someone') + (f.addedAt ? ' · ' + f.addedAt.slice(0, 10) : '') }),
+              el('td', {}, [el('button', {
+                class: 'btn small danger', text: 'Remove',
+                onclick: async () => {
+                  if (!window.confirm('Stop sending "' + f.name + '" with every message for this item?\n\n'
+                    + 'The file stays in the shared folder; it just will not be attached any more.')) return;
+                  item.attachments = item.attachments.filter((x) => x !== f);
+                  if (await persistWorkspace()) { draw(); toast('Removed from this item.', 'ok'); }
+                },
+              })]),
+            ]));
+          }
+          table.appendChild(rows);
+          body.appendChild(el('div', { class: 'table-scroll' }, [table]));
+        }
+      };
+      draw();
+
+      const picker = el('input', { type: 'file', multiple: true, hidden: true });
+      picker.addEventListener('change', async () => {
+        const user = currentUser() || {};
+        for (const file of Array.from(picker.files)) {
+          const path = AMI.attachDirFor(account.id, item.id) + '/' + file.name;
+          try {
+            await state.store.write(path, new Uint8Array(await file.arrayBuffer()));
+          } catch (e) {
+            toast('Could not copy ' + file.name + ' into the shared folder: ' + e.message, 'error');
+            continue;
+          }
+          item.attachments = item.attachments.filter((x) => x.path !== path);
+          item.attachments.push({
+            path, name: file.name, roles: [],
+            addedBy: user.name || '', addedAt: new Date().toISOString(),
+          });
+        }
+        picker.value = '';
+        if (await persistWorkspace()) {
+          draw();
+          renderEmail();
+          toast('Copied into the shared folder and set to go with every message.', 'ok');
+        }
+      });
+
+      host.appendChild(el('p', {
+        class: 'help',
+        text: 'These go on every message drafted for this item. Choose which kinds of message a '
+          + 'file belongs on, or leave every kind unselected for all of them.',
+      }));
+      host.appendChild(body);
+      host.appendChild(picker);
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', { class: 'btn primary', text: 'Add a file', onclick: () => picker.click() }),
+      ]));
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: 'The file is copied into the shared folder.' }),
+          el('span', {
+            class: 'detail',
+            text: 'It goes under ' + AMI.attachDirFor(account.id, item.id) + ', so a colleague opening '
+              + 'this workspace attaches the same file. Replacing it there replaces it for everyone.',
+          }),
+        ]),
+      ]));
+    }, { wide: true });
+  }
+
+  /** Values merged in the order: portal-derived, then whatever a person typed. */
+  function mergedVars(ctx) {
+    return Object.assign({}, ctx.vars, state.emailOverrides.vars || {});
+  }
+
+  function setManualVar(name, value) {
+    if (!state.emailOverrides.vars) state.emailOverrides.vars = {};
+    if (value == null || String(value).trim() === '') delete state.emailOverrides.vars[name];
+    else state.emailOverrides.vars[name] = String(value).trim();
+    // The body may already have been edited by hand; leave that alone, but a
+    // body still generated from the template must pick the new value up.
+    renderEmail();
+  }
+
+  /**
+   * The fields this template pulls in, and where each one came from.
+   *
+   * A missing field is the thing most likely to send a wrong email, so it is
+   * raised before the preview rather than left to be noticed in the text. Every
+   * gap gets a box to type the value in, and typing one never edits the
+   * template — it applies to this draft only.
+   */
+  function fieldsPanel(audit, ctx) {
+    const missing = audit.filter((f) => !f.filled);
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Field' }), el('th', { text: 'Value' }),
+      el('th', { text: 'Where it comes from' }), el('th', { text: 'Fill it in' }),
+    ])]));
+    const body = el('tbody');
+
+    for (const f of audit) {
+      let fill = null;
+      if (!f.filled && f.airport && f.choices && f.choices.length) {
+        // Several airports serve this city. Offering the list is the only honest
+        // move — picking one would be a guess dressed up as a lookup.
+        const pick = el('select', {}, [
+          el('option', { value: '', text: 'Which airport?' }),
+          ...f.choices.map((a) => el('option', { value: a.code, text: AMI.airportLabel(a) })),
+        ]);
+        pick.addEventListener('change', () => setManualVar(f.name, pick.value));
+        fill = pick;
+      } else if (!f.filled) {
+        const input = el('input', { type: 'text', placeholder: 'type a value for this draft' });
+        input.addEventListener('change', () => setManualVar(f.name, input.value));
+        fill = input;
+      } else if (f.manual) {
+        fill = el('button', {
+          class: 'btn small', text: 'Clear',
+          onclick: () => setManualVar(f.name, ''),
+        });
+      }
+
+      const chip = f.manual ? el('span', { class: 'chip edited', text: 'typed in' })
+        : (f.filled
+          ? (f.derived ? el('span', { class: 'chip computed', text: 'derived' })
+            : el('span', { class: 'chip pdf', text: 'filled' }))
+          : el('span', { class: 'chip error', text: 'missing' }));
+
+      body.appendChild(el('tr', {}, [
+        el('td', { class: 'mono', text: '{{' + f.name + '}}' }),
+        el('td', {}, [
+          f.filled
+            ? el('span', { text: f.value.length > 90 ? f.value.slice(0, 90) + '…' : f.value.replace(/<[^>]*>/g, ' ') })
+            : el('span', { class: 'faint', text: '—' }),
+        ]),
+        el('td', {}, [chip, document.createTextNode(' '),
+          el('span', { class: 'note', text: f.why || f.source })]),
+        el('td', {}, [fill]),
+      ]));
+    }
+    table.appendChild(body);
+
+    const head = missing.length
+      ? el('div', { class: 'msg warn' }, [
+        el('span', { class: 'icon', text: '!' }),
+        el('div', {}, [
+          el('strong', {
+            text: missing.length + ' field(s) this template needs have no value: '
+              + missing.map((f) => '{{' + f.name + '}}').join(', '),
+          }),
+          el('span', {
+            class: 'detail',
+            text: 'They will go out as empty braces unless you fill them in below. '
+              + 'Nothing is invented to cover a gap.',
+          }),
+        ]),
+      ])
+      : el('div', { class: 'msg ok' }, [
+        el('span', { class: 'icon', text: '✓' }),
+        el('div', {}, [el('strong', { text: 'Every field this template needs has a value.' })]),
+      ]);
+
+    const airportNote = audit.some((f) => f.airport) && ctx.airport.code
+      ? el('p', {
+        class: 'help',
+        text: ctx.airport.source === 'printed'
+          ? 'The airport code is printed on the purchase order.'
+          : 'The airport code was read from the delivery address — ' + ctx.airport.reason
+            + '. Check it before sending.',
+      })
+      : null;
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('Fields in this template'),
+        el('span', { class: 'spacer' }),
+        el('span', {
+          class: 'chip ' + (missing.length ? 'error' : 'ok'),
+          text: (audit.length - missing.length) + ' of ' + audit.length + ' filled',
+        }),
+      ]),
+      el('div', { class: 'body' }, [
+        head,
+        airportNote,
+        el('div', { class: 'table-scroll' }, [table]),
+        el('p', {
+          class: 'help',
+          text: 'Anything typed here applies to this draft only — the template and the '
+            + 'tracker are untouched.',
+        }),
+      ]),
+    ]);
   }
 
   const BUILTIN_VENDOR_TEMPLATE = {
@@ -5962,7 +7171,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     host.appendChild(el('div', { class: 'btn-row' }, AMI.ROLES.map((r) => el('button', {
       class: 'btn small' + (state.selectedRole === r.id ? ' primary' : ''),
       text: r.name,
-      onclick: () => { state.selectedRole = r.id; state.selectedTemplateId = ''; state.emailOverrides = {}; renderEmail(); },
+      onclick: () => { state.selectedRole = r.id; state.selectedTemplateId = ''; state.emailOverrides = {}; state.draftAttachments = []; renderEmail(); },
     }))));
 
     const templates = availableTemplates(state.selectedRole);
@@ -6000,7 +7209,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
     const toInput = el('input', { type: 'text', value: ov.to != null ? ov.to : (template.to || ctx.recipients.to) });
     const ccInput = el('input', { type: 'text', value: ov.cc != null ? ov.cc : (template.cc || ctx.recipients.cc) });
-    const subjInput = el('input', { type: 'text', value: ov.subject != null ? ov.subject : AMI.fillTemplate(template.subject || '', ctx.vars) });
+    const subjInput = el('input', { type: 'text', value: ov.subject != null ? ov.subject : AMI.fillTemplate(template.subject || '', mergedVars(ctx)) });
     toInput.addEventListener('change', () => { ov.to = toInput.value; });
     ccInput.addEventListener('change', () => { ov.cc = ccInput.value; });
     subjInput.addEventListener('change', () => { ov.subject = subjInput.value; });
@@ -6053,17 +7262,11 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       ]));
     }
 
-    const bodyHtml = ov.html != null ? ov.html : AMI.fillTemplate(template.html || '', ctx.vars);
-    const unresolved = AMI.templatePlaceholders(bodyHtml);
-    if (unresolved.length) {
-      host.appendChild(el('div', { class: 'msg warn' }, [
-        el('span', { class: 'icon', text: '!' }),
-        el('div', {}, [
-          el('strong', { text: 'Unfilled placeholder(s): ' + unresolved.map((p) => '{{' + p + '}}').join(', ') }),
-          el('span', { class: 'detail', text: 'No value was available for these. Edit the draft below or correct the template.' }),
-        ]),
-      ]));
-    }
+    const audit = auditPlaceholders(template, ctx);
+    if (audit.length) host.appendChild(fieldsPanel(audit, ctx));
+
+    const vars = mergedVars(ctx);
+    const bodyHtml = ov.html != null ? ov.html : AMI.fillTemplate(template.html || '', vars);
 
     host.appendChild(el('h3', { text: 'Preview' }));
     host.appendChild(el('div', { class: 'email-preview', html: bodyHtml }));
@@ -6078,10 +7281,10 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     ]));
 
     const attachBox = el('input', { type: 'checkbox', checked: state.selectedRole === 'vendor' });
+    const standing = AMI.attachmentsForRole(item, state.selectedRole);
+    host.appendChild(attachmentsPanel(account, item, standing, attachBox, included));
+
     host.appendChild(el('div', { class: 'btn-row' }, [
-      el('label', { style: 'display:flex;align-items:center;gap:7px;font-size:13px;' }, [
-        attachBox, document.createTextNode('Attach the ' + included.length + ' PO PDF(s) for ' + item.name),
-      ]),
       el('span', { class: 'spacer' }),
       el('button', {
         class: 'btn', text: 'Copy body',
@@ -6094,14 +7297,20 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       }),
       el('button', {
         class: 'btn primary', text: 'Download Outlook draft (.eml)',
-        onclick: () => {
+        onclick: async () => {
           const user = currentUser() || {};
+          let files;
+          try {
+            files = await collectAttachments(item, state.selectedRole, attachBox.checked ? included : []);
+          } catch (e) {
+            toast(e.message, 'error');
+            return;
+          }
           const eml = AMI.buildEml({
             from: user.email ? (user.name ? user.name + ' <' + user.email + '>' : user.email) : '',
             to: toInput.value, cc: ccInput.value, subject: subjInput.value,
             html: '<html><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;">' + bodyHtml + '</body></html>',
-            attachments: attachBox.checked
-              ? included.map((i) => ({ name: i.fileName, mime: 'application/pdf', bytes: i.bytes })) : [],
+            attachments: files,
           });
           download(new Blob([eml], { type: 'message/rfc822' }),
             safeName(account.name + ' ' + item.name + ' ' + state.selectedRole + ' ' + (ctx.vars.poGroups || stamp())) + '.eml');
@@ -6203,14 +7412,22 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     const account = currentAccount();
     try {
       const parsed = await AMI.parseTemplateFile(new Uint8Array(await file.arrayBuffer()), file.name);
+
+      // "Use: Aeromexico" and anything after it is a note to whoever files the
+      // template, not part of the message. It comes out of the imported copy;
+      // the source file is only ever read, so its note stays where it is.
+      const trimmed = AMI.stripInternalNote(parsed.html);
+
       const saved = await AMI.saveTemplate(state.store, account.id, {
         label: parsed.subject ? parsed.subject.slice(0, 60) : file.name.replace(/\.[a-z0-9]+$/i, ''),
         role: state.selectedRole, itemId: '',
         subject: parsed.subject, to: parsed.to, cc: parsed.cc,
-        html: parsed.html, source: file.name + ' — ' + parsed.bodySource,
+        html: trimmed.html, source: file.name + ' — ' + parsed.bodySource,
       });
       state.templates = await AMI.listTemplates(state.store, account.id);
-      toast('Imported ' + file.name + ' (' + parsed.bodySource + '). Set its role, item scope and placeholders.', 'ok');
+      if (trimmed.found) state.lastStrippedNote = { templateId: saved.id, text: trimmed.removed, html: parsed.html };
+      toast('Imported ' + file.name + ' (' + parsed.bodySource + ').'
+        + (trimmed.found ? ' The internal note was removed.' : ''), 'ok');
       renderTemplates();
       openTemplateEditor(saved.id);
     } catch (e) {
@@ -6252,6 +7469,9 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     [label, subject, roleSel, scopeSel, body].forEach((n) => n.addEventListener('input', refresh));
     refresh();
 
+    const strippedNote = state.lastStrippedNote && state.lastStrippedNote.templateId === t.id
+      ? state.lastStrippedNote : null;
+
     const item = currentItem();
     const ctxForSuggest = item && posForItem(item.id).length ? emailVars(t.role || 'vendor') : null;
     const suggestions = ctxForSuggest
@@ -6277,6 +7497,23 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
           el('label', { class: 'field' }, [el('span', { text: 'Applies to' }), scopeSel]),
         ]),
         el('label', { class: 'field' }, [el('span', { text: 'Subject line' }), subject]),
+        strippedNote ? el('div', { class: 'msg info' }, [
+          el('span', { class: 'icon', text: 'i' }),
+          el('div', {}, [
+            el('strong', { text: 'An internal note was removed from the end of this template.' }),
+            el('span', { class: 'detail', text: '“' + strippedNote.text + '” — this and everything after it was '
+              + 'taken out of the imported copy. The file you uploaded is untouched.' }),
+            el('div', { class: 'btn-row' }, [el('button', {
+              class: 'btn small', text: 'Put it back',
+              onclick: () => {
+                body.value = strippedNote.html;
+                state.lastStrippedNote = null;
+                refresh();
+                toast('The note is back in the template body. Save to keep it.', 'ok');
+              },
+            })]),
+          ]),
+        ]) : null,
         suggestions.length ? el('div', { class: 'msg info' }, [
           el('span', { class: 'icon', text: 'i' }),
           el('div', {}, [
@@ -6463,6 +7700,200 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     return out;
   }
 
+  /* ------------------------------------------------------------------ *
+   * Tracker assignment
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Which sheets of a workbook can actually take orders.
+   *
+   * A tracking workbook usually holds several years or cycles, so the choice is
+   * real: reported per sheet, with the row count, rather than left to the
+   * automatic pick.
+   */
+  async function readSheetChoices(path) {
+    const bytes = await state.store.read(path);
+    if (!bytes) throw new Error('Not found at ' + path);
+    const wb = await AMI.Workbook.load(bytes);
+    const out = wb.sheets.map((sh) => {
+      let header = null;
+      try { header = AMI.findHeaderRow(sh); } catch (e) { header = null; }
+      const rows = header ? AMI.dataRows(sh, header).length : 0;
+      return { name: sh.name, usable: !!header, rows };
+    });
+    // The automatic pick is the last usable sheet, so name it the same way here.
+    const usable = out.filter((s) => s.usable);
+    return { sheets: out, autoName: usable.length ? usable[usable.length - 1].name : '' };
+  }
+
+  /**
+   * Point an item at a workbook and a sheet, or correct a wrong one.
+   *
+   * Reassignment never rewrites anything: rows already posted stay in the
+   * workbook they were written to, which the dialog says plainly, because the
+   * alternative — quietly moving them — would be a much worse surprise.
+   */
+  function editItemTracker(accountId, itemId) {
+    const account = state.workspace.accounts.find((a) => a.id === accountId);
+    const item = AMI.findItem(account, itemId);
+    if (!item) return;
+
+    const originalPath = item.trackerPath;
+    const originalSheet = item.sheet;
+
+    const pathField = el('input', { type: 'text', value: item.trackerPath, placeholder: 'trackers/Item Tracking Chart.xlsx' });
+    const workbookPick = el('select', {}, [el('option', { value: '', text: 'Scanning the folder…' })]);
+    const sheetPick = el('select', {}, [el('option', { value: '', text: 'Choose a workbook first' })]);
+    const sheetNote = el('div', { class: 'note' });
+    const status = el('div');
+
+    const usedBy = (path) => state.workspace.accounts.flatMap((acc) => AMI.accountItems(acc)
+      .filter((x) => x !== item && x.trackerPath === path)
+      .map((x) => acc.name + ' → ' + (x.name || x.id)));
+
+    async function loadSheets(path) {
+      clear(sheetPick);
+      clear(status);
+      sheetNote.textContent = '';
+      if (!path) {
+        sheetPick.appendChild(el('option', { value: '', text: 'Choose a workbook first' }));
+        return;
+      }
+      sheetPick.appendChild(el('option', { value: '', text: 'Reading the workbook…' }));
+      let info;
+      try {
+        info = await readSheetChoices(path);
+      } catch (e) {
+        clear(sheetPick);
+        sheetPick.appendChild(el('option', { value: '', text: 'Could not read this workbook' }));
+        status.appendChild(el('div', { class: 'msg error' }, [
+          el('span', { class: 'icon', text: '!' }),
+          el('div', {}, [el('strong', { text: 'Could not read ' + fileOf(path) }),
+            el('span', { class: 'detail', text: e.message })]),
+        ]));
+        return;
+      }
+
+      clear(sheetPick);
+      sheetPick.appendChild(el('option', {
+        value: '',
+        selected: !item.sheet,
+        text: 'Automatic' + (info.autoName ? ' — currently "' + info.autoName + '"' : ''),
+      }));
+      for (const sh of info.sheets) {
+        sheetPick.appendChild(el('option', {
+          value: sh.name,
+          selected: sh.name === item.sheet,
+          disabled: !sh.usable,
+          text: sh.name + (sh.usable ? '  (' + sh.rows + ' order row(s))' : '  — no PO# header, cannot post here'),
+        }));
+      }
+
+      const usable = info.sheets.filter((sh) => sh.usable).length;
+      sheetNote.textContent = usable
+        ? usable + ' of ' + info.sheets.length + ' sheet(s) carry a PO# header. Automatic takes the last of them, '
+          + 'which is the current cycle in a workbook laid out by year.'
+        : 'No sheet in this workbook has a PO# header row, so nothing can be posted into it.';
+
+      if (item.sheet && !info.sheets.some((sh) => sh.name === item.sheet)) {
+        status.appendChild(el('div', { class: 'msg warn' }, [
+          el('span', { class: 'icon', text: '!' }),
+          el('div', {}, [
+            el('strong', { text: 'This item names a sheet that is not in this workbook.' }),
+            el('span', { class: 'detail', text: '"' + item.sheet + '" is not here, so the automatic pick is being used instead.' }),
+          ]),
+        ]));
+      }
+    }
+
+    AMI.findWorkbooks(state.store, '', 4).then((paths) => {
+      clear(workbookPick);
+      workbookPick.appendChild(el('option', {
+        value: '', text: paths.length ? 'Pick a workbook…' : 'No workbooks found in this folder',
+      }));
+      for (const path of paths) {
+        const others = usedBy(path);
+        workbookPick.appendChild(el('option', {
+          value: path, selected: path === item.trackerPath,
+          text: path + (others.length ? '  (also used by ' + others.join(', ') + ')' : ''),
+        }));
+      }
+      if (item.trackerPath && !paths.includes(item.trackerPath)) {
+        workbookPick.appendChild(el('option', {
+          value: item.trackerPath, selected: true,
+          text: item.trackerPath + '  (linked, but not found in the folder now)',
+        }));
+      }
+      if (item.trackerPath) loadSheets(item.trackerPath);
+    });
+
+    workbookPick.addEventListener('change', () => {
+      pathField.value = workbookPick.value;
+      item.sheet = '';
+      loadSheets(workbookPick.value);
+    });
+    pathField.addEventListener('change', () => { loadSheets(pathField.value.trim()); });
+
+    openOverlay('Tracker for ' + (item.name || item.id), account.name, (host) => {
+      host.appendChild(el('p', { class: 'help', text: 'Which workbook this item posts into, and which sheet of it.' }));
+      host.appendChild(editorField('Workbook in this folder', workbookPick));
+      host.appendChild(editorField('Path', pathField, 'Relative to the workspace folder. Editable if the workbook is somewhere the scan does not reach.'));
+      host.appendChild(editorField('Sheet', sheetPick, 'Automatic is right for most workbooks. Choose a sheet to post into a particular year or cycle.'));
+      host.appendChild(sheetNote);
+      host.appendChild(status);
+
+      host.appendChild(el('div', { class: 'msg info' }, [
+        el('span', { class: 'icon', text: 'i' }),
+        el('div', {}, [
+          el('strong', { text: 'Changing this moves nothing that is already written.' }),
+          el('span', {
+            class: 'detail',
+            text: 'Rows posted earlier stay in the workbook and sheet they went into. This only '
+              + 'changes where the next post goes, and which sheet the dashboard reads for this item.',
+          }),
+        ]),
+      ]));
+
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', {
+          class: 'btn primary', text: 'Save tracker',
+          onclick: async () => {
+            const path = pathField.value.trim();
+            const sheet = sheetPick.value;
+            if (!path) { toast('Pick a workbook first.', 'error'); return; }
+
+            const clash = state.workspace.accounts.flatMap((acc) => AMI.accountItems(acc)
+              .filter((x) => x !== item && x.trackerPath === path && (x.sheet || '') === sheet)
+              .map((x) => acc.name + ' → ' + (x.name || x.id)));
+            if (clash.length && !window.confirm(
+              'This is the same workbook and sheet as ' + clash.join(', ') + '.\n\n'
+              + 'Two items posting into one sheet will interleave their orders. Save anyway?')) return;
+
+            item.trackerPath = path;
+            item.sheet = sheet;
+            if (await persistWorkspace()) {
+              if (closeOverlay) closeOverlay();
+              state.portfolio = null;
+              await selectAccount(account.id, state.itemId);
+              renderAccounts();
+              toast('Tracker set to ' + fileOf(path) + (sheet ? ' · ' + sheet : ' · automatic sheet') + '.', 'ok');
+            } else {
+              item.trackerPath = originalPath;
+              item.sheet = originalSheet;
+            }
+          },
+        }),
+        el('button', {
+          class: 'btn', text: 'Cancel',
+          onclick: () => {
+            item.sheet = originalSheet;
+            if (closeOverlay) closeOverlay();
+          },
+        }),
+      ]));
+    });
+  }
+
   async function openAccountEditor(accountId) {
     const ws = state.workspace;
     const a = ws.accounts.find((x) => x.id === accountId);
@@ -6588,25 +8019,19 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     const name = el('input', { type: 'text', value: it.name });
     const product = el('input', { type: 'text', value: it.product, placeholder: 'read from the tracker when blank' });
     const navCode = el('input', { type: 'text', value: it.navCode, placeholder: 'read from the tracker when blank' });
-    const sheet = el('input', { type: 'text', value: it.sheet, placeholder: 'auto — last sheet with a PO# header' });
-    const trackerPath = el('input', { type: 'text', value: it.trackerPath, placeholder: 'trackers/Item Tracking Chart.xlsx' });
     const notes = el('input', { type: 'text', value: it.notes });
     const contactInputs = {};
 
-    const trackerPick = el('select', {}, [el('option', { value: '', text: 'Scanning folder…' })]);
-    const usedPaths = ws.accounts.flatMap((acc) => AMI.accountItems(acc)
-      .filter((x) => x !== it && x.trackerPath).map((x) => x.trackerPath));
-    AMI.findWorkbooks(state.store, '', 4).then((paths) => {
-      clear(trackerPick);
-      trackerPick.appendChild(el('option', { value: '', text: paths.length ? 'Pick a workbook…' : 'No workbooks found in this folder' }));
-      for (const p of paths) {
-        trackerPick.appendChild(el('option', {
-          value: p, selected: p === it.trackerPath,
-          text: p + (usedPaths.includes(p) ? '  (already used by another item)' : ''),
-        }));
-      }
-    });
-    trackerPick.addEventListener('change', () => { if (trackerPick.value) trackerPath.value = trackerPick.value; });
+    // The workbook and sheet are set in their own dialog, which reads the file
+    // to offer the real sheet names rather than asking anyone to type one.
+    const trackerLine = el('div', { class: 'note' });
+    const describeTracker = () => {
+      const st = itemState(it.id);
+      trackerLine.textContent = it.trackerPath
+        ? fileOf(it.trackerPath) + ' · sheet: ' + (it.sheet || ((st && st.sheetName) ? st.sheetName + ' (automatic)' : 'automatic'))
+        : 'No tracker assigned yet.';
+    };
+    describeTracker();
 
     host.appendChild(el('div', { class: 'card' }, [
       el('h2', {}, [
@@ -6615,13 +8040,15 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         el('button', { class: 'btn small', text: 'Back to account', onclick: () => openAccountEditor(a.id) }),
       ]),
       el('div', { class: 'body' }, [
-        el('div', { class: 'grid-2' }, [
-          editorField('Item name', name, 'How it appears in the item switcher.'),
-          editorField('Sheet to post into', sheet),
-        ]),
+        editorField('Item name', name, 'How it appears in the item switcher.'),
         el('h3', { text: 'Tracker' }),
-        editorField('Workbook in this folder', trackerPick),
-        editorField('Path', trackerPath, 'Relative to the workspace folder.'),
+        trackerLine,
+        el('div', { class: 'btn-row' }, [
+          el('button', {
+            class: 'btn', text: it.trackerPath ? 'Change workbook or sheet' : 'Assign a tracker',
+            onclick: () => editItemTracker(a.id, it.id),
+          }),
+        ]),
         el('h3', { text: 'Matching' }),
         el('p', { class: 'help', text: 'Purchase orders are routed here when their item number matches. Leave both blank and the values are read from the tracker itself — which is usually what you want.' }),
         el('div', { class: 'grid-2' }, [
@@ -6639,8 +8066,6 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
               it.name = name.value.trim() || it.name;
               it.product = product.value.trim();
               it.navCode = navCode.value.trim();
-              it.sheet = sheet.value.trim();
-              it.trackerPath = trackerPath.value.trim();
               it.notes = notes.value.trim();
               it.contacts = collectContacts(contactInputs);
               if (await persistWorkspace()) {
@@ -6756,6 +8181,11 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     }
     state.openItems.sort((a, b) => b.ageDays - a.ageDays);
 
+    // A chase the workflow has overtaken is not worth sending, but the gap it
+    // marks is still worth seeing — so it moves aside rather than disappearing.
+    const live = state.openItems.filter((i) => !i.superseded);
+    const overtaken = state.openItems.filter((i) => i.superseded);
+
     host.appendChild(el('p', { class: 'help', text: 'Every item tracker on ' + account.name + ' is scanned. Each line names the blank column and the dated column it is measured from — nothing here is inferred.' }));
 
     if (!state.openItems.length) {
@@ -6763,8 +8193,22 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       return;
     }
 
+    if (!live.length) {
+      host.appendChild(el('div', { class: 'msg ok' }, [
+        el('span', { class: 'icon', text: '✓' }),
+        el('div', {}, [
+          el('strong', { text: 'Nothing left worth chasing.' }),
+          el('span', {
+            class: 'detail',
+            text: overtaken.length + ' item(s) are still blank on the trackers, but each order has '
+              + 'moved past the point where the answer would change anything. They are listed below.',
+          }),
+        ]),
+      ]));
+    }
+
     const byParty = {};
-    for (const i of state.openItems) (byParty[i.party] = byParty[i.party] || []).push(i);
+    for (const i of live) (byParty[i.party] = byParty[i.party] || []).push(i);
 
     for (const party of Object.keys(byParty)) {
       const items = byParty[party];
@@ -6808,6 +8252,54 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         ]),
       ]));
     }
+
+    if (overtaken.length) host.appendChild(supersededCard(overtaken));
+  }
+
+  /**
+   * Follow-ups the workflow overtook. Collapsed, because they need no action —
+   * but present, because a blank column on a shipped order is still a gap in the
+   * record, and hiding it would make the tracker look tidier than it is.
+   */
+  function supersededCard(items) {
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Still blank' }),
+      el('th', { text: 'Why it no longer needs chasing' }), el('th', { text: 'Age' }),
+    ])]));
+    const body = el('tbody');
+    for (const entry of items) {
+      body.appendChild(el('tr', {}, [
+        el('td', { text: entry.itemName }),
+        el('td', { class: 'mono', text: entry.po }),
+        el('td', { text: entry.missingHeader }),
+        el('td', { text: entry.supersededReason }),
+        el('td', { class: 'num', text: entry.ageDays + ' d' }),
+      ]));
+    }
+    table.appendChild(body);
+
+    const details = el('details', { class: 'fold' }, [
+      el('summary', { text: 'Show the ' + items.length + ' item(s)' }),
+      el('div', { class: 'table-scroll' }, [table]),
+    ]);
+
+    return el('div', { class: 'card' }, [
+      el('h2', {}, [
+        document.createTextNode('No longer needed'),
+        el('span', { class: 'spacer' }),
+        el('span', { class: 'chip ok', text: items.length + ' resolved by the workflow' }),
+      ]),
+      el('div', { class: 'body' }, [
+        el('p', {
+          class: 'help',
+          text: 'These columns are still blank, but the order has since been collected, delivered '
+            + 'or invoiced — so the answer would no longer change what happens next. Nothing was '
+            + 'deleted, and no email is drafted for them.',
+        }),
+        details,
+      ]),
+    ]);
   }
 
   function buildChaseEmails(party, items) {
@@ -7236,10 +8728,15 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
   }
 
   /** Decorated orders for the current filters. */
+  /**
+   * Orders in scope, after the account and item filters and after the
+   * hide-finished switch. Counts and totals downstream follow the switch, which
+   * is the point of it — it changes what you are looking at, not what is true.
+   */
   function filteredOrders() {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
-    return AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
+    return applyClosedFilter(AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()));
   }
 
   async function applyStatus(key, statusId, note) {
@@ -7371,12 +8868,16 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       return;
     }
 
+    state.drillIndex = new Map();
     const orders = filteredOrders();
     const scope = filteredPortfolio();
     const counts = AMI.countByStatus(orders);
     const open = orders.filter((o) => o.isOpen);
     const unset = orders.filter((o) => !o.status.statusId);
-    const followUps = scope.reduce((n, p) => n + p.followUps.length, 0);
+    // Only chases that still matter — the ones the workflow overtook are shown
+    // on the Follow-ups page but never counted as outstanding work.
+    const followUps = scope.reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
+    const settledFollowUps = scope.reduce((n, p) => n + p.followUps.filter((f) => f.superseded).length, 0);
     const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
 
     host.appendChild(pageHeader(
@@ -7386,6 +8887,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         : 'All my accounts',
       'Where every order stands right now, read from the item trackers and the statuses your team has set.',
       [
+        closedToggle(() => renderDashboard()),
         el('button', {
           class: 'btn', text: 'Refresh',
           onclick: async () => { await ensurePortfolio(true); renderDashboard(); toast('Trackers re-read.', 'ok'); },
@@ -7447,13 +8949,13 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       { label: 'In transit', value: counts.transit, sub: 'collected, not delivered', tone: 'neutral' },
       { label: 'Delivered', value: counts.delivered, sub: 'arrived, not yet invoiced', tone: 'neutral' },
       {
-        label: 'Invoiced, not closed', value: counts.invoiced,
-        sub: 'billed, awaiting reconciliation',
-        tone: counts.invoiced ? 'warning' : 'neutral',
+        label: 'Invoiced and closed', value: counts.invoiced,
+        sub: 'finished', tone: 'good',
       },
       {
-        label: 'Follow-ups overdue', value: followUps,
-        sub: followUps ? 'across ' + scope.length + ' tracker(s)' : 'nothing outstanding',
+        label: 'Follow-ups outstanding', value: followUps,
+        sub: followUps ? 'across ' + scope.length + ' tracker(s)'
+          : (settledFollowUps ? settledFollowUps + ' overtaken by the workflow' : 'nothing outstanding'),
         tone: followUps ? (followUps >= 5 ? 'critical' : 'warning') : 'good',
       },
       {
@@ -7476,21 +8978,32 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     }
 
     /* Pipeline + per-account bars */
-    const segments = AMI.ORDER_STATUSES.map((s) => ({
-      label: s.label, value: counts[s.id],
-      color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
-    }));
+    const stageSegments = (list, prefix, keyPrefix) => {
+      const c = AMI.countByStatus(list);
+      return AMI.ORDER_STATUSES.map((s) => {
+        const key = keyPrefix + s.id;
+        drill(key, (prefix ? prefix + ' — ' : '') + s.label,
+          s.hint, list.filter((o) => o.status.statusId === s.id));
+        return {
+          label: (prefix ? prefix + ' — ' : '') + s.label,
+          value: c[s.id], step: s.step, key,
+          patternWord: AMI.patternWord(s),
+        };
+      });
+    };
 
     const grid = el('div', { class: 'dash-grid' });
 
-    grid.appendChild(el('div', { class: 'card span-2' }, [
-      el('h2', {}, [document.createTextNode('Order pipeline'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: orders.length + ' order(s) in scope' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.stackedBar(segments, { emptyText: 'No orders' }) }).firstChild,
+    grid.appendChild(chartCard({
+      title: 'Order pipeline',
+      note: orders.length + ' order(s) in scope',
+      span: 2,
+      build: () => [
+        el('div', { html: AMI.stackedBar(stageSegments(orders, '', 'stage:'), { emptyText: 'No orders' }) }).firstChild,
         el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
-      ]),
-    ]));
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each stage has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in pipeline order. Click a band to list the orders in it.' }),
+      ],
+    }));
 
     const accountRows = [];
     const byAccount = new Map();
@@ -7501,60 +9014,78 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     for (const [accountId, list] of byAccount) {
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       if (!account) continue;
-      const c = AMI.countByStatus(list);
       accountRows.push({
         label: account.name,
         sub: AMI.divisionName(state.workspace, account.divisionId),
-        segments: AMI.ORDER_STATUSES.map((s) => ({
-          label: account.name + ' — ' + s.label, value: c[s.id],
-          color: 'var(--stage-' + s.step + ')', ink: 'var(--stage-fg-' + s.step + ')',
-        })),
+        segments: stageSegments(list, account.name, 'acct:' + accountId + ':'),
         meta: list.filter((x) => x.isOpen).length + ' open',
       });
     }
     accountRows.sort((a, b) => a.label.localeCompare(b.label));
 
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', { text: 'Orders by account' }),
-      el('div', { class: 'body' }, [
+    grid.appendChild(chartCard({
+      title: 'Orders by account',
+      build: () => [
         el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
         el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
-      ]),
-    ]));
+      ],
+    }));
 
     /* Throughput */
     const collected = orders
       .filter((o) => o.dates.actualCollection)
-      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0 }));
+      .map((o) => ({ date: o.dates.actualCollection, value: Number(o.values.cases) || 0, order: o }));
     const series = AMI.monthlySeries(collected, 12, new Date());
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Cases collected per month'), el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'last 12 months' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.columnChart(series, { unit: 'cases', ariaLabel: 'Cases collected per month' }) }).firstChild,
-      ]),
-    ]));
+    for (const b of series) {
+      b.key = 'month:' + b.year + '-' + b.month;
+      drill(b.key, 'Collected in ' + b.label,
+        'Orders whose actual collection date falls in this month.',
+        collected.filter((e) => e.date.getFullYear() === b.year && e.date.getMonth() === b.month)
+          .map((e) => e.order));
+    }
+    grid.appendChild(chartCard({
+      title: 'Cases collected per month',
+      note: 'last 12 months',
+      build: (big) => [
+        el('div', {
+          html: AMI.columnChart(series, {
+            unit: 'cases', ariaLabel: 'Cases collected per month',
+            width: big ? 1000 : 640, height: big ? 340 : 168,
+          }),
+        }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Click a column to list the orders collected that month.' }),
+      ],
+    }));
 
     /* Attention list */
-    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays).slice(0, 8);
-    const staleRows = stale.map((o) => ({
-      label: 'PO ' + o.po,
-      sub: o.accountName + ' · ' + o.itemName,
-      value: o.ageDays,
-      color: o.ageDays >= 45 ? 'var(--critical)' : (o.ageDays >= 21 ? 'var(--warning)' : 'var(--stage-2)'),
-      meta: o.ageDays + ' d',
-      tip: 'PO ' + o.po + ' — last dated activity '
-        + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+    const stale = open.filter((o) => o.ageDays != null).sort((a, b) => b.ageDays - a.ageDays);
+    const staleRow = (o) => {
+      const key = 'order:' + o.key;
+      drill(key, 'PO ' + o.po, o.accountName + ' · ' + o.itemName, [o]);
+      return {
+        label: 'PO ' + o.po,
+        sub: o.accountName + ' · ' + o.itemName,
+        value: o.ageDays,
+        // Age is not a pipeline stage, so it borrows the reserved status palette
+        // rather than the stage ramp — a stage weave here would mean nothing.
+        tone: o.ageDays >= AMI.HEALTH_THRESHOLDS.criticalDays ? 'critical'
+          : (o.ageDays >= AMI.HEALTH_THRESHOLDS.warningDays ? 'warning' : 'neutral'),
+        key,
+        meta: o.ageDays + ' d',
+        tip: 'PO ' + o.po + ' — last dated activity '
+          + (o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : 'none') + '.',
+      };
+    };
+    grid.appendChild(chartCard({
+      title: 'Longest without movement',
+      note: 'open orders, days since the last dated activity',
+      build: (big) => [
+        el('div', {
+          html: AMI.barList((big ? stale : stale.slice(0, 8)).map(staleRow), { emptyText: 'No open orders' }),
+        }).firstChild,
+        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' + (big || stale.length <= 8 ? '' : ' Showing the 8 oldest — expand for all ' + stale.length + '.') }),
+      ],
     }));
-    grid.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Longest without movement'),
-        el('span', { class: 'spacer' }),
-        el('span', { class: 'context-note', text: 'open orders, days since the last dated activity' })]),
-      el('div', { class: 'body' }, [
-        el('div', { html: AMI.barList(staleRows, { emptyText: 'No open orders' }) }).firstChild,
-        el('p', { class: 'help', style: 'margin:12px 0 0', text: 'Amber past ' + AMI.HEALTH_THRESHOLDS.warningDays + ' days, red past ' + AMI.HEALTH_THRESHOLDS.criticalDays + '.' }),
-      ]),
-    ]));
 
     /* Account health table */
     const healthTable = el('table', { class: 'data' });
@@ -7568,7 +9099,8 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     for (const accountId of accountsInScope) {
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       const list = orders.filter((o) => o.accountId === accountId);
-      const fu = scope.filter((p) => p.account.id === accountId).reduce((n, p) => n + p.followUps.length, 0);
+      const fu = scope.filter((p) => p.account.id === accountId)
+        .reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
       const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId), list, fu);
       healthBody.appendChild(el('tr', {}, [
         el('td', {}, [el('b', { text: account.name })]),
@@ -7578,14 +9110,21 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
         el('td', { class: 'num', text: String(s.total) }),
         el('td', { class: 'num', text: String(s.followUps) }),
         el('td', { text: s.stalest ? 'PO ' + s.stalest.po + ' · ' + s.stalestDays + ' d' : '—' }),
-        el('td', {}, [el('button', {
-          class: 'btn small', text: 'Summary',
-          onclick: () => {
-            state.filters.accountId = accountId;
-            showTab('orderstatus');
-            setTimeout(() => generateSummary(), 0);
-          },
-        })]),
+        el('td', {}, [
+          el('button', {
+            class: 'btn small', text: 'Orders',
+            onclick: () => showDrill('Orders on ' + account.name,
+              (s.divisionName ? s.divisionName + ' division · ' : '') + s.total + ' order(s)', list),
+          }),
+          el('button', {
+            class: 'btn small', text: 'Summary',
+            onclick: () => {
+              state.filters.accountId = accountId;
+              showTab('orderstatus');
+              setTimeout(() => generateSummary(), 0);
+            },
+          }),
+        ]),
       ]));
     }
     healthTable.appendChild(healthBody);
@@ -7603,6 +9142,118 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     ]));
 
     host.appendChild(grid);
+    wireDrill(host);
+  }
+
+  /**
+   * One delegated handler per host covers every mark inside it, now and after
+   * any redraw. Wired once, because the host outlives the charts it holds.
+   */
+  function wireDrill(host) {
+    if (host.dataset.drillWired) return;
+    host.dataset.drillWired = '1';
+    host.addEventListener('click', onDrillClick);
+    host.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') onDrillClick(e);
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Chart cards, zoom and drill-down
+   * ------------------------------------------------------------------ */
+
+  /**
+   * A dashboard card whose chart can be redrawn larger. `build(big)` returns the
+   * nodes; it is called once for the card and again, with `big` set, for the
+   * enlarged copy, so the two never drift apart.
+   */
+  function chartCard(spec) {
+    const body = el('div', { class: 'body' }, spec.build(false));
+    return el('div', { class: 'card' + (spec.span === 2 ? ' span-2' : '') }, [
+      el('h2', {}, [
+        document.createTextNode(spec.title),
+        el('span', { class: 'spacer' }),
+        spec.note ? el('span', { class: 'context-note', text: spec.note }) : null,
+        el('button', {
+          class: 'btn small',
+          text: 'Expand',
+          'data-tip': 'Open this chart larger, with every row rather than the top few.',
+          onclick: () => openOverlay(spec.title, spec.note || '', (host) => {
+            for (const n of spec.build(true)) host.appendChild(n);
+            wireDrill(host);
+          }, { wide: true }),
+        }),
+      ].filter(Boolean)),
+      body,
+    ]);
+  }
+
+  /** Record what sits behind a mark, so clicking it can show the orders. */
+  function drill(key, title, sub, orders) {
+    if (!state.drillIndex) state.drillIndex = new Map();
+    state.drillIndex.set(key, { title, sub, orders });
+  }
+
+  function onDrillClick(e) {
+    const mark = e.target.closest && e.target.closest('[data-drill]');
+    if (!mark) return;
+    if (e.type === 'keydown') e.preventDefault();
+    const entry = state.drillIndex && state.drillIndex.get(mark.getAttribute('data-drill'));
+    if (!entry) return;
+    showDrill(entry.title, entry.sub, entry.orders);
+  }
+
+  /** The orders behind one mark, as a table you can act on. */
+  function showDrill(title, sub, orders) {
+    openOverlay(title, sub, (host) => {
+      if (!orders.length) {
+        host.appendChild(el('div', { class: 'empty', text: 'No orders here.' }));
+        return;
+      }
+      host.appendChild(el('p', {
+        class: 'drill-note',
+        text: orders.length + ' order(s). Every column is read from the tracker or from a status '
+          + 'someone set — nothing here is calculated for the chart.',
+      }));
+
+      const table = el('table', { class: 'data' });
+      table.appendChild(el('thead', {}, [el('tr', {}, [
+        el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
+        el('th', { text: 'Cases' }), el('th', { text: 'Stage' }), el('th', { text: 'Where it comes from' }),
+        el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
+      ])]));
+      const body = el('tbody');
+      const sorted = orders.slice().sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
+      for (const o of sorted) {
+        const st = AMI.statusById(o.status.statusId);
+        body.appendChild(el('tr', {}, [
+          el('td', {}, [el('b', { text: o.po })]),
+          el('td', { text: o.accountName }),
+          el('td', { text: o.itemName }),
+          el('td', { class: 'num', text: o.values.cases != null ? String(o.values.cases) : '—' }),
+          el('td', { html: AMI.statusPill(st, { short: true }) }),
+          el('td', {}, [el('span', {
+            class: 'chip ' + (SOURCE_CHIP[o.status.source] || 'manual'),
+            text: SOURCE_LONG[o.status.source] || o.status.source,
+            'data-tip': o.status.reason,
+          })]),
+          el('td', { text: o.lastEvent ? AMI.formatShort(o.lastEvent) + ' (' + o.lastEventLabel + ')' : '—' }),
+          el('td', { class: 'num', text: o.ageDays == null ? '—' : String(o.ageDays) }),
+        ]));
+      }
+      table.appendChild(body);
+      host.appendChild(el('div', { class: 'table-scroll' }, [table]));
+
+      host.appendChild(el('div', { class: 'btn-row' }, [
+        el('button', {
+          class: 'btn', text: 'Set statuses for these',
+          onclick: () => {
+            if (closeOverlay) closeOverlay();
+            showTab('orderstatus');
+          },
+        }),
+      ]));
+    }, { wide: true });
   }
 
   /* ------------------------------------------------------------------ *
@@ -7620,22 +9271,22 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       else unset.push(o);
     }
 
-    const makeColumn = (title, stageVar, list, statusId, hint) => {
+    const makeColumn = (title, stage, list, statusId, hint) => {
       const cards = el('div', { class: 'kan-cards' });
       if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
       for (const o of list) cards.appendChild(makeCard(o));
 
-      const col = el('div', { class: 'kan-col' }, [
-        el('div', {
-          class: 'kan-head',
-          style: '--stage:' + stageVar,
-          'data-tip': hint,
-        }, [
-          el('span', { class: 'kan-title', text: title }),
-          el('span', { class: 'kan-count', text: String(list.length) }),
-        ]),
-        cards,
+      // The heading carries the stage's weave, so the columns stay apart at a
+      // glance without depending on their shade.
+      const head = el('div', {
+        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.step) : ' kan-head-unset'),
+        'data-tip': hint + (stage ? ' Shown as ' + AMI.patternWord(stage) + '.' : ''),
+      }, [
+        el('span', { class: 'kan-title', text: title }),
+        el('span', { class: 'kan-count', text: String(list.length) }),
       ]);
+
+      const col = el('div', { class: 'kan-col' }, [head, cards]);
 
       if (statusId) {
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
@@ -7655,10 +9306,10 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     };
 
     for (const c of columns) {
-      board.appendChild(makeColumn(c.status.short, 'var(--stage-' + c.status.step + ')', c.orders, c.status.id, c.status.hint));
+      board.appendChild(makeColumn(c.status.short, c.status, c.orders, c.status.id, c.status.hint));
     }
     if (unset.length) {
-      board.appendChild(makeColumn('No status', 'var(--border-strong)', unset, '',
+      board.appendChild(makeColumn('No status', null, unset, '',
         'Nothing in the tracker indicates a stage, and nobody has set one.'));
     }
     return board;
@@ -7666,10 +9317,11 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
   function makeCard(order) {
     const st = AMI.statusById(order.status.statusId);
+    // Only the stage tokens, not the fill — a card is mostly text and needs a
+    // plain ground. Its left rail carries the weave instead.
     const card = el('div', {
-      class: 'kan-card',
+      class: 'kan-card ' + (st ? 'stage-' + st.step : 'kan-card-unset'),
       draggable: 'true',
-      style: '--stage:' + (st ? 'var(--stage-' + st.step + ')' : 'var(--border-strong)'),
       'data-tip': order.status.reason,
       'data-po': order.po,
     }, [
@@ -7716,6 +9368,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
       'Order status',
       'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
       [
+        closedToggle(() => renderOrderStatus()),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -7723,35 +9376,16 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
 
     host.appendChild(filterBar(() => renderOrderStatus(), { withItem: true, withStatus: true, withSearch: true }));
 
-    const user = currentUser() || {};
-    const canEditRules = !!user.isAdmin || !state.workspace.users.length;
-    const autoClose = !!state.workspace.settings.autoCloseInvoiced;
-    const ruleBox = el('input', {
-      type: 'checkbox', checked: autoClose, disabled: !canEditRules,
-      onchange: async (e) => {
-        state.workspace.settings.autoCloseInvoiced = e.target.checked;
-        if (await persistWorkspace()) {
-          state.portfolio = null;
-          await ensurePortfolio(true);
-          renderOrderStatus();
-          toast(e.target.checked
-            ? 'Invoiced orders will now show as closed.'
-            : 'Invoiced orders will now stay open until closed.', 'ok');
-        }
-      },
-    });
     host.appendChild(el('div', { class: 'msg info' }, [
       el('span', { class: 'icon', text: 'i' }),
       el('div', {}, [
-        el('label', { class: 'check-inline' }, [
-          ruleBox,
-          document.createTextNode('Treat invoiced orders as closed'),
-        ]),
+        el('strong', { text: 'An invoiced order is a closed order.' }),
         el('span', {
           class: 'detail',
-          text: 'Applies only where the stage came from the tracker. Setting a stage by hand always '
-            + 'stands — choose "Invoiced" on an order and it stays invoiced. '
-            + (canEditRules ? 'This is a workspace-wide setting.' : 'Only administrators change this.'),
+          text: 'Invoicing is the end of the pipeline here, so the last stage reads '
+            + '“Invoiced and Closed”. A NAV invoice number on the tracker puts an order there '
+            + 'on its own. Use the “Hide invoiced and closed” switch on this page or on Account '
+            + 'Health to work with only what is still live.',
         }),
       ]),
     ]));
@@ -7878,7 +9512,7 @@ button.btn.small.danger { color: var(--critical); border-color: var(--border-str
     }
     const scope = filteredPortfolio().filter((p) => p.account.id === account.id);
     const orders = AMI.decorate(scope.flatMap((p) => p.orders),
-      state.statusDoc || AMI.emptyStatusDoc(), new Date(), statusOptions());
+      state.statusDoc || AMI.emptyStatusDoc(), new Date());
     const user = currentUser() || {};
 
     const built = AMI.buildAccountSummary({
