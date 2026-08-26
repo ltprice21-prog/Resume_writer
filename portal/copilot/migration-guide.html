@@ -1,0 +1,1403 @@
+<title>Order Desk on Copilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #fbfaf8;
+    --raised: #ffffff;
+    --sunk: #f3f1ec;
+    --ink: #1c1a17;
+    --muted: #6b655c;
+    --faint: #948d82;
+    --rule: #e2ddd4;
+    --rule-firm: #c9c2b6;
+    --accent: #3f5d52;
+    --accent-soft: #e8efea;
+    --accent-ink: #2b4239;
+    --critical: #8f3428;
+    --critical-soft: #f8ebe8;
+    --caution: #8a6410;
+    --caution-soft: #faf1de;
+    --measure: 68ch;
+    --sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --serif: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #191817;
+      --raised: #21201e;
+      --sunk: #141312;
+      --ink: #eae6df;
+      --muted: #a7a096;
+      --faint: #837c72;
+      --rule: #322f2b;
+      --rule-firm: #4a453f;
+      --accent: #7fa896;
+      --accent-soft: #1e2a25;
+      --accent-ink: #a9c9bb;
+      --critical: #d8837a;
+      --critical-soft: #2e1c19;
+      --caution: #d3a95c;
+      --caution-soft: #2b2211;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #191817;
+    --raised: #21201e;
+    --sunk: #141312;
+    --ink: #eae6df;
+    --muted: #a7a096;
+    --faint: #837c72;
+    --rule: #322f2b;
+    --rule-firm: #4a453f;
+    --accent: #7fa896;
+    --accent-soft: #1e2a25;
+    --accent-ink: #a9c9bb;
+    --critical: #d8837a;
+    --critical-soft: #2e1c19;
+    --caution: #d3a95c;
+    --caution-soft: #2b2211;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  @media (min-width: 1040px) {
+    .wrap { grid-template-columns: 200px minmax(0, 1fr); gap: 56px; padding-right: 40px; }
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 64px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-optical-sizing: auto;
+    font-weight: 500;
+    font-size: clamp(34px, 5.5vw, 52px);
+    line-height: 1.06;
+    letter-spacing: -.015em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    max-width: var(--measure);
+    font-size: 19px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- rail ---------- */
+
+  nav.rail { display: none; }
+
+  @media (min-width: 1040px) {
+    nav.rail {
+      display: block;
+      position: sticky;
+      top: 28px;
+      align-self: start;
+      max-height: calc(100vh - 56px);
+      overflow-y: auto;
+      font-size: 14px;
+    }
+    nav.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    nav.rail a {
+      display: block;
+      padding: 5px 10px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid var(--rule);
+      line-height: 1.35;
+    }
+    nav.rail a:hover { color: var(--ink); border-left-color: var(--rule-firm); background: var(--sunk); }
+    nav.rail a.here { color: var(--accent-ink); border-left-color: var(--accent); font-weight: 600; }
+    nav.rail .rail-break { height: 14px; }
+  }
+
+  /* ---------- flow ---------- */
+
+  main { min-width: 0; }
+  main > * { max-width: var(--measure); }
+  main > .full, main > section > .full { max-width: none; }
+
+  section { margin: 0 0 68px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.15;
+    letter-spacing: -.01em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 20px;
+    margin: 0 0 6px;
+    letter-spacing: -.005em;
+  }
+
+  .section-note {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 16px;
+  }
+
+  p { margin: 0 0 16px; }
+  main p, main li { max-width: var(--measure); }
+  a { color: var(--accent-ink); text-underline-offset: 2px; }
+  strong { font-weight: 600; }
+  code { font-family: var(--mono); font-size: .88em; }
+
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* ---------- verdict table ---------- */
+
+  .verdicts { display: flex; flex-direction: column; gap: 10px; margin: 0 0 28px; max-width: none; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .verdict .stripe { background: var(--rule-firm); }
+  .verdict.keeps .stripe { background: var(--accent); }
+  .verdict.loses .stripe { background: var(--critical); }
+  .verdict.thinks .stripe { background: var(--caution); }
+
+  .verdict-body { padding: 14px 18px; }
+  .verdict h4 { margin: 0 0 4px; font-size: 16px; font-weight: 700; font-family: var(--sans); }
+  .verdict p { margin: 0; color: var(--muted); font-size: 15.5px; max-width: none; }
+  .verdict .tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 2px;
+    margin-left: 8px;
+    vertical-align: 2px;
+  }
+  .verdict.keeps .tag { background: var(--accent-soft); color: var(--accent-ink); }
+  .verdict.loses .tag { background: var(--critical-soft); color: var(--critical); }
+  .verdict.thinks .tag { background: var(--caution-soft); color: var(--caution); }
+
+  /* ---------- callouts ---------- */
+
+  .callout {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--caution);
+    background: var(--caution-soft);
+    padding: 18px 22px;
+    border-radius: 3px;
+    margin: 0 0 28px;
+    max-width: var(--measure);
+  }
+
+  .callout.grave { border-left-color: var(--critical); background: var(--critical-soft); }
+  .callout h3 { margin-bottom: 8px; }
+  .callout > *:last-child { margin-bottom: 0; }
+  .callout p { max-width: none; }
+
+  /* ---------- agent cards ---------- */
+
+  .agents { display: flex; flex-direction: column; gap: 20px; max-width: none; }
+
+  .agent {
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+
+  .agent-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .agent-id { min-width: 240px; flex: 1; }
+  .agent h3 { margin: 0 0 4px; font-size: 22px; }
+  .agent-desc { color: var(--muted); font-size: 15px; margin: 0; max-width: 56ch; }
+
+  .agent-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
+    margin: 18px 0 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule);
+  }
+  .agent-meta div { display: flex; flex-direction: column; gap: 1px; }
+  .agent-meta dt {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 700;
+  }
+  .agent-meta dd { margin: 0; font-size: 14.5px; color: var(--ink); }
+
+  .starters { margin-top: 16px; }
+  .starters-label {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 700;
+  }
+  .starters ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .starters li {
+    font-size: 13.5px;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 3px 12px;
+    color: var(--muted);
+  }
+
+  /* ---------- copy button ---------- */
+
+  button.copy {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--paper);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 8px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+  }
+
+  button.copy:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+  button.copy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button.copy.small { font-size: 13px; padding: 4px 11px; }
+  button.copy.done { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* ---------- disclosure + code ---------- */
+
+  details.reveal { margin-top: 16px; }
+  details.reveal > summary {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-ink);
+    padding: 6px 0;
+    user-select: none;
+  }
+  details.reveal > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  pre {
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 10px 0 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.62;
+    white-space: pre;
+    tab-size: 2;
+  }
+
+  pre code { font-size: inherit; font-family: inherit; }
+
+  /* ---------- steps ---------- */
+
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; max-width: none; }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 18px;
+    padding: 0 0 28px;
+    position: relative;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 19px;
+    line-height: 1;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1.5px solid var(--rule-firm);
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--paper);
+    margin-top: 1px;
+  }
+
+  ol.steps > li.done::before {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--paper);
+  }
+
+  ol.steps > li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 17px;
+    top: 40px;
+    bottom: 12px;
+    width: 1.5px;
+    background: var(--rule);
+  }
+
+  .step-body { min-width: 0; }
+  .step-body h3 { margin-bottom: 8px; }
+  .step-body > *:last-child { margin-bottom: 0; }
+
+  .step-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13.5px;
+    color: var(--muted);
+    cursor: pointer;
+    margin-top: 10px;
+    user-select: none;
+  }
+  .step-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+  /* ---------- tables ---------- */
+
+  .table-scroll { overflow-x: auto; margin: 0 0 24px; max-width: none; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 15px;
+    min-width: 460px;
+  }
+
+  th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 700;
+    border-bottom-color: var(--rule-firm);
+  }
+  td code { color: var(--critical); font-weight: 500; }
+
+  /* ---------- formulas ---------- */
+
+  .formulas { display: flex; flex-direction: column; gap: 14px; max-width: none; }
+  .formula { border: 1px solid var(--rule); border-radius: 3px; background: var(--raised); padding: 14px 16px; }
+  .formula-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .formula-name { font-size: 15px; font-weight: 600; }
+  .formula pre { margin-top: 10px; }
+
+  /* ---------- checklist ---------- */
+
+  ul.plain { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+  ul.plain > li {
+    padding-left: 20px;
+    position: relative;
+  }
+  ul.plain > li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 11px;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+    color: var(--faint);
+    font-size: 14px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Migration brief &middot; AMI Order Desk</p>
+    <h1>Order Desk on Copilot</h1>
+    <p class="standfirst">
+      Three agents, a SharePoint layout and a sheet of Excel formulas that together do most of
+      what the portal did. <strong>Built for Agent Builder, not Copilot Studio</strong> &mdash;
+      so no code, no connectors, and one part of the job that has to move to Excel rather than
+      to an agent.
+    </p>
+  </header>
+
+  <nav class="rail" aria-label="Sections">
+    <ol>
+      <li><a href="#honest">What moves, what doesn&rsquo;t</a></li>
+      <li><a href="#guarantee">The guarantee that changes</a></li>
+      <div class="rail-break"></div>
+      <li><a href="#agents">The three agents</a></li>
+      <li><a href="#setup">Setting it up</a></li>
+      <li><a href="#paste">The paste procedure</a></li>
+      <li><a href="#excel">The dashboard in Excel</a></li>
+      <div class="rail-break"></div>
+      <li><a href="#tests">Three tests for day one</a></li>
+      <li><a href="#keep">What to keep</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="honest">
+      <h2>What moves, what doesn&rsquo;t</h2>
+      <p class="section-note">
+        Agent Builder makes declarative agents: a prompt plus documents. It cannot run code,
+        write to a file, or call anything. That covers about half of what the portal did.
+      </p>
+
+      <div class="verdicts full">
+        <div class="verdict keeps">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Reading a PO into a tracker row<span class="tag">Moves well</span></h4>
+            <p>Your POs are text-based and the NAV labels are consistent. This is what language models are for.</p>
+          </div>
+        </div>
+        <div class="verdict keeps">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Drafting emails from templates<span class="tag">Moves well</span></h4>
+            <p>Better than the portal at awkward one-offs, because you can simply ask for a variation.</p>
+          </div>
+        </div>
+        <div class="verdict keeps">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Finding things in a tracker<span class="tag">Moves well</span></h4>
+            <p>Strong at &ldquo;which POs have no collection date?&rdquo; and at explaining what a row means.</p>
+          </div>
+        </div>
+        <div class="verdict loses">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Writing to the tracking chart<span class="tag">Doesn&rsquo;t move</span></h4>
+            <p>No agent can write to a file. The agent gives you the row and you paste it &mdash; carefully, because four columns carry formulas.</p>
+          </div>
+        </div>
+        <div class="verdict loses">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>The dashboard<span class="tag">Doesn&rsquo;t move</span></h4>
+            <p>Chat has no charts. It becomes Excel formulas instead &mdash; which is the better home for it anyway.</p>
+          </div>
+        </div>
+        <div class="verdict loses">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Exact counts across many rows<span class="tag">Doesn&rsquo;t move</span></h4>
+            <p>Copilot reads a spreadsheet as text and will miscount. Use it to find and explain; use Excel for numbers you act on.</p>
+          </div>
+        </div>
+        <div class="verdict thinks">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>The <code>.msg</code> templates<span class="tag">Needs a step</span></h4>
+            <p>Copilot cannot open <code>.msg</code> or <code>.oft</code>. Convert each one to <code>.docx</code> once &mdash; about five minutes for the set.</p>
+          </div>
+        </div>
+        <div class="verdict thinks">
+          <div class="stripe"></div>
+          <div class="verdict-body">
+            <h4>Colourblind-safe stage patterns<span class="tag">Needs a step</span></h4>
+            <p>Replaced by Excel conditional formatting that uses borders and number formats, not colour alone.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="guarantee">
+      <h2>The guarantee that changes character</h2>
+      <div class="callout grave">
+        <h3>The portal could not invent a value. Copilot can.</h3>
+        <p>
+          The portal read bytes out of a PDF and had nowhere to get a plausible-sounding number
+          from. A language model does have somewhere &mdash; that is what it does when it meets
+          a gap.
+        </p>
+        <p>
+          The instruction sheets fight this hard: blank is defined as the correct answer, every
+          output must end with a list of what was left blank, and all arithmetic must be shown.
+          That kind of instruction works most of the time. <strong>Most of the time is a
+          different guarantee from never.</strong>
+        </p>
+        <p>
+          So the working rule changes: <strong>the agent&rsquo;s output is a draft a person
+          checks, never something to paste unread.</strong> Build the habit now, while the
+          batches are small. Check the PO number, the quantity and the dates against the PDF
+          every time &mdash; those three carry all the cost.
+        </p>
+      </div>
+      <div class="callout">
+        <h3>One note on the security decision, then I&rsquo;ll leave it</h3>
+        <p>
+          The portal made no network calls of any kind. It ran from a file on your machine and
+          touched only your OneDrive folder. If the concern was company data leaving the network,
+          that is worth ten minutes with whoever raised it &mdash; Copilot sends your PO contents
+          and tracker rows to Microsoft&rsquo;s service, which is a larger surface, not a smaller
+          one. If the concern was unsanctioned software, that is a fair objection and Copilot is
+          the right answer. Either way, what follows works.
+        </p>
+      </div>
+    </section>
+
+    <section id="agents">
+      <h2>The three agents</h2>
+      <p class="section-note">
+        In Microsoft 365 Copilot, choose <strong>Create agent</strong>, then the
+        <strong>Configure</strong> tab &mdash; not Describe, which rewrites what you paste.
+        Paste each instruction sheet whole and unedited.
+      </p>
+      <div class="agents full">
+      <article class="agent" id="agent-po-reader">
+        <header class="agent-head">
+          <div class="agent-id">
+            <h3>AMI PO Reader</h3>
+            <p class="agent-desc">Reads an AMI purchase order PDF and returns the row to add to the item&rsquo;s Order Tracking Chart, with a list of anything the PO does not carry.</p>
+          </div>
+          <button class="copy" data-copy="src-po-reader">
+            <span class="copy-label">Copy instructions</span>
+          </button>
+        </header>
+        <dl class="agent-meta">
+          <div><dt>Knowledge</dt><dd>Purchase orders/ &middot; Reference/</dd></div>
+          <div><dt>Web search</dt><dd>Off</dd></div>
+          <div><dt>Length</dt><dd><span class="tnum">5,928</span> of 8,000 characters</dd></div>
+        </dl>
+        <details class="reveal">
+          <summary>Read the instruction sheet</summary>
+          <pre id="src-po-reader"><code>You read AMI Group purchase order PDFs and turn each one into a single row for that item&#x27;s Order Tracking Chart. You do nothing else. If asked for anything else, say so and stop.
+
+# THE RULE THAT OVERRIDES EVERY OTHER INSTRUCTION
+
+Never invent, infer, estimate or complete a value. Every figure you output must be either copied from the purchase order, or calculated by the arithmetic in this document from figures printed on that same purchase order.
+
+If a value is not on the document, write BLANK. Never a plausible value, never a value carried over from another order, never a typical or expected value. A blank cell is correct and useful. A guessed cell is a shipping error.
+
+Every row you output ends with a &quot;You must fill these in&quot; list naming every BLANK. If you are unsure whether you have read something correctly, say which field and why, and mark it BLANK.
+
+Never round, never reformat numbers, never convert currencies or units beyond the arithmetic below.
+
+# WHAT THE PURCHASE ORDER CARRIES
+
+These are the printed labels on a NAV purchase order. Read the value to the right of each label, or the block beneath it.
+
+- Order No.        the PO number, e.g. 350633-2
+- Order Date       the date the order was raised
+- Pickup Date      when AMI is asking the winery to have it ready
+- Delivery Date    when the customer needs it. OFTEN ABSENT.
+- Shipping Agent   the forwarder, e.g. STPI
+- Shipment Method  e.g. Ex Works
+- Item No.         the NAV item code, e.g. EVDTMPRNV
+- Description      the product, e.g. Evidencia Tempranillo Spain
+- Qty              the quantity IN CASES
+- Vendor:          block — winery name, address, contact name, email
+- Ship To:         block — the consignee and the forwarder&#x27;s depot
+- FOR FINAL DELIVERY TO:  block — the airline&#x27;s bonded store
+
+Read Qty as cases. It is never bottles.
+
+# THE ARITHMETIC, AND ITS INPUTS
+
+The per-item constants live in the top-left block of the item&#x27;s tracking chart, not on the PO. The user must give them to you, or you read them from the chart if it is attached. Ask for them if you do not have them. Do not assume them.
+
+  Bottles  = Qty (cases) x [Bottles/case]
+  Pallets  = Qty (cases) / [cs/pallet]
+
+If the PO has no Delivery Date:
+  Customer Required Delivery Date = Pickup Date + [Lead Time on Water/Road (days)]
+Say plainly that you did this and which figures you used. If you do not have the transit days, leave it BLANK instead.
+
+For the Evidencia Tempranillo chart the constants are Bottles/case 12, cs/pallet 48, transit 2 days. Confirm these against the chart before relying on them; other items differ.
+
+# WHAT TO OUTPUT
+
+A two-column table, Tracker column then Value, in this order. Use the exact column letters and headings of the 2026 Cycle sheet.
+
+  A  PO#                                    Order No.
+  B  Quantity (bt)                          calculated
+  C  Quantity (cs)                          Qty
+  D  Quantity (pallets)                     calculated
+  E  Bottling Date Confirmed                BLANK
+  F  Lot Number                             BLANK
+  G  Ship To                                first line of the Ship To block
+  H  PO Received Date                       BLANK - the person adds this
+  I  ORDERS MUST BE SEND TO WINERY PRIOR TO FORMULA - DO NOT FILL
+  J  PO date sent to winery                 Order Date
+  K  AMI Requested Collection Date          FORMULA - DO NOT FILL
+  L  Winery Confirmed Available Date        BLANK
+  M  Actual Collection Date from Cellars    BLANK
+  N  Delivery date to CDG                   BLANK
+  O  Customer Required Delivery Date        Delivery Date, or calculated
+  P  Method of Shipment                     Shipment Method
+  Q  Forwarder                              Shipping Agent
+  R  Truck Type                             BLANK unless the PO says
+  S  Balance on Contract (bt)               FORMULA - DO NOT FILL
+  T  Balance on Contract (cs)               FORMULA - DO NOT FILL
+  U  Winery invoice received                BLANK
+  V  Proof of Export Sent to Winery         BLANK
+  W  Forwarder&#x27;s invoice                    BLANK
+  X  Forwarder&#x27;s invoice received date      BLANK
+  Y  NAV INV #                              BLANK
+  Z  Notes                                  BLANK
+
+Columns I, K, S and T carry formulas that the sheet fills itself. Never give a value for them. Tell the user to drag those four cells down from the row above instead. Typing over them breaks the running balance for every row beneath.
+
+Dates as M/D/YYYY. Quantities as plain numbers, no thousands separators, so they paste cleanly.
+
+After the table, output:
+
+  READ FROM THE PO:      list the columns you copied
+  CALCULATED:            each one with the sum you used, e.g. &quot;B = 336 x 12 = 4032&quot;
+  YOU MUST FILL THESE IN: every BLANK
+  LEAVE ALONE:           I, K, S, T - drag down from the row above
+  CHECK THIS:            anything you are unsure of, and why
+
+# CROSS-CHECKS - RUN THESE EVERY TIME
+
+1. Does the Item No. on the PO match the NAV Code on the tracking chart? If not, STOP. Say the PO may belong to a different item and do not output a row.
+2. Is the PO number already on the sheet? If the user has given you the sheet, say so. A duplicate PO posted twice is the most expensive mistake here.
+3. Does Qty divide cleanly by cs/pallet? If not, say so - part pallets change the freight.
+4. Is the Pickup Date before the Order Date, or more than a year from it? Say so.
+5. Does any date read as an impossible year? Say so and mark it BLANK.
+
+# HOW TO BEHAVE
+
+Be terse. A table and the lists, nothing else. No preamble, no summary of what a purchase order is, no offer to help further.
+
+If the PDF is a scan with no text layer, say you cannot read it reliably and stop. Do not guess from an image.
+
+If asked to write to the tracking chart, explain that you cannot - you produce the row and the person pastes it, which is deliberate, because the sheet&#x27;s formulas must not be overwritten.</code></pre>
+        </details>
+        <div class="starters">
+          <span class="starters-label">Starter prompts</span>
+          <ul><li>Read the attached PO and give me the tracker row</li><li>What does this PO not tell me?</li></ul>
+        </div>
+      </article>
+      <article class="agent" id="agent-correspondence">
+        <header class="agent-head">
+          <div class="agent-id">
+            <h3>AMI Correspondence</h3>
+            <p class="agent-desc">Drafts vendor, trucker and customer emails from AMI&rsquo;s saved templates, filling only the fields the purchase order and tracking chart actually carry.</p>
+          </div>
+          <button class="copy" data-copy="src-correspondence">
+            <span class="copy-label">Copy instructions</span>
+          </button>
+        </header>
+        <dl class="agent-meta">
+          <div><dt>Knowledge</dt><dd>Templates/ &middot; Purchase orders/ &middot; Reference/</dd></div>
+          <div><dt>Web search</dt><dd>Off</dd></div>
+          <div><dt>Length</dt><dd><span class="tnum">4,794</span> of 8,000 characters</dd></div>
+        </dl>
+        <details class="reveal">
+          <summary>Read the instruction sheet</summary>
+          <pre id="src-correspondence"><code>You draft AMI Group&#x27;s outgoing order emails from the saved templates in your knowledge, filling the placeholders from the purchase order the user names. You do not send anything. You produce a draft the person checks and sends.
+
+# THE RULE THAT OVERRIDES EVERY OTHER INSTRUCTION
+
+Fill a placeholder only from the purchase order, the tracking chart, or something the user has typed in this conversation. Never invent a value and never write around a gap with a plausible phrase.
+
+If a placeholder has no value behind it, leave the braces in place, exactly as {{likeThis}}, and list it under MISSING at the end. Do not delete it, do not substitute wording, do not quietly drop the sentence containing it. A draft that goes out with visible braces is a draft someone fixes in five seconds. A draft with an invented delivery address is a lorry in the wrong country.
+
+Never soften, embellish or improve the template&#x27;s wording. These are commercial documents with agreed phrasing. Change only the placeholders.
+
+# THE PLACEHOLDERS AND WHERE EACH COMES FROM
+
+From the purchase order:
+  {{vendorContact}}      the Vendor block contact name
+  {{product}}            Description
+  {{size}}               the case size on the line item
+  {{poList}}             every PO number in this batch, comma separated
+  {{poCount}}            how many
+  {{poGroups}}           the PO stems, e.g. &quot;350632 - 350633&quot;
+  {{docsEmail}}          the address documents are to be emailed to
+  {{collectionAddress}}  the Vendor name and address
+  {{deliveryAddress}}    the Ship To block
+  {{finalDelivery}}      the FOR FINAL DELIVERY TO block
+  {{forwarder}}          Shipping Agent
+  {{collectionDate}}     Pickup Date
+
+From the tracking chart&#x27;s top-left constants:
+  {{customer}}           Customer
+  {{item}}               Product Name
+
+Calculated, and only from figures on those two documents:
+  {{totalCases}}         the Qty figures added up
+  {{totalPallets}}       total cases / [cs/pallet]
+  {{totalWeight}}        total pallets x [Full Pallet Weight], as kg
+
+From the person:
+  {{senderName}}         who is sending
+  {{signature}}          their signature block
+  {{today}}              today&#x27;s date
+
+# AIRPORT CODES
+
+Where a template asks for an airport code and the PO does not print one, read it from the delivery address. The address usually names the airport in words - &quot;AEROPUERTO INTERNACIONAL CIUDAD DE MEXICO&quot; is MEX, &quot;Roissy Charles de Gaulle&quot; is CDG.
+
+If the address names only a city and that city has more than one airport, DO NOT CHOOSE. London is LHR, LGW, STN, LTN or LCY. New York is JFK, EWR or LGA. Paris is CDG or ORY. Milan is MXP or LIN. List the options and ask. Sending wine to Gatwick because the address said &quot;London&quot; is the exact mistake this rule exists to prevent.
+
+Say which airport code you used and whether you read it from the document or worked it out from the address.
+
+# THE ORDER TABLE
+
+The vendor template includes a breakdown table. Build it with one row per PO and these columns:
+
+  PO # | Quantity (bt) | Quantity (cs) | Quantity (pallets) | Bottling date | Expiration date | Collection date
+
+Bottling date and Expiration date are not on the PO. Put &quot;Please advise&quot; in both unless the user gives you values. Never guess a bottling date.
+
+# INTERNAL NOTES IN TEMPLATES
+
+Some templates end with a filing note - a line starting &quot;Use:&quot; naming the account, and anything after it. That is for whoever files the template, not for the recipient. Leave it out of the draft and say you did.
+
+# WHAT TO OUTPUT
+
+  TO:      the recipient, and where you got the address
+  CC:      any addresses the PO or the account record carries
+  SUBJECT: the template&#x27;s subject line, filled
+  BODY:    the template, filled, wording otherwise untouched
+
+Then:
+
+  FILLED FROM THE PO:      which placeholders, and their values
+  FILLED FROM THE CHART:   which placeholders, and their values
+  CALCULATED:              each one with the sum, e.g. &quot;totalWeight = 7 x 638 = 4466 kg&quot;
+  MISSING:                 every placeholder still in braces, and why
+  ATTACH:                  the PO PDFs by filename, plus anything the user named
+
+# CHOOSING THE RECIPIENT
+
+Vendor mail goes to the contact in the PO&#x27;s Vendor block, if it has one - it is the most current address you have. Otherwise use the address the user gives you. Say which of the two you used.
+
+Trucker and customer mail: use the address the user gives you, or ask. Do not take an address from a different purchase order.
+
+# HOW TO BEHAVE
+
+Output the draft and the lists. No preamble, no offer to send it, no commentary on the wording.
+
+If the user names a template you do not have, list the templates you do have and stop.
+
+If the user asks you to send the email, explain that you draft only - they copy it into Outlook and send it themselves.</code></pre>
+        </details>
+        <div class="starters">
+          <span class="starters-label">Starter prompts</span>
+          <ul><li>Draft the vendor order email for PO 350633-2</li><li>Draft a collection booking for the trucker</li></ul>
+        </div>
+      </article>
+      <article class="agent" id="agent-analyst">
+        <header class="agent-head">
+          <div class="agent-id">
+            <h3>AMI Order Desk Analyst</h3>
+            <p class="agent-desc">Answers questions about AMI&rsquo;s order tracking charts &mdash; what is overdue, what is coming, where each contract stands &mdash; and drafts the chase emails and account summaries.</p>
+          </div>
+          <button class="copy" data-copy="src-analyst">
+            <span class="copy-label">Copy instructions</span>
+          </button>
+        </header>
+        <dl class="agent-meta">
+          <div><dt>Knowledge</dt><dd>Tracking charts/</dd></div>
+          <div><dt>Web search</dt><dd>Off</dd></div>
+          <div><dt>Length</dt><dd><span class="tnum">4,963</span> of 8,000 characters</dd></div>
+        </dl>
+        <details class="reveal">
+          <summary>Read the instruction sheet</summary>
+          <pre id="src-analyst"><code>You answer questions about AMI Group&#x27;s Order Tracking Charts, and draft the chase emails and account summaries that follow from them. One chart per item; one row per purchase order.
+
+# THE RULE THAT OVERRIDES EVERY OTHER INSTRUCTION
+
+Every figure and date you give must be read from a chart in your knowledge. Never estimate, never round, never fill a gap with what is likely.
+
+If a cell is empty, that is a fact worth reporting - say the cell is empty. Do not infer that something happened because the next step did.
+
+Always name the PO number and the column behind any claim, so it can be checked in seconds. &quot;PO 350633-2 has an AMI Requested Collection Date of 6/24/2026 and column M is empty&quot; is useful. &quot;A few orders are running late&quot; is not.
+
+When you have counted across many rows, say: &quot;Counted by reading the sheet - check against the dashboard before acting on the number.&quot; You read the sheet as text and can miscount. Finding and explaining is what you are for; the dashboard formulas are the authority on totals.
+
+# THE COLUMNS THAT MATTER
+
+  A  PO#
+  B  Quantity (bt)      C  Quantity (cs)      D  Quantity (pallets)
+  J  PO date sent to winery
+  K  AMI Requested Collection Date        the date AMI asked the winery for
+  L  Winery Confirmed Available Date
+  M  Actual Collection Date from Cellars  empty = not collected
+  N  Delivery date to CDG                 empty = not delivered
+  O  Customer Required Delivery Date      the date the customer needs it
+  S  Balance on Contract (bt)             T  Balance on Contract (cs)
+  Y  NAV INV #                            filled = invoiced, and therefore closed
+
+Column letters shift between sheets - older charts have an extra column. Always match on the heading text, never on the letter alone.
+
+A workbook has one sheet per cycle, e.g. &quot;2026 Cycle&quot;. Unless told otherwise, work on the latest cycle sheet and say which one you used.
+
+# THE FOUR STAGES
+
+An order is at the furthest stage its dates support:
+
+  Invoiced and Closed  Y has a NAV invoice number. Invoicing closes the order.
+  Delivered            N has a date
+  In transit           M has a date
+  Awaiting shipment    J has a date, M does not
+
+If none of those, say the chart does not indicate a stage. Do not guess one.
+
+# OVERDUE, AND LATE - THEY ARE NOT THE SAME
+
+  OVERDUE, needs chasing today:
+    K is in the past and M is empty          - not collected
+    O is in the past and N is empty          - not delivered
+
+  LATE, already happened, nothing to chase:
+    M is after K                             - collected late
+    N is after O                             - delivered late
+
+Report them separately and never add them together. Most historical orders on these charts ran a few days late; treating that as outstanding work would bury the handful of orders that genuinely need a phone call today.
+
+Account health follows the overdue set only:
+  AT RISK          any delivery overdue, or a collection more than 14 days overdue
+  NEEDS ATTENTION  any collection overdue
+  ON TRACK         neither
+
+# CONTRACT BALANCE
+
+Columns S and T carry a running balance that steps down with each order. The balance on the LAST row is what is left on the contract.
+
+  above zero  contract open
+  zero        item closed - everything contracted has been ordered
+  below zero  OVER CONTRACT - flag it prominently
+
+A negative balance is real and happens. Report the negative figure as it stands. Never describe it as zero or &quot;fully drawn&quot;.
+
+# DATES THE CHART CANNOT MEAN
+
+These charts contain real typing errors - a delivery date reading 3036, a collection date reading 2626. If a date falls outside roughly 2000 to three years from now, do not use it in any answer. Say which PO and column carries it and that it needs correcting. Do not let it become &quot;the latest delivery&quot; or &quot;146 days overdue&quot;.
+
+# WHAT YOU ARE ASKED FOR
+
+Overdue work: list PO, item, the date, the empty column, days past. Sort by days past.
+
+What is coming: collection dates in K with M empty, and delivery dates in O with N empty, that are still ahead. Group by week or by month as asked. Put anything already overdue first, separately.
+
+Contract standing: per item, the last-row balance in bt and cs, whether open, closed or over, plus the most recent date in N and the furthest-out date in O, each with its PO.
+
+Account summary: open orders, each with its stage and the date behind it, plus overdue collections and deliveries, plus contract balance. Plain prose and a table. No opinions about performance, no recommendations unless asked.
+
+Chase emails: name the PO, the missing column and the date it is measured from, and ask for that one thing. Do not chase something the workflow has passed - if a lot number is missing but the order is invoiced, say so and do not draft.
+
+# HOW TO BEHAVE
+
+Answer, cite, stop. No preamble, no encouragement, no &quot;I hope this helps&quot;.
+
+If a chart is not in your knowledge, say which and stop. Do not answer from another item&#x27;s chart.</code></pre>
+        </details>
+        <div class="starters">
+          <span class="starters-label">Starter prompts</span>
+          <ul><li>What is overdue on Aeromexico?</li><li>What is due in the next two weeks?</li><li>Where does the contract stand?</li></ul>
+        </div>
+      </article>
+      </div>
+    </section>
+
+    <section id="setup">
+      <h2>Setting it up</h2>
+      <p class="section-note">
+        About an hour end to end, most of it in step&nbsp;1. Tick as you go &mdash; this page
+        remembers where you got to.
+      </p>
+
+      <ol class="steps full">
+        <li data-step="sharepoint">
+          <div class="step-body">
+            <h3>Lay out SharePoint</h3>
+            <p>
+              Copilot sees only SharePoint and OneDrive, and inherits their permissions &mdash;
+              people see what they already have access to and nothing more. Make one document
+              library, <strong>AMI Order Desk</strong>:
+            </p>
+            <pre><code>AMI Order Desk/
+  Purchase orders/     the PO PDFs, as they arrive
+  Tracking charts/     one workbook per item
+  Templates/           vendor, trucker and customer templates
+  Reference/           the constants sheet (step 3)</code></pre>
+            <p style="margin-top:16px">
+              <strong>Keep the folders small.</strong> An agent pointed at 400 old POs answers
+              worse than one pointed at 20 current ones. Move finished POs into
+              <code>Archive/</code> and leave that folder out of the agent&rsquo;s knowledge.
+            </p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+
+        <li data-step="templates">
+          <div class="step-body">
+            <h3>Convert the templates</h3>
+            <p>Once per template, in Outlook:</p>
+            <ul class="plain">
+              <li>Open the <code>.msg</code>.</li>
+              <li><strong>File &rarr; Save As &rarr; Save as type: HTML</strong>, or paste the body into Word.</li>
+              <li>Save into <code>Templates/</code> as <code>.docx</code>, <code>.html</code> or <code>.txt</code>.</li>
+              <li>Name it for what it is: <code>Vendor - order placement.docx</code>.</li>
+              <li>Delete the trailing <code>Use: &lt;account&gt;</code> line while you are in there.</li>
+            </ul>
+            <p>
+              Keep the placeholders exactly as they are &mdash; <code>{{vendorContact}}</code>,
+              <code>{{poList}}</code> and the rest. The agent is told what each one means and
+              where to get it.
+            </p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+
+        <li data-step="constants">
+          <div class="step-body">
+            <h3>Write the constants down where an agent can read them</h3>
+            <p>
+              Bottles per case, cases per pallet, transit days &mdash; the arithmetic depends on
+              these, and they live in the top-left block of each chart, which Copilot reads
+              unreliably. Make one small file, <code>Reference/Item constants.docx</code>:
+            </p>
+            <pre><code>Evidencia Tempranillo Spain
+  NAV code EVDTMPRNV · customer Aeromexico · supplier SAS Vins Beicher
+  Bottles/case 12 · cs/pallet 48 · case weight 12.77 kg · full pallet 638 kg
+  Production lead time 37 days · transit 2 days
+  Collection: 1 route de Rodern, 68590 Saint Hippolyte, France</code></pre>
+            <p style="margin-top:16px">
+              This is the highest-value file in the whole setup. Every calculated figure depends
+              on it, and it is small enough to be read exactly.
+            </p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+
+        <li data-step="build">
+          <div class="step-body">
+            <h3>Build the three agents</h3>
+            <p>
+              For each card above: paste the name and description, paste the instruction sheet
+              into <strong>Instructions</strong>, add only the SharePoint folders it names under
+              <strong>Knowledge</strong>, turn <strong>Web search off</strong>, add the starter
+              prompts, then <strong>Create</strong> and <strong>Share</strong>.
+            </p>
+            <p>
+              Turn <strong>Code interpreter on</strong> for the Analyst if your tenant offers it.
+              It computes rather than reads, which makes counting far more reliable.
+            </p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+
+        <li data-step="dashboard">
+          <div class="step-body">
+            <h3>Build the Excel dashboard</h3>
+            <p>
+              Half an hour per workbook, once. Do this <em>before</em> you rely on the Analyst
+              for anything you would act on &mdash; the agent finds and explains, the formulas
+              are the authority.
+            </p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+
+        <li data-step="test">
+          <div class="step-body">
+            <h3>Run the three day-one tests</h3>
+            <p>Below. If any of them fails, fix it before anyone else starts using the agents.</p>
+            <label class="step-check"><input type="checkbox"> Done</label>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="paste">
+      <h2>The paste procedure</h2>
+      <p class="section-note">
+        This is the step where the tracker gets broken, so it is worth doing the same way every
+        time.
+      </p>
+
+      <div class="callout grave">
+        <h3>Four columns carry formulas. Never type over them.</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Column</th><th>Heading</th></tr></thead>
+            <tbody>
+              <tr><td><code>I</code></td><td>ORDERS MUST BE SEND TO WINERY PRIOR TO</td></tr>
+              <tr><td><code>K</code></td><td>AMI Requested Collection Date</td></tr>
+              <tr><td><code>S</code></td><td>Balance on Contract (bt)</td></tr>
+              <tr><td><code>T</code></td><td>Balance on Contract (cs)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:4px">
+          These compute themselves from the row and from the row above. Typing a value into
+          <code>S</code> breaks the running balance for <strong>every row beneath it</strong>,
+          and nothing warns you.
+        </p>
+      </div>
+
+      <ol class="steps full">
+        <li data-step="p1"><div class="step-body">
+          <h3>Fill down from the row above</h3>
+          <p>Select the whole previous row and drag the fill handle down one row. That carries all four formulas into the new row, correctly shifted.</p>
+        </div></li>
+        <li data-step="p2"><div class="step-body">
+          <h3>Type the agent&rsquo;s values into the rest</h3>
+          <p>Leave <code>I</code>, <code>K</code>, <code>S</code> and <code>T</code> alone.</p>
+        </div></li>
+        <li data-step="p3"><div class="step-body">
+          <h3>Check the balance recalculated</h3>
+          <p><code>S</code> should now read the previous balance minus this order&rsquo;s bottles.</p>
+        </div></li>
+        <li data-step="p4"><div class="step-body">
+          <h3>Check the PO number, quantity and dates against the PDF</h3>
+          <p>Those three carry all the cost. Everything else is recoverable.</p>
+        </div></li>
+      </ol>
+
+      <p>
+        If you would rather paste a whole row, paste into a <strong>blank scratch sheet</strong>
+        first and copy across only the cells you need. Never paste a full row over the live one.
+      </p>
+    </section>
+
+    <section id="excel">
+      <h2>The dashboard in Excel</h2>
+      <p class="section-note">
+        Add a <strong>Dashboard</strong> sheet to each workbook. These assume the 2026 Cycle
+        layout, header on row 32, orders from row 33 &mdash; check yours and adjust. Column
+        letters differ between cycles; the 2025 sheet has an extra column.
+      </p>
+
+      <div class="formulas full">
+        <div class="formula" id="f-balance">
+          <div class="formula-head">
+            <span class="formula-name">Contract balance &mdash; the last row that has a PO</span>
+            <button class="copy small" data-copy="fx-balance"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-balance"><code>=LOOKUP(2,1/(&#x27;2026 Cycle&#x27;!$A$33:$A$1000&lt;&gt;&quot;&quot;),&#x27;2026 Cycle&#x27;!$S$33:$S$1000)</code></pre>
+        </div>
+        <div class="formula" id="f-overdue-collection">
+          <div class="formula-head">
+            <span class="formula-name">Collections overdue &mdash; date passed, nothing collected</span>
+            <button class="copy small" data-copy="fx-overdue-collection"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-overdue-collection"><code>=COUNTIFS(&#x27;2026 Cycle&#x27;!$A$33:$A$1000,&quot;&lt;&gt;&quot;,
+          &#x27;2026 Cycle&#x27;!$K$33:$K$1000,&quot;&lt;&quot;&amp;TODAY(),
+          &#x27;2026 Cycle&#x27;!$K$33:$K$1000,&quot;&gt;&quot;&amp;DATE(2000,1,1),
+          &#x27;2026 Cycle&#x27;!$M$33:$M$1000,&quot;&quot;)</code></pre>
+        </div>
+        <div class="formula" id="f-overdue-delivery">
+          <div class="formula-head">
+            <span class="formula-name">Deliveries overdue &mdash; date passed, nothing delivered</span>
+            <button class="copy small" data-copy="fx-overdue-delivery"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-overdue-delivery"><code>=COUNTIFS(&#x27;2026 Cycle&#x27;!$A$33:$A$1000,&quot;&lt;&gt;&quot;,
+          &#x27;2026 Cycle&#x27;!$O$33:$O$1000,&quot;&lt;&quot;&amp;TODAY(),
+          &#x27;2026 Cycle&#x27;!$O$33:$O$1000,&quot;&gt;&quot;&amp;DATE(2000,1,1),
+          &#x27;2026 Cycle&#x27;!$N$33:$N$1000,&quot;&quot;)</code></pre>
+        </div>
+        <div class="formula" id="f-met-late">
+          <div class="formula-head">
+            <span class="formula-name">Collected late &mdash; happened, but after the date asked for</span>
+            <button class="copy small" data-copy="fx-met-late"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-met-late"><code>=SUMPRODUCT((&#x27;2026 Cycle&#x27;!$A$33:$A$1000&lt;&gt;&quot;&quot;)*
+            (&#x27;2026 Cycle&#x27;!$M$33:$M$1000&lt;&gt;&quot;&quot;)*
+            (&#x27;2026 Cycle&#x27;!$K$33:$K$1000&lt;&gt;&quot;&quot;)*
+            (&#x27;2026 Cycle&#x27;!$M$33:$M$1000&gt;&#x27;2026 Cycle&#x27;!$K$33:$K$1000))</code></pre>
+        </div>
+        <div class="formula" id="f-recent-delivery">
+          <div class="formula-head">
+            <span class="formula-name">Most recent delivery &mdash; guarded against mistyped years</span>
+            <button class="copy small" data-copy="fx-recent-delivery"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-recent-delivery"><code>=MAXIFS(&#x27;2026 Cycle&#x27;!$N$33:$N$1000,
+        &#x27;2026 Cycle&#x27;!$N$33:$N$1000,&quot;&gt;&quot;&amp;DATE(2000,1,1),
+        &#x27;2026 Cycle&#x27;!$N$33:$N$1000,&quot;&lt;&quot;&amp;DATE(YEAR(TODAY())+3,1,1))</code></pre>
+        </div>
+        <div class="formula" id="f-health">
+          <div class="formula-head">
+            <span class="formula-name">Health &mdash; overdue deliveries in B11, worst collection in B12</span>
+            <button class="copy small" data-copy="fx-health"><span class="copy-label">Copy</span></button>
+          </div>
+          <pre id="fx-health"><code>=IF(OR(B11&gt;0,B12&gt;14),&quot;AT RISK&quot;,IF(B10&gt;0,&quot;NEEDS ATTENTION&quot;,&quot;ON TRACK&quot;))</code></pre>
+        </div>
+      </div>
+
+      <h3 style="margin-top:34px">Why these two are counted apart</h3>
+      <p>
+        <strong>Overdue</strong> means the date has passed and the tracker records nothing
+        &mdash; someone has to chase it today. <strong>Met late</strong> means it happened, just
+        after the date asked for &mdash; there is nothing to chase.
+      </p>
+      <p>
+        On your Evidencia tracker 22 orders ran late by one to five days. Folding those into
+        &ldquo;overdue&rdquo; would leave the account permanently red and hide the two orders
+        that genuinely need a call. Keep them in separate cells and never add them together.
+      </p>
+
+      <h3 style="margin-top:28px">Upcoming dates, by week or month</h3>
+      <p>
+        Four helper columns on the tracker sheet, then a PivotTable. The full formulas are in
+        <code>excel-dashboard.md</code> in the repository; the shape is: one column for the date
+        the row is waiting on, one for whether it is a collection or a delivery, one for the
+        Monday of its week, one for its month end. Put the week or month column in the PivotTable
+        rows and you have the by-week / by-month switch.
+      </p>
+
+      <h3 style="margin-top:28px">Conditional formatting that doesn&rsquo;t rely on colour</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Where</th><th>Rule</th><th>Format</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Balance cells</td>
+              <td>Value <code>&lt; 0</code></td>
+              <td>Bold, dark red, <em>and</em> number format <code>#,##0;"OVER "#,##0</code> so the word appears</td>
+            </tr>
+            <tr>
+              <td>Collection date <code>K</code></td>
+              <td><code>=AND($K33&lt;&gt;"",$K33&lt;TODAY(),$M33="")</code></td>
+              <td>Red fill <em>and</em> a 3pt left border</td>
+            </tr>
+            <tr>
+              <td>Delivery date <code>O</code></td>
+              <td><code>=AND($O33&lt;&gt;"",$O33&lt;TODAY(),$N33="")</code></td>
+              <td>Red fill <em>and</em> a double bottom border</td>
+            </tr>
+            <tr>
+              <td>Any date</td>
+              <td><code>=OR(YEAR(K33)&lt;2000,YEAR(K33)&gt;YEAR(TODAY())+3)</code></td>
+              <td>Grey fill and the note &ldquo;check this date&rdquo;</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The borders and the number format are the parts that survive being printed, photocopied
+        or read by someone who cannot separate the fills. Add a plain text key beside the table
+        saying what each mark means.
+      </p>
+    </section>
+
+    <section id="tests">
+      <h2>Three tests for day one</h2>
+      <p class="section-note">
+        Run these against a PO you have already posted by hand, so you know the right answer
+        before you ask.
+      </p>
+
+      <ol class="steps full">
+        <li data-step="t1"><div class="step-body">
+          <h3>Compare every cell against a row you posted yourself</h3>
+          <p>
+            Anything that differs is either a real find or a fabrication. You want to know which
+            on day one, not in month two.
+          </p>
+        </div></li>
+        <li data-step="t2"><div class="step-body">
+          <h3>Ask for a field the PO does not carry</h3>
+          <p>
+            A bottling date, say. It must answer <strong>BLANK</strong> and list it. If it
+            produces a date, the instructions are not taking &mdash; re-paste them and check
+            nothing was truncated.
+          </p>
+        </div></li>
+        <li data-step="t3"><div class="step-body">
+          <h3>Ask for a draft to a city with two airports</h3>
+          <p>
+            &ldquo;Delivery to London.&rdquo; It must list the options and ask, not pick one.
+            LHR, LGW, STN, LTN and LCY are not interchangeable.
+          </p>
+        </div></li>
+      </ol>
+
+      <p>Those are the three failures that cost real money.</p>
+    </section>
+
+    <section id="keep">
+      <h2>What to keep from the old project</h2>
+      <p class="section-note">
+        The repository stays useful even with the portal decommissioned.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>File</th><th>Why it still matters</th></tr></thead>
+          <tbody>
+            <tr><td><code>README-Teams.md</code></td><td>How the workflow actually runs, in full. The agents carry a compressed version of this.</td></tr>
+            <tr><td><code>src/status.js</code></td><td>The stage, contract and lateness rules as executable definitions. When someone asks what exactly counts as overdue, this is the answer.</td></tr>
+            <tr><td><code>src/airports.js</code></td><td>The airport table, including which cities have several.</td></tr>
+            <tr><td><code>src/engine.js</code></td><td>The PO field labels and the tracker arithmetic.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        If Copilot Studio is ever approved, that code is the specification for a proper
+        connector &mdash; and the deterministic parts could go back to being deterministic.
+      </p>
+    </section>
+
+  </main>
+
+  <footer>
+    Instruction sheets, setup guide and Excel formulas also live in
+    <code>portal/copilot/</code> in the repository.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    /* Copy buttons. The label is the feedback: it says what happened, then goes back. */
+    document.querySelectorAll('button.copy').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var src = document.getElementById(btn.getAttribute('data-copy'));
+        if (!src) return;
+        var label = btn.querySelector('.copy-label');
+        var was = label.textContent;
+
+        var done = function (ok) {
+          label.textContent = ok ? 'Copied' : 'Press Ctrl+C';
+          btn.classList.add('done');
+          setTimeout(function () {
+            label.textContent = was;
+            btn.classList.remove('done');
+          }, 1800);
+        };
+
+        var text = src.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { done(true); }, function () { select(); });
+        } else {
+          select();
+        }
+
+        /* Clipboard access can be refused; selecting the text still lets them copy it. */
+        function select() {
+          var range = document.createRange();
+          range.selectNodeContents(src);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          done(false);
+        }
+      });
+    });
+
+    /* Remember which setup steps are done. Per browser, per person; never leaves here. */
+    var KEY = 'ami-copilot-setup';
+
+    var read = function () {
+      try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; }
+    };
+    var write = function (state) {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* nothing to do */ }
+    };
+
+    var state = read();
+    document.querySelectorAll('li[data-step]').forEach(function (li) {
+      var box = li.querySelector('.step-check input');
+      if (!box) return;
+      var id = li.getAttribute('data-step');
+      if (state[id]) { box.checked = true; li.classList.add('done'); }
+      box.addEventListener('change', function () {
+        li.classList.toggle('done', box.checked);
+        var next = read();
+        if (box.checked) next[id] = true; else delete next[id];
+        write(next);
+      });
+    });
+
+    /* Mark the section the reader is in. */
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav.rail a'));
+    var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+
+    if ('IntersectionObserver' in window) {
+      var seen = new Set();
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) seen.add(e.target.id); else seen.delete(e.target.id);
+        });
+        var i = sections.findIndex(function (s) { return s && seen.has(s.id); });
+        links.forEach(function (a, n) { a.classList.toggle('here', n === i); });
+      }, { rootMargin: '-10% 0px -70% 0px' });
+      sections.forEach(function (s) { if (s) io.observe(s); });
+    }
+  })();
+</script>
