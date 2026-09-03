@@ -50,6 +50,32 @@ Read the value to the right of each printed label, or the block beneath it.
 
 `Qty` is always cases. It is never bottles.
 
+If the PDF returns no text — a scan, a photograph — say so and stop. **Do not read
+figures off an image of a document.** A misread digit in a quantity is a wrong
+lorry.
+
+## Working in SharePoint and Excel
+
+You can open the tracking chart. Do it — every time, before you output a row.
+Reading the live sheet is what turns cross-checks 1 and 2 below from advice into
+an actual check.
+
+**Open the workbook read-only. Never write to it.** Columns `I`, `K`, `S` and `T`
+carry formulas, and an automated write near `S` breaks the running contract
+balance for every row beneath it with nothing in Excel to warn anyone. Your output
+is a row for a person to paste. That is deliberate, not a limitation to work
+around — say so if you are asked to update the sheet.
+
+When you open the chart:
+
+1. **Say which workbook and which cycle sheet you read**, by name.
+2. **Read the constants from its top-left block** and use those. They are the
+   authority; the table below is a fallback for when you cannot open the chart.
+   **If the two disagree, stop and say so** — one of them is wrong, and a wrong
+   cases-per-pallet books the wrong freight.
+3. **Read the last used row** so you can check the PO is not already there, and
+   confirm the balance the new row will step down from.
+
 ## Item constants
 
 These are **not on the purchase order**. They live in the top-left block of the
@@ -155,8 +181,11 @@ CHECK THIS              anything uncertain, and why
 1. **Item match.** Does `Item No.` on the PO match the NAV code of the tracking
    chart? If not, **stop**. Say the PO may belong to a different item and output
    no row. A PO posted to the wrong chart corrupts two contract balances at once.
-2. **Duplicate.** Is this PO number already on the sheet? If you have the sheet,
-   check and say so. A PO posted twice is the most expensive mistake here.
+2. **Duplicate.** Is this PO number already on the sheet? Search column A of every
+   cycle sheet in the workbook, not just the current one. If it is there, **stop**
+   — name the sheet and row it sits on and output no row. A PO posted twice is
+   the most expensive mistake here. If you could not open the workbook, say the
+   check did not run.
 3. **Whole pallets.** Does `Qty` divide cleanly by cases per pallet? If not, say
    so — part pallets change the freight cost and the booking.
 4. **Date sanity.** Is `Pickup Date` before `Order Date`, or more than a year
@@ -171,9 +200,10 @@ CHECK THIS              anything uncertain, and why
 - **You produce the row; a person pastes it.** If asked to write to the tracking
   chart, explain that this is deliberate — the sheet's formulas must not be
   overwritten by an automated paste.
-- **A scan with no text layer cannot be read reliably.** Say so and stop. Do not
-  read figures off an image of a document.
 - **One PO, one row.** For a batch, output them one at a time, each with its own
-  checks.
+  checks. Never merge two POs into a row, even for the same item on the same day.
+- **Never say a check ran when it did not.** If the workbook would not open, name
+  the check you could not run. An unrun duplicate check reported as passed is
+  worse than no check at all.
 - Be terse. The table and the five lists, nothing else. No preamble, no
   explanation of what a purchase order is, no offer to help further.

@@ -27,19 +27,38 @@ frontmatter. Upload is the better route and the instructions below use it.
 the skill by matching the request against each `description`, and your team has
 one place to go rather than three.
 
-1. **Create an agent.** Name it `AMI Order Desk`. Description: *"Reads AMI
-   purchase orders, drafts order correspondence, and answers questions about the
-   order tracking charts."*
+1. **Create an agent.** Name it for the programme — `Order Desk - Europe`.
 2. **Add each skill** — upload `ami-po-reader/SKILL.md`,
    `ami-correspondence/SKILL.md` and `ami-order-desk-analyst/SKILL.md`.
-3. **Knowledge → SharePoint.** Point it at the `AMI Order Desk` library: the
-   purchase order, tracking chart and template folders. Leave `Archive/` out — a
-   folder of 400 finished POs makes every answer worse.
-4. **Moderation: High.** This tightens how far the model goes beyond its sources,
-   which is the behaviour all three skills are built around.
-5. **General knowledge: off**, if the toggle is available. Nothing outside your
-   documents should reach a tracker row.
-6. **Test the three checks below before sharing it with anyone.**
+3. **Instructions.** Paste the block from `AGENT-INSTRUCTIONS.md`. The box must
+   not be left on its placeholder text: it is what routes between the three
+   skills and carries the rules that hold whichever one is running.
+4. **Tools → SharePoint MCP**, scoped **read-only** if the connection offers it.
+5. **Knowledge → SharePoint.** Point it at the purchase order, tracking chart and
+   template folders. Leave `Archive/` out — a folder of 400 finished POs makes
+   every answer worse. **No web source.**
+6. **Memory: off.** See `AGENT-INSTRUCTIONS.md` for why.
+7. **Moderation: High**, and **general knowledge off** if the toggle is there.
+8. **Test the three checks below before sharing it with anyone.**
+
+### What the agent does and does not touch
+
+The skills assume tools are live, and are written to a deliberate posture:
+
+| | |
+| --- | --- |
+| **Reads** | PO PDFs, tracking charts, templates — from SharePoint and OneDrive |
+| **Writes** | Nothing, in Excel. It opens workbooks read-only and hands you the row |
+| **Outlook** | Creates drafts, with attachments. **Never sends** |
+
+Reading the live workbook is a real gain: the PO reader's duplicate check and
+item-code check were conditional advice before, and now actually run against
+column A of every cycle sheet. Duplicate-PO is the most expensive mistake in this
+workflow, and it is now caught before the row is written rather than at invoicing.
+
+The read-only posture is not caution for its own sake. Columns `I`, `K`, `S` and
+`T` carry formulas; a write near `S` breaks the running contract balance for every
+row beneath it and Excel says nothing. The row goes in by hand, after a fill-down.
 
 ### When to split into three agents instead
 
@@ -72,20 +91,25 @@ above, **Web search off**.
 
 The instructions field caps at **8,000 characters**. Measured:
 
-| Skill body | Characters |
-| --- | --- |
-| `ami-po-reader` | 7,556 |
-| `ami-order-desk-analyst` | 5,557 |
-| `ami-correspondence` | 5,114 |
+| Skill body | Characters | Against the cap |
+| --- | --- | --- |
+| `ami-po-reader` | 9,154 | **over — must be trimmed** |
+| `ami-correspondence` | 6,556 | fits |
+| `ami-order-desk-analyst` | 6,333 | fits |
 
-All three fit. The PO reader has about 440 characters of headroom, so if you add
-items to its constants table, watch the counter. **A silently truncated
-instruction sheet is the failure that looks like the model ignoring you**, and it
-is the cross-checks at the bottom that get cut first.
+The PO reader no longer fits, because the tool sections that make it work in a
+live M365 tenant pushed it past the cap. Copilot Studio's skill upload has no such
+limit, which is another reason to prefer it.
 
-If you must trim, cut the Boundaries section, then the `BLANK` rows of the column
-table — keeping the four formula columns and every column that carries a value.
-**Never cut the rule at the top or the cross-checks.**
+To fit the PO reader into Agent Builder, cut in this order: the **Working in
+SharePoint and Excel** section (Agent Builder has no tools, so it is describing
+something that cannot happen), then Boundaries, then the `BLANK` rows of the
+column table — keeping the four formula columns and every column that carries a
+value. That first cut alone brings it back under.
+
+**Never cut the rule at the top or the cross-checks**, and check the character
+counter after pasting. A silently truncated instruction sheet is the failure that
+looks like the model simply ignoring you, and the cross-checks are at the bottom.
 
 ## Claude
 
@@ -121,11 +145,20 @@ Run these on day one, against a PO you have already posted by hand:
    which on day one, not in month two.
 2. **Ask it for a field the PO does not carry** — a bottling date. It must answer
    `BLANK` and list it. A date here means the instructions are not taking.
-3. **Ask correspondence to draft to a city with two airports** — "delivery to
-   London". It must list the options and ask, not pick one.
+3. **Feed it a PO that is already on the sheet.** It must find it, name the sheet
+   and row, and refuse to output a row. This is the check the tools bought you;
+   confirm it actually runs.
+4. **Ask correspondence to draft to a city with two airports** — "delivery to
+   London". It must list LHR, LGW, STN, LTN and LCY and ask, not pick one.
+5. **Ask it to send that draft.** It must decline and leave the draft in Outlook.
 
-If any of the three fails, stop and fix it before rolling out. They are the three
-failures that cost real money.
+If any fails, stop and fix it before rolling out. They are the failures that cost
+real money.
+
+Test 3 is also the one that tells you whether the SharePoint connection is
+actually working. A tenant permission problem looks identical to a clean sheet —
+the agent says nothing was found either way — which is why the skill is told to
+name the check it could not run rather than report a pass.
 
 ## Keeping them current
 
