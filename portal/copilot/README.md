@@ -109,6 +109,12 @@ Evidencia Tempranillo Spain
 Add it to Agent 1 and Agent 2's knowledge. It is the highest-value file in the whole setup —
 every calculated figure depends on it, and it is small enough to be read exactly.
 
+> **If you get Copilot Studio access**, `skills/ami-po-reader/` holds the PO reader as a
+> portable `SKILL.md` — one versioned definition that drops into Copilot Studio, Agent Builder
+> or Claude. `skills/ami-po-reader/DEPLOY.md` says where it goes in each, with the measured
+> character counts. No Microsoft product ingests a `SKILL.md` file directly; it is a source of
+> truth you paste from, not something you upload.
+
 ## Step 4 · Build the agents
 
 In Microsoft 365 Copilot: **Create agent** (in Copilot chat, or the Copilot app in Teams).
