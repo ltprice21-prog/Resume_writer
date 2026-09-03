@@ -1,6 +1,6 @@
 ---
 name: ami-po-reader
-description: Reads an AMI Group purchase order PDF and produces the single row to add to that item's Excel Order Tracking Chart, plus a list of every field the PO does not carry. Use when someone supplies a purchase order and needs the tracker row, asks what a PO does or does not contain, or asks which cells they must fill in by hand. Covers the NAV purchase order field labels, the bottles and pallets arithmetic, the four tracker columns whose formulas must never be overwritten, and the cross-checks that catch a duplicate or misrouted purchase order.
+description: Reads an AMI Group purchase order PDF and produces the single row to add to that item's Excel Order Tracking Chart, plus a list of every field the purchase order does not carry. Use when someone supplies a purchase order and needs the tracker row, asks what a PO does or does not contain, or asks which cells they must fill in by hand. Covers the NAV purchase order field labels, the bottles and pallets arithmetic, the per-item constants, the four tracker columns whose formulas must never be overwritten, and the cross-checks that catch a duplicate or misrouted purchase order.
 ---
 
 # AMI purchase order reader
@@ -12,8 +12,7 @@ Chart, and say plainly what the purchase order does not tell you.
 
 **Never invent, infer, estimate or complete a value.** Every figure you output is
 either copied from the purchase order, or calculated by the arithmetic below from
-figures printed on that same purchase order and the item constants you have been
-given.
+figures printed on that same purchase order and the item constants in this file.
 
 If a value is not there, write `BLANK`. Never a plausible value, never a value
 carried over from another order, never a typical or expected one. **A blank cell
@@ -51,19 +50,35 @@ Read the value to the right of each printed label, or the block beneath it.
 
 `Qty` is always cases. It is never bottles.
 
-## The arithmetic, and where its inputs come from
+## Item constants
 
-The constants are **not on the purchase order**. They live in the top-left block
-of the item's tracking chart, and are listed in `reference/item-constants.md`.
+These are **not on the purchase order**. They live in the top-left block of the
+item's tracking chart, repeated here because that block is laid out for a person
+reading a spreadsheet and is read unreliably by anything else.
 
-If you do not have the constants for this item, **ask for them**. Do not assume
-them, and do not carry them over from a different item — bottles per case and
-cases per pallet differ between products, and using the wrong pair silently
-produces a wrong pallet count and a wrong freight booking.
+| Item | NAV code | Customer | Bottles/case | Cases/pallet | Full pallet kg | Transit days |
+| --- | --- | --- | --- | --- | --- | --- |
+| Evidencia Tempranillo Spain | `EVDTMPRNV` | Aeromexico | 12 | 48 | 638 | 2 |
+
+Evidencia detail: supplier SAS Vins Beicher · case 12 × 1L · case weight 12.77 kg ·
+production lead time 37 days · origin Spain · HS 22042182 · collection 1 route de
+Rodern, 68590 Saint Hippolyte, France · winery closed 12/22–1/5, last PO 12/5,
+first collection after closure 1/6 · minimum order 5 pallets.
+
+**If an item is not in this table, ask for its constants.** Do not assume them and
+do not carry them over from a different item — bottles per case and cases per
+pallet differ across the range, and a borrowed pair silently produces a wrong
+pallet count and a wrong freight booking.
+
+**When a constant changes on a chart, change it here the same day.** A stale
+cases-per-pallet produces a number nobody checks, because it looks reasonable.
+
+## The arithmetic
 
 ```
 Bottles = Qty (cases) × [Bottles per case]
 Pallets = Qty (cases) ÷ [Cases per pallet]
+Weight  = Pallets × [Full pallet kg]
 ```
 
 When the PO carries no `Delivery Date`:
@@ -162,9 +177,3 @@ CHECK THIS              anything uncertain, and why
   checks.
 - Be terse. The table and the five lists, nothing else. No preamble, no
   explanation of what a purchase order is, no offer to help further.
-
-## Reference
-
-- `reference/item-constants.md` — bottles per case, cases per pallet, transit
-  days and NAV code, per item. Keep this current; every calculated figure depends
-  on it.

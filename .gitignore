@@ -11,3 +11,5 @@ build
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+portal/copilot/skills/dist/

@@ -1,7 +1,12 @@
 # Moving the Order Desk to Microsoft Copilot
 
-For **Microsoft 365 Copilot Agent Builder** — not Copilot Studio. Everything here works with
-what Agent Builder gives you: a name, an instruction sheet, and SharePoint files as knowledge.
+For **Microsoft 365 Copilot Agent Builder**: a name, an instruction sheet, and SharePoint files
+as knowledge.
+
+> **If you have Copilot Studio, start at `skills/DEPLOY.md` instead.** Copilot Studio accepts
+> skill upload, and `skills/` holds all three agents as uploadable `SKILL.md` files — one
+> versioned definition each, rather than three instruction blocks pasted by hand. Steps 1, 2, 3,
+> 5 and 6 below still apply; step 4 is replaced by the upload.
 
 ---
 
@@ -109,11 +114,9 @@ Evidencia Tempranillo Spain
 Add it to Agent 1 and Agent 2's knowledge. It is the highest-value file in the whole setup —
 every calculated figure depends on it, and it is small enough to be read exactly.
 
-> **If you get Copilot Studio access**, `skills/ami-po-reader/` holds the PO reader as a
-> portable `SKILL.md` — one versioned definition that drops into Copilot Studio, Agent Builder
-> or Claude. `skills/ami-po-reader/DEPLOY.md` says where it goes in each, with the measured
-> character counts. No Microsoft product ingests a `SKILL.md` file directly; it is a source of
-> truth you paste from, not something you upload.
+> **On Copilot Studio**, skip this step: the constants are already inside
+> `skills/ami-po-reader/SKILL.md`, in its **Item constants** table. Keep them in one place, not
+> two — a second copy in SharePoint drifts and nobody knows which is right.
 
 ## Step 4 · Build the agents
 
