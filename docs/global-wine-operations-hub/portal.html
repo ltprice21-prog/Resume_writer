@@ -1,0 +1,1451 @@
+<title>Global Wine Operations Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: fixed left rail (bottom bar on phones) + sticky top bar + one working view; records open in a right-hand drawer. */
+:root{
+  --bg:#f5f4f3; --surface:#ffffff; --surface-2:#eeebea; --line:#e0dcda; --line-2:#cfc9c7;
+  --fg:#1e1a1b; --muted:#6a6264; --faint:#958d8f;
+  --accent:#7b1e3a; --accent-fg:#ffffff; --accent-soft:#f3e4e9;
+  --ok:#2c7a4b; --ok-soft:#e2f1e7; --warn:#9a5d06; --warn-soft:#fbefd8;
+  --bad:#b3261e; --bad-soft:#fbe3e1; --crit:#6f0c0c; --crit-soft:#f4cfcc;
+  --info:#2a5ca5; --info-soft:#e3ebf7;
+  --shadow:0 12px 40px rgba(40,20,25,.18);
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141112; --surface:#1c191a; --surface-2:#262223; --line:#343031; --line-2:#464042;
+  --fg:#ede8e9; --muted:#a79ea0; --faint:#7d7577;
+  --accent:#d9728f; --accent-fg:#1a0a10; --accent-soft:#3a1f28;
+  --ok:#62c088; --ok-soft:#1a3224; --warn:#e3a94d; --warn-soft:#3a2b12;
+  --bad:#f07d73; --bad-soft:#3e1d1a; --crit:#ffb0a8; --crit-soft:#5a1a17;
+  --info:#7ea9ea; --info-soft:#1b2940; --shadow:0 12px 40px rgba(0,0,0,.5); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#141112; --surface:#1c191a; --surface-2:#262223; --line:#343031; --line-2:#464042;
+  --fg:#ede8e9; --muted:#a79ea0; --faint:#7d7577;
+  --accent:#d9728f; --accent-fg:#1a0a10; --accent-soft:#3a1f28;
+  --ok:#62c088; --ok-soft:#1a3224; --warn:#e3a94d; --warn-soft:#3a2b12;
+  --bad:#f07d73; --bad-soft:#3e1d1a; --crit:#ffb0a8; --crit-soft:#5a1a17;
+  --info:#7ea9ea; --info-soft:#1b2940; --shadow:0 12px 40px rgba(0,0,0,.5); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+.mono{font-family:var(--mono);font-size:.92em}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600}
+h1{font-size:22px;letter-spacing:-.01em} h2{font-size:16px} h3{font-size:14px}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* shell */
+.app{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100%}
+.rail{position:sticky;top:0;height:100vh;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:2px}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 8px 16px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:var(--accent-fg)}
+.brand b{display:block;font-size:13px;line-height:1.15}
+.brand span{font-size:11px;color:var(--muted)}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:0;background:none;cursor:pointer;text-align:left;color:var(--muted);font-weight:500;width:100%}
+.nav:hover{background:var(--surface-2);color:var(--fg)}
+.nav.on{background:var(--accent-soft);color:var(--accent)}
+.nav svg{flex:none}
+.nav .badge{margin-left:auto}
+.rail .sep{height:1px;background:var(--line);margin:8px 6px}
+.rail .grow{flex:1}
+.main{min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;padding:10px 20px;flex-wrap:wrap}
+.search{position:relative;flex:1 1 280px;min-width:0}
+.search input{width:100%;padding:8px 12px 8px 34px;border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint)}
+.qres{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;z-index:40}
+.qres button{display:flex;gap:10px;width:100%;padding:9px 12px;border:0;background:none;text-align:left;cursor:pointer;align-items:baseline}
+.qres button:hover,.qres button.hi{background:var(--surface-2)}
+.me{display:flex;align-items:center;gap:6px;font-size:13px}
+.me select{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);max-width:170px}
+.view{padding-block:20px 60px;padding-inline:20px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.banner{font-size:12.5px;padding:8px 20px;background:var(--info-soft);color:var(--info);border-bottom:1px solid var(--line)}
+.banner.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn.ghost{border-color:transparent;background:none}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:12.5px;font-weight:500;color:var(--muted)}
+.chip.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip .n{font-variant-numeric:tabular-nums;margin-left:4px;opacity:.75}
+input.f,select.f,textarea.f{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);min-width:0}
+textarea.f{resize:vertical;min-height:70px}
+input.f.inline,select.f.inline{width:auto;padding:3px 6px;font-size:12.5px}
+label.fl{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+
+/* status */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.b-ok{background:var(--ok-soft);color:var(--ok)} .b-warn{background:var(--warn-soft);color:var(--warn)}
+.b-bad{background:var(--bad-soft);color:var(--bad)} .b-crit{background:var(--crit-soft);color:var(--crit)}
+.b-info{background:var(--info-soft);color:var(--info)} .b-acc{background:var(--accent-soft);color:var(--accent)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--line-2);flex:none}
+.d-green{background:var(--ok)} .d-amber{background:var(--warn)} .d-red{background:var(--bad)} .d-done{background:var(--faint)}
+.sev{border-left:4px solid var(--line-2)}
+.sev-Critical{border-left-color:var(--crit)} .sev-High{border-left-color:var(--bad)} .sev-Medium{border-left-color:var(--warn)} .sev-Low{border-left-color:var(--line-2)}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+.panel>.hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel>.bd{padding:14px 16px}
+.panel>.bd.flush{padding:0}
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0;position:relative;overflow:hidden}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line-2)}
+.tile.t-ok::before{background:var(--ok)} .tile.t-warn::before{background:var(--warn)} .tile.t-bad::before{background:var(--bad)} .tile.t-info::before{background:var(--info)}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.tile .v{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tile .s{font-size:12px;color:var(--muted)}
+.tile.on{outline:2px solid var(--fg)}
+.tile:hover{border-color:var(--line-2)}
+
+/* lists */
+.tbl-wrap{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+table.t td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.t tr.click{cursor:pointer}
+table.t tr.click:hover td{background:var(--surface-2)}
+table.t tr:last-child td{border-bottom:0}
+.items{display:flex;flex-direction:column}
+.item{display:flex;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+.item:last-child{border-bottom:0}
+.item .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.item .ttl{font-weight:500}
+.item .meta{font-size:12.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.item .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.kind{font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:4px;background:var(--surface-2);color:var(--muted);flex:none;margin-top:2px}
+.kind.exc{background:var(--bad-soft);color:var(--bad)}
+.link{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-weight:500;text-align:left}
+.link:hover{text-decoration:underline}
+.mini{display:flex;gap:2px}
+.mini i{width:7px;height:10px;border-radius:2px;background:var(--line)}
+.mini i.d{background:var(--ok)} .mini i.c{background:var(--info)} .mini i.cr{background:var(--bad)}
+.empty{padding:28px 16px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:10px;align-items:center}
+.empty b{color:var(--fg);font-size:15px}
+.hero-empty{max-width:640px;margin:40px auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px;display:flex;flex-direction:column;gap:14px}
+.hero-empty ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--muted)}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar{display:grid;grid-template-columns:150px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:12.5px;cursor:default}
+.bar .trk{height:14px;background:var(--surface-2);border-radius:4px;overflow:hidden;display:flex}
+.bar .fill{background:var(--info);height:100%}
+.bar .fill.late{background:var(--bad)}
+.bar .fill.acc{background:var(--accent)}
+.bar .val{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.bar .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* drawer & modal */
+.scrim{position:fixed;inset:0;background:rgba(20,10,14,.35);z-index:50}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(820px,100%);background:var(--bg);z-index:60;box-shadow:var(--shadow);display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.drawer .dh{padding:14px 20px;padding-top:calc(14px + env(safe-area-inset-top,0px));background:var(--surface);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.drawer .db{overflow-y:auto;padding:16px 20px 60px;display:flex;flex-direction:column;gap:14px;flex:1}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px}
+.kv div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.kv span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.kv b{font-weight:500;overflow-wrap:anywhere}
+.modal-wrap{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:16px;background:rgba(20,10,14,.4)}
+.modal{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);width:min(640px,100%);max-height:calc(100vh - 32px);display:flex;flex-direction:column;border:1px solid var(--line)}
+.modal .mh{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal .mb{padding:16px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.modal .mf{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:8px;z-index:100;font-size:13px;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+
+/* tracker */
+.tracker{display:grid;grid-template-columns:3fr 4fr 2fr 3fr;gap:8px}
+.ph{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ph-l{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--muted);border-bottom:2px solid var(--line);padding-bottom:4px}
+.ph-s{display:flex;gap:4px}
+.st{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;text-align:center}
+.st .sd{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.st.done .sd{background:var(--ok);color:#fff;border-color:var(--ok)}
+.st.cur .sd{background:var(--info);color:#fff;border-color:var(--info);box-shadow:0 0 0 3px var(--info-soft)}
+.st.cur.red .sd{background:var(--bad);border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.st .nm{font-size:10.5px;color:var(--muted);line-height:1.15;overflow-wrap:anywhere}
+.st.cur .nm{color:var(--fg);font-weight:600}
+.task{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.task:last-child{border-bottom:0}
+.task .tt{flex:1 1 220px;min-width:0}
+.task.done .tt{color:var(--muted);text-decoration:line-through}
+.chk{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line-2);background:var(--surface);cursor:pointer;display:grid;place-items:center;flex:none;padding:0}
+.chk.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.gate{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-top:10px}
+.blockers{font-size:12.5px;color:var(--warn)}
+.timeline{display:flex;flex-direction:column;gap:0}
+.ev{display:grid;grid-template-columns:92px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.ev:last-child{border-bottom:0}
+.ev time{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.shipline{display:flex;align-items:flex-start;margin:6px 0 2px}
+.shipline .sp{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;font-size:10.5px;color:var(--muted);text-align:center}
+.shipline .sp::before{content:"";position:absolute;top:6px;left:-50%;right:50%;height:2px;background:var(--line)}
+.shipline .sp:first-child::before{display:none}
+.shipline .sp.on::before{background:var(--ok)}
+.shipline .sp i{width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid var(--line-2);z-index:1}
+.shipline .sp.on i{background:var(--ok);border-color:var(--ok)}
+.shipline .sp.now i{background:var(--info);border-color:var(--info);box-shadow:0 0 0 3px var(--info-soft)}
+.shipline .sp.now{color:var(--fg);font-weight:600}
+.req{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.req:last-child{border-bottom:0}
+.req .cat{flex:none;width:98px}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px;padding:4px 0}
+.hide-sm{} .only-sm{display:none}
+
+@media (max-width: 900px){
+  .cols{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width: 760px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{position:fixed;top:auto;bottom:0;left:0;right:0;height:auto;flex-direction:row;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));border-right:0;border-top:1px solid var(--line);z-index:30;overflow-x:auto;gap:0}
+  .rail .brand,.rail .sep,.rail .grow,.rail .desk{display:none}
+  .nav{flex-direction:column;gap:2px;font-size:10.5px;padding:6px 8px;min-width:64px;align-items:center;position:relative}
+  .nav .badge{position:absolute;top:0;right:6px;margin:0;padding:0 5px;font-size:10px}
+  .view{padding-inline:16px;padding-bottom:100px}
+  .top{padding:10px 16px}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .tracker{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bar{grid-template-columns:100px minmax(0,1fr) 40px}
+  .hide-sm{display:none} .only-sm{display:initial}
+  .item{flex-wrap:wrap} .item .acts{width:100%;justify-content:flex-start}
+  .drawer .dh,.drawer .db{padding-inline:16px}
+  .ev{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion: no-preference){
+  .drawer{animation:slide .18s ease-out}
+  @keyframes slide{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}
+}
+</style>
+
+<div class="app" id="app">
+  <nav class="rail" id="rail" aria-label="Main"></nav>
+  <div class="main">
+    <div id="banner"></div>
+    <header class="top">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" autocomplete="off" placeholder="Search orders, POs, AWB / container, customers, suppliers  ( / )" aria-label="Search">
+        <div class="qres" id="qres" hidden></div>
+      </div>
+      <div class="me"><span class="muted hide-sm">I am</span><select id="meSel" aria-label="Who are you"></select></div>
+      <button class="btn pri" data-act="new-order" id="newOrderBtn">+ New order</button>
+    </header>
+    <main class="view" id="view"></main>
+  </div>
+</div>
+<div id="drawerRoot"></div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* ============================================================
+   Global Wine Operations Hub — single-file operational portal.
+   Data lives in this artifact's shared store (db capability) when
+   available, otherwise in this browser (local mode). No external
+   APIs, no AI calls.
+   ============================================================ */
+
+// ---------- reference data ----------
+const STAGES = [
+  {n:1, name:'PO Intake', phase:'Commit', out:'Order accepted for review', tasks:[
+    ['Confirm PO details (customer, destination, dates)',0],['Review pricing against price list',0],
+    ['Review quantities and product availability',0],['Review delivery request against lead time',0],['File customer PO in the order folder',0]]},
+  {n:2, name:'Order Validation', phase:'Commit', out:'Order approved', tasks:[
+    ['Validate commercial terms (Incoterm, currency, payment)',1],['Review account requirements',1],
+    ['Review compliance and destination requirements',1],['Approve order',1]]},
+  {n:3, name:'Supplier Release', phase:'Commit', out:'Supplier committed', tasks:[
+    ['Create supplier PO',1],['Send supplier instructions and account requirements',1],['Confirm supplier acceptance',2]]},
+  {n:4, name:'Supply Coordination', phase:'Prepare', out:'Supply secured', tasks:[
+    ['Confirm inventory and allocation',2],['Confirm ready date with supplier',2],['Resolve shortages or substitutions',3]]},
+  {n:5, name:'Logistics Planning', phase:'Prepare', out:'Shipment planned', tasks:[
+    ['Assign forwarder and transport mode',1],['Confirm warehouse requirements',2],['Schedule collection',2],['Confirm booking and ETA',3]]},
+  {n:6, name:'Documentation', phase:'Prepare', out:'Shipment package complete', tasks:[
+    ['Collect required documents',2],['Review documents against account rules',3],['Validate compliance',3]]},
+  {n:7, name:'Pre-Shipment Review', phase:'Prepare', out:'Shipment approved', tasks:[
+    ['Verify readiness: supply, booking, documents',1],['Reconfirm booking with forwarder',1],['Approve shipment',1]]},
+  {n:8, name:'Shipment Execution', phase:'Move', out:'Shipment in transit', tasks:[
+    ['Confirm collection',0],['Send shipping notice to customer',1],['Monitor transit and manage delays',2]]},
+  {n:9, name:'Delivery Management', phase:'Move', out:'Delivery complete', tasks:[
+    ['Confirm delivery',0],['Support customs clearance',0],['Obtain proof of delivery (POD)',3]]},
+  {n:10, name:'Customer Invoicing', phase:'Close', out:'Customer invoiced', fin:true, tasks:[
+    ['Create customer invoice',1],['Validate pricing and invoice rules',1],['Issue billing documents',2]]},
+  {n:11, name:'Supplier Settlement', phase:'Close', out:'Supplier settled', fin:true, tasks:[
+    ['Receive supplier invoice',3],['Match supplier invoice to supplier PO',4],['Submit for payment',5]]},
+  {n:12, name:'Order Closure', phase:'Close', out:'Order closed', tasks:[
+    ['Close outstanding actions',2],['Archive documentation',2],['Capture lessons learned',3]]},
+];
+const PHASES = ['Commit','Prepare','Move','Close'];
+const DOC_TYPES = ['Customer PO','Supplier PO','Packing list','Commercial invoice','Air waybill / Bill of lading','Certificate of origin','Analysis certificate','Health / phytosanitary certificate','Label approval','Export declaration','Excise document (e-AD)','Customs entry','Proof of delivery (POD)','Supplier invoice','Customer invoice'];
+const BASE_DOCS = ['Customer PO','Supplier PO','Packing list','Commercial invoice','Air waybill / Bill of lading','Proof of delivery (POD)'];
+const POST_SHIP_DOCS = ['Proof of delivery (POD)','Supplier invoice','Customer invoice','Customs entry'];
+const DOC_STATUSES = ['Missing','Requested','Received','Approved','Rejected','Waived'];
+const DOC_OK = ['Received','Approved','Waived'];
+const SHIP_STATUSES = ['Not booked','Booked','Collected','Departed','In transit','Arrived','Customs','Delivered'];
+const ROLES = ['Coordinator','Specialist','Manager','Finance','Viewer'];
+const REQ_CATS = ['Label','Documentation','Packing','Shipping','Invoice','Compliance'];
+const ACCOUNT_TYPES = ['Airline','Distributor','Hospitality'];
+const SEV = {Critical:4, High:3, Medium:2, Low:1};
+const SEVS = ['Critical','High','Medium','Low'];
+const EXC_TYPES = {
+  PRICE_VAR:['Pricing discrepancy','Medium',1], QTY_SHORT:['Product shortage','High',2], LEAD_TIME:['Unrealistic delivery request','Medium',1],
+  SUPP_NORESP:['Supplier non-response','Medium',1], SUPP_DELAY:['Production / ready-date slip','High',1],
+  DOC_MISSING:['Missing documentation','High',1], DOC_ERROR:['Document error','Medium',1], REQ_FAIL:['Account requirement not met','High',1],
+  COMPLIANCE:['Compliance issue','Critical',0], SHIPBY_MISSED:['Ship-by date missed','High',0], SHIP_DELAY:['Delayed shipment','High',1],
+  CUSTOMS_HOLD:['Customs hold','High',1], DAMAGE:['Damage or temperature excursion','High',2], POD_MISSING:['Missing POD','Medium',2],
+  INV_MISMATCH:['Invoice mismatch','Medium',2], INV_OVERDUE:['Invoice not issued','Medium',1], ORDER_IDLE:['Stalled order','Low',2], OTHER:['Other','Medium',2]
+};
+const RESOLUTIONS = ['Fixed by supplier','Fixed by forwarder','Customer agreed change','Internal correction','Document reissued','Waived / accepted risk','Not an issue'];
+const ROOT_CAUSES = ['Supplier process','Customer change','Forwarder / carrier','Customs / regulatory','Internal error','Requirement unclear','Data quality'];
+const OPEN_EXC = ['Open','Acknowledged','Escalated'];
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const z = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
+const today = () => ymd(new Date());
+const addDays = (s,n) => { const d = new Date(s+'T12:00:00'); d.setDate(d.getDate()+n); return ymd(d); };
+const diffDays = (a,b) => Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/864e5); // b - a
+const fmtDate = s => s ? new Date(s.slice(0,10)+'T12:00:00').toLocaleDateString(undefined,{day:'2-digit',month:'short'}) : '—';
+const fmtDateY = s => s ? new Date(s.slice(0,10)+'T12:00:00').toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'}) : '—';
+const fmtTime = s => { if(!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined,{day:'2-digit',month:'short'})+' '+z(d.getHours())+':'+z(d.getMinutes()); };
+const money = (v,cur='EUR') => { try { return new Intl.NumberFormat(undefined,{style:'currency',currency:cur||'EUR',maximumFractionDigits:0}).format(v||0); } catch(e){ return (cur||'')+' '+Math.round(v||0); } };
+const kmoney = (v) => { v = v||0; return v>=1e6 ? '€'+(v/1e6).toFixed(2)+'M' : v>=1e3 ? '€'+Math.round(v/1e3)+'k' : '€'+Math.round(v); };
+const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+const clone = o => JSON.parse(JSON.stringify(o));
+const relDue = d => { if(!d) return ''; const n = diffDays(today(), d); return n<0 ? `${-n}d overdue` : n===0 ? 'Due today' : n===1 ? 'Due tomorrow' : `Due ${fmtDate(d)}`; };
+const dueCls = d => { if(!d) return ''; const n = diffDays(today(), d); return n<0 ? 'b-bad' : n<=1 ? 'b-warn' : ''; };
+const sevCls = s => ({Critical:'b-crit',High:'b-bad',Medium:'b-warn',Low:''}[s]||'');
+function getPath(o,p){ return p.split('.').reduce((a,k)=>a==null?a:a[k], o); }
+function setPath(o,p,v){ const ks=p.split('.'); let c=o; ks.slice(0,-1).forEach(k=>{ if(c[k]==null||typeof c[k]!=='object') c[k]={}; c=c[k]; }); c[ks[ks.length-1]]=v; }
+const ICON = {
+  work:'<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>',
+  dash:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  orders:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+  tasks:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/>',
+  exc:'<path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/><path d="M12 18h.01"/>',
+  ship:'<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+  acct:'<path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/>',
+  rep:'<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
+  set:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
+};
+const icon = (k,s=18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+
+// ---------- store ----------
+const S = { mode:'loading', loaded:false, readOnly:false, db:null, orders:{}, accounts:{}, team:[], queues:{} };
+const UI = { view:'work', me:'', drawer:null, filters:{}, pendingRender:false, confirm:null };
+try { UI.me = localStorage.getItem('gwoh-me') || ''; const v = localStorage.getItem('gwoh-view'); if(v) UI.view = v; } catch(e){}
+const LS_KEY = 'gwoh-local-v1';
+
+async function initStore(){
+  let db = null;
+  try { if (window.claude && typeof window.claude.use === 'function') db = await window.claude.use('db'); } catch(e){ db = null; }
+  if (db) { S.db = db; S.mode = 'shared'; subscribe(); }
+  else { S.mode = 'local'; loadLocal(); S.loaded = true; render(); }
+}
+function loadLocal(){
+  try { const raw = localStorage.getItem(LS_KEY); if (raw) { const d = JSON.parse(raw); S.orders = d.orders||{}; S.accounts = d.accounts||{}; S.team = d.team||[]; } } catch(e){}
+}
+function saveLocal(){ try { localStorage.setItem(LS_KEY, JSON.stringify({orders:S.orders, accounts:S.accounts, team:S.team})); } catch(e){ toast('This browser blocked saving. Changes last until you close the page.'); } }
+function subscribe(){
+  const got = {o:false,a:false,t:false};
+  const done = k => { got[k]=true; if(got.o&&got.a&&got.t) S.loaded = true; schedule(); };
+  const onErr = e => { if (e && (e.code==='revoked'||e.code==='not_granted'||e.code==='capability_disabled')) { S.readOnly = true; } toast('The shared workspace stopped updating. Reload the page to reconnect.'); schedule(); };
+  S.db.collection('orders').onSnapshot(snap => { const m={}; snap.docs.forEach(d=>{ if(d.exists) m[d.id] = Object.assign({}, d.data(), {id:d.id}); }); S.orders=m; done('o'); }, onErr);
+  S.db.collection('accounts').onSnapshot(snap => { const m={}; snap.docs.forEach(d=>{ if(d.exists) m[d.id] = Object.assign({}, d.data(), {id:d.id}); }); S.accounts=m; done('a'); }, onErr);
+  S.db.doc('config/team').onSnapshot(d => { S.team = d.exists ? (d.data().members||[]) : []; done('t'); }, onErr);
+}
+function write(coll, id, op, data){
+  const path = coll==='config' ? 'config/team' : coll+'/'+id;
+  if (S.readOnly) { toast('You can view this workspace but not change it.'); return Promise.resolve(false); }
+  if (S.mode !== 'shared') {
+    if (coll==='config') S.team = data.members;
+    else if (op==='delete') delete S[coll][id];
+    else if (op==='set') S[coll][id] = Object.assign({}, data, {id});
+    else S[coll][id] = Object.assign({}, S[coll][id], data);
+    saveLocal(); schedule(true); return Promise.resolve(true);
+  }
+  const body = data ? clone(data) : null; if (body) delete body.id;
+  const run = async () => {
+    const ref = S.db.doc(path);
+    for (let attempt=0; attempt<2; attempt++){
+      try { if(op==='set') await ref.set(body); else if(op==='update') await ref.update(body); else await ref.delete(); return true; }
+      catch(e){
+        const code = e && e.code;
+        if (code==='unavailable' && attempt===0) { await new Promise(r=>setTimeout(r, 400+Math.random()*600)); continue; }
+        if (code==='invalid_argument' && op!=='delete') { S.readOnly = true; toast('Your access to this workspace is view-only, so the change was not saved.'); }
+        else if (code==='quota_exceeded') toast('The workspace is full. Remove closed or example orders, then try again.');
+        else if (code==='resource_exhausted') toast('Too many changes at once. Wait a moment and try again.');
+        else toast('The change could not be saved. Check your connection and try again.');
+        schedule(true); return false;
+      }
+    }
+  };
+  const p = (S.queues[path] || Promise.resolve()).then(run);
+  S.queues[path] = p; return p;
+}
+
+// ---------- rendering control ----------
+let rafId = 0;
+function schedule(force){
+  const a = document.activeElement;
+  const editing = a && a !== document.body && a.id !== 'q' && a.id !== 'meSel' && (a.tagName==='TEXTAREA' || (a.tagName==='INPUT' && !['checkbox','button'].includes(a.type)));
+  if (editing && !force) { UI.pendingRender = true; return; }
+  cancelAnimationFrame(rafId); rafId = requestAnimationFrame(render);
+}
+document.addEventListener('focusout', () => { if (UI.pendingRender) { UI.pendingRender=false; setTimeout(()=>schedule(), 0); } });
+
+function toast(msg){
+  const r = $('#toastRoot'); r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  clearTimeout(toast.t); toast.t = setTimeout(()=>{ r.innerHTML=''; }, 3200);
+}
+
+// ---------- domain logic ----------
+const teamNames = () => S.team.map(m=>m.name);
+const roleOf = name => (S.team.find(m=>m.name===name)||{}).role || '';
+const financeOwner = fallback => (S.team.find(m=>m.role==='Finance')||{}).name || fallback;
+const acctOf = o => S.accounts[o.accountId] || {name:'(deleted account)', requirements:[], docRules:[], currency:'EUR'};
+const ordersArr = () => Object.values(S.orders);
+const openOrders = () => ordersArr().filter(o=>o.status==='Open' || o.status==='On hold');
+const stageDef = n => STAGES[n-1];
+const docOk = (o,t) => DOC_OK.includes(((o.docs||{})[t]||{}).status);
+const preShipMissing = o => (o.reqDocs||[]).filter(t => !POST_SHIP_DOCS.includes(t) && !docOk(o,t));
+
+function genTasks(o, n, start){
+  const s = stageDef(n); const anchor = {5:3,6:2,7:1}[n];
+  return s.tasks.map(([title, off]) => {
+    let due = addDays(start, off);
+    if (anchor && o.shipBy) { const lim = addDays(o.shipBy, -anchor); if (lim < due) due = lim < start ? start : lim; }
+    return { id: uid(), stage:n, title, owner: s.fin ? financeOwner(o.owner) : o.owner, due, status:'open' };
+  });
+}
+function logTo(o, text, who){ o.activity = o.activity || []; o.activity.unshift({at:new Date().toISOString(), who: who || UI.me || 'Someone', text}); if (o.activity.length>150) o.activity.length = 150; o.lastActivity = today(); }
+
+function gateBlockers(o){
+  const b = []; const n = o.stage;
+  const open = (o.tasks||[]).filter(t=>t.stage===n && t.status!=='done').length;
+  if (open) b.push(`${open} task${open>1?'s':''} still open`);
+  const sh = o.shipment||{};
+  if (n===5 && (!sh.forwarder || !sh.eta)) b.push('Forwarder and ETA must be recorded');
+  if (n===6) { const m = preShipMissing(o); if (m.length) b.push('Missing: '+m.join(', ')); }
+  if (n===7) { const hi = allExc(o).filter(x=>OPEN_EXC.includes(x.status) && SEV[x.severity]>=3); if (hi.length) b.push(`${hi.length} High/Critical exception${hi.length>1?'s':''} open`); }
+  if (n===8 && SHIP_STATUSES.indexOf(sh.status||'Not booked') < 3) b.push('Shipment status must be Departed or later');
+  if (n===9) { if (sh.status!=='Delivered') b.push('Shipment not marked Delivered'); if (!docOk(o,'Proof of delivery (POD)')) b.push('POD not received'); }
+  if (n===10 && !(o.finance||{}).invoiceNo) b.push('Customer invoice number not recorded');
+  if (n===11 && !(o.finance||{}).supplierInvoiceNo) b.push('Supplier invoice number not recorded');
+  if (n===12) { const ex = allExc(o).filter(x=>OPEN_EXC.includes(x.status)); if (ex.length) b.push(`${ex.length} exception${ex.length>1?'s':''} still open`); }
+  return b;
+}
+function advanceStage(o, note){
+  const n = o.stage; const t = today();
+  o.stageDates = o.stageDates || {}; o.stageDates[n] = Object.assign({}, o.stageDates[n], {done:t});
+  logTo(o, `Stage ${n} ${stageDef(n).name} complete: ${stageDef(n).out}${note?' ('+note+')':''}`);
+  if (n === 12) { o.status = 'Closed'; o.closedAt = t; return; }
+  o.stage = n+1; o.stageDates[n+1] = {start:t};
+  o.tasks = (o.tasks||[]).concat(genTasks(o, n+1, t));
+  logTo(o, `Stage ${n+1} ${stageDef(n+1).name} started, ${stageDef(n+1).tasks.length} tasks created`, 'System');
+}
+
+function detect(o){
+  if (o.status !== 'Open') return [];
+  const out = []; const t = today(); const st = ((o.stageDates||{})[o.stage]||{}).start; const sh = o.shipment||{};
+  const miss = preShipMissing(o);
+  if (o.stage>=5 && o.stage<=7 && miss.length && o.shipBy) {
+    const d = diffDays(t, o.shipBy);
+    if (d <= 3) out.push({code:'DOC_MISSING', title:`Missing before ship date: ${miss.join(', ')}`, severity: d<=1?'Critical':'High', due: d>1 ? addDays(o.shipBy,-1) : t});
+  }
+  if (o.stage===3 && st) { const n = diffDays(st, t); const acc = (o.tasks||[]).find(x=>x.stage===3 && /acceptance/.test(x.title)); if (n>=2 && acc && acc.status!=='done') out.push({code:'SUPP_NORESP', title:`No acceptance from ${o.supplier||'supplier'} after ${n} days`, severity: n>=4?'High':'Medium', due:t}); }
+  if (o.stage<=7 && o.shipBy && t > o.shipBy) out.push({code:'SHIPBY_MISSED', title:`Ship-by date ${fmtDate(o.shipBy)} passed and the order has not shipped`, severity:'High', due:t});
+  if (o.stage>=5 && o.stage<=9 && sh.eta && o.requested && sh.eta > o.requested && sh.status!=='Delivered') out.push({code:'SHIP_DELAY', title:`ETA ${fmtDate(sh.eta)} is after requested delivery ${fmtDate(o.requested)}`, severity: o.accountType==='Airline'?'Critical':'High', due:t});
+  if (o.stage===9 && sh.status==='Delivered' && !docOk(o,'Proof of delivery (POD)') && sh.delivered && diffDays(sh.delivered,t)>=3) out.push({code:'POD_MISSING', title:`No POD ${diffDays(sh.delivered,t)} days after delivery`, severity:'Medium', due:t});
+  if (o.stage===10 && st && diffDays(st,t)>=3) out.push({code:'INV_OVERDUE', title:`Delivered ${diffDays(st,t)} days ago and not yet invoiced`, severity:'Medium', due:t});
+  if (o.lastActivity && diffDays(o.lastActivity, t) >= 5) out.push({code:'ORDER_IDLE', title:`No activity for ${diffDays(o.lastActivity,t)} days`, severity:'Low', due:addDays(t,2)});
+  return out;
+}
+function allExc(o){
+  const stored = (o.exceptions||[]).map(x => Object.assign({}, x, {orderId:o.id}));
+  const byId = new Map(stored.map(x=>[x.id,x]));
+  const live = new Set();
+  for (const d of detect(o)) {
+    const id = 'auto-'+d.code; live.add(id);
+    const s = byId.get(id);
+    if (s) { if (s.status!=='Resolved') { s.title = d.title; if (SEV[d.severity] > SEV[s.severity]) s.severity = d.severity; } }
+    else stored.push({id, code:d.code, title:d.title, severity:d.severity, owner:o.owner, due:d.due, status:'Open', raisedAt:null, raisedBy:'System', auto:true, virtual:true, orderId:o.id});
+  }
+  stored.forEach(x => { if (x.auto && !live.has(x.id) && OPEN_EXC.includes(x.status)) x.cleared = true; });
+  return stored;
+}
+function escLevel(x){
+  let l = x.level || 0; if (!OPEN_EXC.includes(x.status)) return l;
+  const t = today();
+  if (x.status==='Open' && x.raisedAt && (Date.now()-new Date(x.raisedAt).getTime()) > 4*3600e3) l = Math.max(l,1);
+  if (x.due && x.due < t) l = Math.max(l,2);
+  if (x.due && diffDays(x.due, t) >= 2) l = Math.max(l,3);
+  return l;
+}
+function isLate(o){ if (o.status!=='Open' && o.status!=='On hold') return false; if (o.stage>9) return false; const t=today(); const eta=(o.shipment||{}).eta; return (o.requested && t>o.requested) || (eta && o.requested && eta>o.requested && (o.shipment||{}).status!=='Delivered'); }
+function health(o){
+  if (o.status==='Closed' || o.status==='Cancelled') return 'done';
+  const ex = allExc(o).filter(x=>OPEN_EXC.includes(x.status) && !x.cleared);
+  const t = today();
+  const cur = (o.tasks||[]).filter(x=>x.stage===o.stage && x.status!=='done');
+  if (ex.some(x=>SEV[x.severity]>=3) || cur.some(x=>x.due<t) || isLate(o)) return 'red';
+  if (ex.some(x=>x.severity==='Medium') || cur.some(x=>diffDays(t,x.due)<=1) || o.status==='On hold') return 'amber';
+  return 'green';
+}
+function allOpenExc(){ const r=[]; openOrders().forEach(o=>allExc(o).forEach(x=>{ if(OPEN_EXC.includes(x.status)) r.push(x); })); return r; }
+function allOpenTasks(){ const r=[]; openOrders().forEach(o=>(o.tasks||[]).forEach(t=>{ if(t.status!=='done' && t.stage===o.stage) r.push(Object.assign({orderId:o.id}, t)); })); return r; }
+const orderLabel = o => `${o.no}`;
+
+function mutateOrder(id, fn){
+  const cur = S.orders[id]; if (!cur) return;
+  const o = clone(cur); fn(o); o.updated = new Date().toISOString();
+  const patch = {}; Object.keys(o).forEach(k => { if (k!=='id' && JSON.stringify(o[k]) !== JSON.stringify(cur[k])) patch[k] = o[k]; });
+  if (Object.keys(patch).length) return write('orders', id, 'update', patch);
+}
+function persistExc(o, x){
+  o.exceptions = o.exceptions || [];
+  let s = o.exceptions.find(e=>e.id===x.id);
+  if (!s) { s = {id:x.id, code:x.code, title:x.title, severity:x.severity, owner:x.owner, due:x.due, status:'Open', raisedAt:new Date().toISOString(), raisedBy:'System', auto:!!x.auto}; o.exceptions.push(s); }
+  return s;
+}
+
+// ---------- shell ----------
+const NAV = [
+  ['work','My Work','work'],['dashboard','Dashboard','dash'],['orders','Orders','orders'],['tasks','Tasks','tasks'],['exceptions','Exceptions','exc'],
+  ['shipments','Shipments','ship'],['accounts','Accounts','acct'],['reports','Reports','rep']
+];
+function renderRail(){
+  const hi = S.loaded ? allOpenExc().filter(x=>SEV[x.severity]>=3).length : 0;
+  const myOpen = S.loaded && UI.me ? allOpenTasks().filter(t=>t.owner===UI.me && t.due<=today()).length : 0;
+  $('#rail').innerHTML = `
+    <div class="brand"><div class="brand-mark">${icon('orders',17)}</div><div><b>Global Wine<br>Operations Hub</b><span>${S.mode==='shared'?'Shared workspace':S.mode==='local'?'Local workspace':'Connecting…'}</span></div></div>
+    ${NAV.map(([k,l,i],idx)=>`${idx===5?'<div class="sep"></div>':''}<button class="nav ${UI.view===k?'on':''}" data-act="nav" data-v="${k}">${icon(i)}<span>${l}</span>${k==='exceptions'&&hi?`<span class="badge b-bad">${hi}</span>`:''}${k==='work'&&myOpen?`<span class="badge b-warn">${myOpen}</span>`:''}</button>`).join('')}
+    <div class="grow"></div>
+    <button class="nav desk" data-act="settings">${icon('set')}<span>Team &amp; data</span></button>`;
+}
+function renderTop(){
+  const sel = $('#meSel'); const names = teamNames();
+  const html = `<option value="">— choose —</option>` + S.team.map(m=>`<option ${m.name===UI.me?'selected':''} value="${esc(m.name)}">${esc(m.name)}${m.role?' · '+esc(m.role):''}</option>`).join('');
+  if (sel.innerHTML !== html) sel.innerHTML = html;
+  if (UI.me && !names.includes(UI.me) && S.loaded && names.length) { UI.me=''; }
+  const b = $('#banner');
+  let msg = '';
+  if (S.mode==='local') msg = `<div class="banner warn">Local workspace: changes are saved in this browser only. Open the published artifact on claude.ai to work in the team's shared workspace.</div>`;
+  else if (S.readOnly) msg = `<div class="banner warn">View-only access: you can browse orders but your changes won't be saved. Ask the owner for Contributor access.</div>`;
+  if (b.innerHTML !== msg) b.innerHTML = msg;
+  $('#newOrderBtn').disabled = !S.loaded;
+}
+function render(){
+  const dscroll = document.querySelector('.drawer .db'); const dTop = dscroll ? dscroll.scrollTop : 0;
+  renderRail(); renderTop();
+  const v = $('#view');
+  if (!S.loaded) { v.innerHTML = `<div class="empty"><b>Connecting to the shared workspace…</b><span>Orders, tasks and exceptions will appear here in a moment.</span></div>`; return; }
+  if (!S.team.length && !Object.keys(S.orders).length && !Object.keys(S.accounts).length) { v.innerHTML = viewSetup(); renderDrawer(dTop); return; }
+  const fn = {work:viewWork, dashboard:viewDashboard, orders:viewOrders, tasks:viewTasks, exceptions:viewExceptions, shipments:viewShipments, accounts:viewAccounts, reports:viewReports}[UI.view] || viewWork;
+  v.innerHTML = fn();
+  renderDrawer(dTop);
+}
+
+// ---------- views ----------
+function viewSetup(){
+  return `<div class="hero-empty">
+    <div class="eyebrow">Welcome</div>
+    <h1>Set up the Global Wine Operations Hub</h1>
+    <p class="muted" style="margin:0">This workspace is empty. Everything the team adds here is shared with everyone who opens this page.</p>
+    <ol>
+      <li>Add your team members and their roles.</li>
+      <li>Create customer accounts with their requirements, documents and price lists.</li>
+      <li>Enter purchase orders. The hub creates the tasks, checks and exceptions for you.</li>
+    </ol>
+    <div class="row">
+      <button class="btn pri" data-act="settings">Add your team</button>
+      <button class="btn" data-act="load-examples">Explore with example data</button>
+    </div>
+    <p class="faint" style="margin:0;font-size:12.5px">Example data is clearly labelled and can be removed in one click from Team &amp; data.</p>
+  </div>`;
+}
+function needMe(){
+  return `<div class="panel"><div class="bd"><div class="empty"><b>Who are you?</b><span>Pick your name so the hub can show your tasks and exceptions. This is remembered on this device.</span>
+    <div class="row" style="justify-content:center">${S.team.map(m=>`<button class="btn" data-act="set-me" data-n="${esc(m.name)}">${esc(m.name)}</button>`).join('') || '<button class="btn pri" data-act="settings">Add your team</button>'}</div></div></div></div>`;
+}
+function orderMini(o){
+  const h = health(o);
+  return `<span class="mini" title="Stage ${o.stage} of 12">${STAGES.map(s=>`<i class="${o.status==='Closed'||s.n<o.stage?'d':s.n===o.stage?(h==='red'?'cr':'c'):''}"></i>`).join('')}</span>`;
+}
+function stageBadge(o){
+  if (o.status==='Closed') return `<span class="badge b-ok">Closed</span>`;
+  if (o.status==='Cancelled') return `<span class="badge">Cancelled</span>`;
+  return `<span>${o.stage}. ${esc(stageDef(o.stage).name)}</span>${o.status==='On hold'?' <span class="badge b-warn">On hold</span>':''}`;
+}
+function workItemsFor(pred){
+  const items = [];
+  allOpenExc().filter(pred.exc).forEach(x=>{ const o=S.orders[x.orderId]; items.push({kind:'exc', x, o, sort:[0, -SEV[x.severity], x.due||'9']}); });
+  allOpenTasks().filter(pred.task).forEach(t=>{ const o=S.orders[t.orderId]; items.push({kind:'task', t, o, sort:[1, 0, t.due||'9']}); });
+  items.sort((a,b)=>{ const ao=a.kind==='task'?a.t.due:a.x.due, bo=b.kind==='task'?b.t.due:b.x.due; const aOver = ao<today()?0:1, bOver = bo<today()?0:1;
+    if (aOver!==bOver) return aOver-bOver; if (a.sort[1]!==b.sort[1]) return a.sort[1]-b.sort[1]; return String(ao).localeCompare(String(bo)); });
+  return items;
+}
+function workItemHtml(it){
+  const o = it.o; const a = acctOf(o);
+  if (it.kind==='exc') { const x = it.x; const lvl = escLevel(x);
+    return `<div class="item sev sev-${x.severity}"><span class="kind exc">EXC</span><div class="body">
+      <div class="ttl">${esc(EXC_TYPES[x.code]?.[0]||x.code)}: ${esc(x.title)}</div>
+      <div class="meta"><button class="link" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button><span>${esc(a.name)}</span><span>Stage ${o.stage}</span>
+      <span class="badge ${sevCls(x.severity)}">${x.severity}</span><span class="badge ${dueCls(x.due)}">${relDue(x.due)}</span>${lvl?`<span class="badge b-crit">Escalated L${lvl}</span>`:''}${x.status==='Acknowledged'?'<span class="badge b-info">Acknowledged</span>':''}${x.cleared?'<span class="badge b-ok">Condition cleared</span>':''}</div></div>
+      <div class="acts">${x.status==='Open'?`<button class="btn sm" data-act="exc-ack" data-o="${o.id}" data-x="${x.id}">Acknowledge</button>`:''}<button class="btn sm" data-act="exc-resolve" data-o="${o.id}" data-x="${x.id}">Resolve</button><button class="btn sm ghost" data-act="open-order" data-o="${o.id}">Open</button></div></div>`; }
+  const t = it.t;
+  return `<div class="item"><span class="kind">TASK</span><div class="body">
+    <div class="ttl">${esc(t.title)}</div>
+    <div class="meta"><button class="link" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button><span>${esc(a.name)}</span><span>Stage ${t.stage} ${esc(stageDef(t.stage).name)}</span><span class="badge ${dueCls(t.due)}">${relDue(t.due)}</span>${UI.view!=='work'?`<span>${esc(t.owner||'Unassigned')}</span>`:''}</div></div>
+    <div class="acts"><button class="btn sm" data-act="task-done" data-o="${o.id}" data-t="${t.id}">✓ Done</button><button class="btn sm" data-act="task-snooze" data-o="${o.id}" data-t="${t.id}" title="Move due date by one day">+1 day</button><button class="btn sm ghost" data-act="open-order" data-o="${o.id}">Open</button></div></div>`;
+}
+function viewWork(){
+  if (!UI.me) return needMe();
+  const me = UI.me, t = today(), isMgr = roleOf(me)==='Manager';
+  const myTasks = allOpenTasks().filter(x=>x.owner===me);
+  const myExc = allOpenExc().filter(x=>x.owner===me);
+  const myOrders = openOrders().filter(o=>o.owner===me);
+  const escal = allOpenExc().filter(x=> escLevel(x)>=1 && (x.owner===me || (isMgr && escLevel(x)>=2)));
+  const overdue = myTasks.filter(x=>x.due<t).length + myExc.filter(x=>x.due&&x.due<t).length;
+  const dueToday = myTasks.filter(x=>x.due===t).length + myExc.filter(x=>x.due===t).length;
+  const atRisk = myOrders.filter(o=>health(o)==='red');
+  const f = UI.filters.work || 'all';
+  const preds = {
+    all:{task:x=>x.owner===me, exc:x=>x.owner===me},
+    overdue:{task:x=>x.owner===me&&x.due<t, exc:x=>x.owner===me&&x.due&&x.due<t},
+    today:{task:x=>x.owner===me&&x.due===t, exc:x=>x.owner===me&&x.due===t},
+    exc:{task:()=>false, exc:x=>x.owner===me},
+    risk:{task:x=>x.owner===me && atRisk.some(o=>o.id===x.orderId), exc:x=>x.owner===me && atRisk.some(o=>o.id===x.orderId)},
+    esc:{task:()=>false, exc:x=>escal.includes(x)}
+  };
+  const items = workItemsFor(preds[f]||preds.all);
+  const tile = (k,label,val,sub,cls) => `<button class="tile ${cls} ${f===k?'on':''}" data-act="filter" data-k="work" data-v="${f===k?'all':k}"><span class="k">${label}</span><span class="v">${val}</span><span class="s">${sub}</span></button>`;
+  const hr = new Date().getHours(); const greet = hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
+  const ms = [];
+  myOrders.forEach(o=>{ const sh=o.shipment||{}; [['Ship by',o.shipBy],['Collection',sh.collection],['ETD',sh.etd],['ETA',sh.eta],['Customer delivery',o.requested]].forEach(([l,d])=>{ if(d && d>=t && diffDays(t,d)<=14) ms.push({d,l,o}); }); });
+  ms.sort((a,b)=>a.d.localeCompare(b.d));
+  const byPhase = PHASES.map(p=>[p, myOrders.filter(o=>stageDef(o.stage).phase===p).length]);
+  const maxP = Math.max(1, ...byPhase.map(x=>x[1]));
+  return `
+  <div class="spread"><div><div class="eyebrow">${new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'})}</div>
+    <h1>${greet}, ${esc(me.split(' ')[0])}.</h1>
+    <div class="muted">You have ${dueToday} thing${dueToday===1?'':'s'} due today, ${overdue} overdue and ${escal.length} escalation${escal.length===1?'':'s'}.</div></div></div>
+  <div class="tiles">
+    ${tile('overdue','Overdue',overdue,'tasks and exceptions',overdue?'t-bad':'t-ok')}
+    ${tile('today','Due today',dueToday,'across my orders',dueToday?'t-warn':'t-ok')}
+    ${tile('exc','My open exceptions',myExc.length,`${myExc.filter(x=>SEV[x.severity]>=3).length} high or critical`,myExc.some(x=>SEV[x.severity]>=3)?'t-bad':myExc.length?'t-warn':'t-ok')}
+    ${tile('risk','My orders at risk',atRisk.length,`of ${myOrders.length} open orders`,atRisk.some(o=>health(o)==='red')?'t-bad':atRisk.length?'t-warn':'t-ok')}
+    ${tile('esc',isMgr?'Escalations':'Escalated to me',escal.length,isMgr?'L2+ across the team, plus mine':'not acknowledged or past due',escal.length?'t-bad':'t-ok')}
+  </div>
+  <div class="cols">
+    <section class="panel"><div class="hd"><h2>Needs my action</h2><span class="muted">${items.length} item${items.length===1?'':'s'}${f!=='all'?' · <button class="link" data-act="filter" data-k="work" data-v="all">Show all</button>':''}</span></div>
+      <div class="items">${items.length ? items.slice(0,60).map(workItemHtml).join('') : `<div class="empty"><b>Nothing waiting on you${f!=='all'?' in this view':''}.</b><span>New tasks appear here automatically as your orders move through their stages.</span></div>`}</div></section>
+    <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <section class="panel"><div class="hd"><h2>Upcoming milestones</h2><span class="muted">next 14 days</span></div>
+        <div class="items">${ms.length ? ms.slice(0,14).map(m=>`<div class="item"><div class="num mono" style="width:56px;flex:none">${fmtDate(m.d)}</div><div class="body"><div class="ttl">${esc(m.l)}</div><div class="meta"><button class="link" data-act="open-order" data-o="${m.o.id}">${esc(m.o.no)}</button><span>${esc(acctOf(m.o).name)}</span></div></div></div>`).join('') : '<div class="empty">No milestones in the next two weeks.</div>'}</div></section>
+      <section class="panel"><div class="hd"><h2>My orders by phase</h2><button class="link" data-act="goto-orders" data-f="mine">View all</button></div>
+        <div class="bd"><div class="bars">${byPhase.map(([p,n])=>`<div class="bar"><span class="lbl">${p}</span><span class="trk"><span class="fill acc" style="width:${n/maxP*100}%"></span></span><span class="val">${n}</span></div>`).join('')}</div></div></section>
+    </div>
+  </div>`;
+}
+
+function viewDashboard(){
+  const f = UI.filters.dash || {};
+  const inScope = o => (!f.type || acctOf(o).type===f.type) && (!f.region || acctOf(o).region===f.region);
+  const open = openOrders().filter(inScope);
+  const t = today();
+  const late = open.filter(isLate);
+  const withExc = open.filter(o=>allExc(o).some(x=>OPEN_EXC.includes(x.status)&&!x.cleared));
+  const missDocs = open.filter(o=>o.stage>=6 && o.stage<=8 && preShipMissing(o).length);
+  const transit = open.filter(o=>o.stage===8 || (o.stage===9 && (o.shipment||{}).status!=='Delivered'));
+  const delayed = transit.filter(o=>allExc(o).some(x=>x.code==='SHIP_DELAY'&&OPEN_EXC.includes(x.status)));
+  const awaitInv = open.filter(o=>o.stage===10);
+  const pendBill = awaitInv.reduce((s,o)=>s+(o.value||0),0);
+  const oldestInv = awaitInv.reduce((m,o)=>Math.max(m, diffDays(((o.stageDates||{})[10]||{}).start||t, t)),0);
+  const crit = [];
+  open.forEach(o=>allExc(o).forEach(x=>{ if(OPEN_EXC.includes(x.status) && SEV[x.severity]>=3) crit.push(x); }));
+  crit.sort((a,b)=>SEV[b.severity]-SEV[a.severity] || String(a.due).localeCompare(String(b.due)));
+  const delivered = ordersArr().filter(inScope).filter(o=>(o.shipment||{}).delivered && diffDays((o.shipment||{}).delivered,t)<=90);
+  const otif = delivered.length ? Math.round(delivered.filter(o=>o.shipment.delivered<=o.requested).length/delivered.length*1000)/10 : null;
+  const pct = (a,b)=> b? Math.round(a/b*1000)/10 : 0;
+  const lateP = pct(late.length, open.length), excP = pct(withExc.length, open.length);
+  const tone = (v,g,a) => v<=g?'t-ok':v<=a?'t-warn':'t-bad';
+  const tile = (label,val,sub,cls,go) => `<button class="tile ${cls}" ${go?`data-act="goto-orders" data-f="${go}"`:''}><span class="k">${label}</span><span class="v">${val}</span><span class="s">${sub}</span></button>`;
+  const byStage = STAGES.map(s=>{ const os = open.filter(o=>o.stage===s.n); const lateN = os.filter(o=>{ const sd=((o.stageDates||{})[s.n]||{}); return (o.tasks||[]).some(x=>x.stage===s.n&&x.status!=='done'&&x.due<t); }).length; return [s, os.length, lateN]; });
+  const maxS = Math.max(1, ...byStage.map(x=>x[1]));
+  const excByType = {}; open.forEach(o=>allExc(o).forEach(x=>{ if(OPEN_EXC.includes(x.status)) excByType[x.code]=(excByType[x.code]||0)+1; }));
+  const excRows = Object.entries(excByType).sort((a,b)=>b[1]-a[1]); const maxE = Math.max(1,...excRows.map(r=>r[1]));
+  const load = S.team.filter(m=>m.role!=='Viewer').map(m=>{ const ts = allOpenTasks().filter(x=>x.owner===m.name); return [m.name, ts.length, ts.filter(x=>x.due<t).length]; }).sort((a,b)=>b[1]-a[1]);
+  const maxL = Math.max(1,...load.map(l=>l[1]));
+  const regions = [...new Set(Object.values(S.accounts).map(a=>a.region).filter(Boolean))];
+  const acctRisk = Object.values(S.accounts).map(a=>{ const os=open.filter(o=>o.accountId===a.id); return [a, os.length, os.filter(o=>health(o)==='red').length, os.reduce((s,o)=>s+(o.value||0),0)]; }).filter(r=>r[1]).sort((a,b)=>b[2]-a[2]||b[3]-a[3]);
+  return `
+  <div class="spread"><div><div class="eyebrow">Operations leadership</div><h1>Executive dashboard</h1></div>
+    <div class="row">
+      <select class="f inline" data-chg="dash-f" data-k="type" aria-label="Account type"><option value="">All account types</option>${ACCOUNT_TYPES.map(x=>`<option ${f.type===x?'selected':''}>${x}</option>`).join('')}</select>
+      <select class="f inline" data-chg="dash-f" data-k="region" aria-label="Region"><option value="">All regions</option>${regions.map(x=>`<option ${f.region===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
+    </div></div>
+  <div class="tiles">
+    ${tile('Open orders',open.length,`${kmoney(open.reduce((s,o)=>s+(o.value||0),0))} open value`,'t-info','open')}
+    ${tile('Late orders',late.length,`${lateP}% of open`,tone(lateP,3,6),'late')}
+    ${tile('With exceptions',withExc.length,`${excP}% of open`,tone(excP,10,20),'exc')}
+    ${tile('Missing documents',missDocs.length,'orders in stages 6–8',missDocs.length?(missDocs.length>10?'t-bad':'t-warn'):'t-ok','docs')}
+    ${tile('Shipments in transit',transit.length,`${delayed.length} delayed`,delayed.length?'t-bad':'t-info','transit')}
+    ${tile('Awaiting invoice',awaitInv.length,awaitInv.length?`oldest ${oldestInv}d`:'none waiting',oldestInv>5?'t-bad':oldestInv>2?'t-warn':'t-ok','invoice')}
+    ${tile('Revenue pending billing',kmoney(pendBill),'delivered, not invoiced',pendBill?'t-warn':'t-ok','invoice')}
+    ${tile('Critical risks',crit.filter(x=>x.severity==='Critical').length,`${crit.length} high or critical`,crit.some(x=>x.severity==='Critical')?'t-bad':crit.length?'t-warn':'t-ok','')}
+    ${tile('OTIF (90 days)',otif==null?'—':otif+'%',`${delivered.length} deliveries · target 96%`,otif==null?'':otif>=96?'t-ok':otif>=92?'t-warn':'t-bad','')}
+  </div>
+  <div class="cols">
+    <section class="panel"><div class="hd"><h2>Orders by stage</h2><div class="legend"><span><i style="background:var(--info)"></i>On track</span><span><i style="background:var(--bad)"></i>With overdue tasks</span></div></div>
+      <div class="bd"><div class="bars">${byStage.map(([s,n,l])=>`<div class="bar" title="${n} orders, ${l} with overdue tasks"><span class="lbl">${s.n}. ${esc(s.name)}</span><span class="trk"><span class="fill" style="width:${(n-l)/maxS*100}%"></span><span class="fill late" style="width:${l/maxS*100}%"></span></span><span class="val">${n}</span></div>`).join('')}</div></div></section>
+    <section class="panel"><div class="hd"><h2>Critical risks</h2><button class="link" data-act="nav" data-v="exceptions">All exceptions</button></div>
+      <div class="items">${crit.length? crit.slice(0,8).map(x=>{ const o=S.orders[x.orderId]; return `<div class="item sev sev-${x.severity}"><div class="body"><div class="ttl">${esc(x.title)}</div><div class="meta"><button class="link" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button><span>${esc(acctOf(o).name)}</span><span>${esc(x.owner||'Unowned')}</span><span class="badge ${sevCls(x.severity)}">${x.severity}</span>${escLevel(x)?`<span class="badge b-crit">L${escLevel(x)}</span>`:''}</div></div></div>`; }).join('') : '<div class="empty">No high or critical exceptions open.</div>'}</div></section>
+  </div>
+  <div class="grid3">
+    <section class="panel"><div class="hd"><h2>Open exceptions by type</h2></div><div class="bd"><div class="bars">${excRows.length? excRows.map(([c,n])=>`<div class="bar"><span class="lbl">${esc(EXC_TYPES[c]?.[0]||c)}</span><span class="trk"><span class="fill late" style="width:${n/maxE*100}%"></span></span><span class="val">${n}</span></div>`).join('') : '<span class="muted">None open.</span>'}</div></div></section>
+    <section class="panel"><div class="hd"><h2>Accounts at risk</h2></div><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th>Account</th><th>Open</th><th>Red</th><th>Value</th></tr></thead><tbody>${acctRisk.slice(0,6).map(([a,n,r,v])=>`<tr class="click" data-act="open-account" data-a="${a.id}"><td>${esc(a.name)}</td><td class="num">${n}</td><td class="num">${r?`<span class="badge b-bad">${r}</span>`:'0'}</td><td class="num">${kmoney(v)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No open orders.</td></tr>'}</tbody></table></div></div></section>
+    <section class="panel"><div class="hd"><h2>Team workload</h2><span class="legend"><span><i style="background:var(--bad)"></i>overdue</span></span></div><div class="bd"><div class="bars">${load.length? load.map(([n,c,o])=>`<div class="bar"><span class="lbl">${esc(n)}</span><span class="trk"><span class="fill late" style="width:${o/maxL*100}%"></span><span class="fill acc" style="width:${(c-o)/maxL*100}%"></span></span><span class="val">${c}</span></div>`).join('') : '<span class="muted">Add team members to see workload.</span>'}</div></div></section>
+  </div>`;
+}
+
+function orderFilterFn(k){
+  const t = today();
+  return ({
+    open:o=>o.status==='Open'||o.status==='On hold', mine:o=>(o.status==='Open'||o.status==='On hold')&&o.owner===UI.me,
+    late:isLate, risk:o=>health(o)==='red', exc:o=>(o.status==='Open'||o.status==='On hold')&&allExc(o).some(x=>OPEN_EXC.includes(x.status)&&!x.cleared),
+    docs:o=>o.status==='Open'&&o.stage>=6&&o.stage<=8&&preShipMissing(o).length>0,
+    transit:o=>o.status==='Open'&&(o.stage===8||(o.stage===9&&(o.shipment||{}).status!=='Delivered')),
+    invoice:o=>o.status==='Open'&&o.stage===10, hold:o=>o.status==='On hold', closed:o=>o.status==='Closed'||o.status==='Cancelled'
+  })[k] || (o=>o.status==='Open'||o.status==='On hold');
+}
+function viewOrders(){
+  const f = UI.filters.orders || {view:'open'};
+  const views = [['open','All open'],['mine','My orders'],['late','Late'],['risk','At risk'],['exc','With exceptions'],['docs','Missing docs'],['transit','In transit'],['invoice','Awaiting invoice'],['hold','On hold'],['closed','Closed']];
+  let list = ordersArr().filter(orderFilterFn(f.view));
+  if (f.acct) list = list.filter(o=>o.accountId===f.acct);
+  if (f.owner) list = list.filter(o=>o.owner===f.owner);
+  const hRank = {red:0,amber:1,green:2,done:3};
+  list.sort((a,b)=> hRank[health(a)]-hRank[health(b)] || String(a.shipBy).localeCompare(String(b.shipBy)));
+  UI.lastOrderList = list.map(o=>o.id);
+  return `
+  <div class="spread"><div><div class="eyebrow">Single source of truth</div><h1>Orders</h1></div>
+    <div class="row"><button class="btn" data-act="copy-csv">Copy as CSV for Excel</button><button class="btn pri" data-act="new-order">+ New order</button></div></div>
+  <div class="chips">${views.map(([k,l])=>`<button class="chip ${f.view===k?'on':''}" data-act="order-view" data-v="${k}">${l}<span class="n">${ordersArr().filter(orderFilterFn(k)).length}</span></button>`).join('')}</div>
+  <div class="row">
+    <select class="f inline" data-chg="order-f" data-k="acct" aria-label="Account"><option value="">All accounts</option>${Object.values(S.accounts).sort((a,b)=>a.name.localeCompare(b.name)).map(a=>`<option value="${a.id}" ${f.acct===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+    <select class="f inline" data-chg="order-f" data-k="owner" aria-label="Owner"><option value="">All owners</option>${teamNames().map(n=>`<option ${f.owner===n?'selected':''}>${esc(n)}</option>`).join('')}</select>
+  </div>
+  <section class="panel"><div class="bd flush"><div class="tbl-wrap"><table class="t">
+    <thead><tr><th></th><th>Order</th><th>Customer / PO</th><th>Stage</th><th class="hide-sm">Owner</th><th>Ship by</th><th class="hide-sm">Req. delivery</th><th style="text-align:right">Value</th><th>Exc.</th></tr></thead>
+    <tbody>${list.length? list.map(o=>{ const h=health(o); const ex=allExc(o).filter(x=>OPEN_EXC.includes(x.status)&&!x.cleared); const a=acctOf(o);
+      return `<tr class="click" data-act="open-order" data-o="${o.id}"><td><span class="dot d-${h}" title="${h}"></span></td><td class="mono">${esc(o.no)}${o.example?' <span class="badge">example</span>':''}</td>
+      <td><div>${esc(a.name)}</div><div class="muted mono" style="font-size:12px">PO ${esc(o.customerPo)}</div></td>
+      <td><div>${stageBadge(o)}</div>${orderMini(o)}</td><td class="hide-sm">${esc(o.owner)}</td>
+      <td class="num">${fmtDate(o.shipBy)}</td><td class="num hide-sm">${fmtDate(o.requested)}</td><td class="num" style="text-align:right">${money(o.value,o.currency)}</td>
+      <td>${ex.length?`<span class="badge ${sevCls(ex.reduce((m,x)=>SEV[x.severity]>SEV[m]?x.severity:m,'Low'))}">${ex.length}</span>`:'<span class="faint">–</span>'}</td></tr>`; }).join('')
+    : `<tr><td colspan="9"><div class="empty"><b>No orders in this view.</b>${Object.keys(S.accounts).length?'<button class="btn pri" data-act="new-order">+ New order</button>':'<span>Create a customer account first, then enter its purchase orders.</span><button class="btn pri" data-act="new-account">+ New account</button>'}</div></td></tr>`}</tbody></table></div></div></section>`;
+}
+
+function viewTasks(){
+  const f = UI.filters.tasks || 'mine'; const t = today(); const names = teamNames();
+  const all = allOpenTasks();
+  const preds = { mine:x=>x.owner===UI.me, team:()=>true, overdue:x=>x.due<t, week:x=>diffDays(t,x.due)<=7, unassigned:x=>!x.owner||!names.includes(x.owner) };
+  const list = all.filter(preds[f]||preds.mine).sort((a,b)=>String(a.due).localeCompare(String(b.due)));
+  const chips = [['mine','My tasks'],['team','Team'],['overdue','Overdue'],['week','Due in 7 days'],['unassigned','Unassigned']];
+  return `
+  <div class="spread"><div><div class="eyebrow">Generated from workflow stages</div><h1>Tasks</h1></div></div>
+  <div class="chips">${chips.map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-act="filter" data-k="tasks" data-v="${k}">${l}<span class="n">${all.filter(preds[k]).length}</span></button>`).join('')}</div>
+  <section class="panel"><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Task</th><th>Order</th><th>Owner</th><th>Due</th><th></th></tr></thead><tbody>
+  ${list.length? list.map(x=>{ const o=S.orders[x.orderId]; return `<tr><td><button class="chk" data-act="task-done" data-o="${o.id}" data-t="${x.id}" aria-label="Mark done"></button></td>
+    <td><div>${esc(x.title)}</div><div class="muted" style="font-size:12px">Stage ${x.stage} · ${esc(stageDef(x.stage).name)}</div></td>
+    <td><button class="link mono" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button><div class="muted" style="font-size:12px">${esc(acctOf(o).name)}</div></td>
+    <td><select class="f inline" data-chg="task-owner" data-o="${o.id}" data-t="${x.id}" aria-label="Owner">${ownerOptions(x.owner)}</select></td>
+    <td><span class="badge ${dueCls(x.due)}">${relDue(x.due)}</span></td>
+    <td><button class="btn sm" data-act="task-snooze" data-o="${o.id}" data-t="${x.id}">+1 day</button></td></tr>`; }).join('')
+  : `<tr><td colspan="6"><div class="empty">${!UI.me&&f==='mine'?'Choose who you are at the top of the page to see your tasks.':'No tasks in this view.'}</div></td></tr>`}
+  </tbody></table></div></div></section>`;
+}
+function ownerOptions(cur){ const names = teamNames(); return (cur && !names.includes(cur) ? `<option selected>${esc(cur)}</option>` : (!cur?'<option value="" selected>Unassigned</option>':'')) + names.map(n=>`<option ${n===cur?'selected':''}>${esc(n)}</option>`).join(''); }
+
+function viewExceptions(){
+  const f = UI.filters.exc || 'open'; const t = today();
+  const every = []; ordersArr().forEach(o=>allExc(o).forEach(x=>every.push(x)));
+  const preds = { open:x=>OPEN_EXC.includes(x.status), mine:x=>OPEN_EXC.includes(x.status)&&x.owner===UI.me, escalated:x=>OPEN_EXC.includes(x.status)&&escLevel(x)>=1,
+    overdue:x=>OPEN_EXC.includes(x.status)&&x.due&&x.due<t, unowned:x=>OPEN_EXC.includes(x.status)&&(!x.owner||!teamNames().includes(x.owner)),
+    resolved:x=>x.status==='Resolved' && x.resolvedAt && diffDays(x.resolvedAt.slice(0,10),t)<=30 };
+  const list = every.filter(preds[f]||preds.open);
+  const chips = [['open','Open'],['mine','Mine'],['escalated','Escalated'],['overdue','Past due'],['unowned','Unowned'],['resolved','Resolved (30 days)']];
+  const openAll = every.filter(preds.open);
+  const ages = openAll.filter(x=>x.raisedAt).map(x=>diffDays(x.raisedAt.slice(0,10),t));
+  const avgAge = ages.length? (ages.reduce((a,b)=>a+b,0)/ages.length).toFixed(1) : '0';
+  const groups = f==='resolved' ? [['Resolved', list]] : SEVS.map(s=>[s, list.filter(x=>x.severity===s)]).filter(g=>g[1].length);
+  return `
+  <div class="spread"><div><div class="eyebrow">Exception engine</div><h1>Exceptions</h1><div class="muted">${openAll.length} open · average age ${avgAge} days · ${openAll.filter(x=>x.due&&x.due<t).length} past due · auto-detected issues appear and clear on their own</div></div>
+    <button class="btn pri" data-act="raise-exc">+ Raise exception</button></div>
+  <div class="chips">${chips.map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-act="filter" data-k="exc" data-v="${k}">${l}<span class="n">${every.filter(preds[k]).length}</span></button>`).join('')}</div>
+  ${groups.length? groups.map(([g,xs])=>`<section class="panel"><div class="hd"><h2>${g} <span class="muted num">(${xs.length})</span></h2></div><div class="items">${xs.sort((a,b)=>String(a.due).localeCompare(String(b.due))).map(excRow).join('')}</div></section>`).join('')
+    : '<section class="panel"><div class="empty"><b>No exceptions in this view.</b><span>Good. The engine keeps checking documents, dates, suppliers, shipments and invoices.</span></div></section>'}`;
+}
+function excRow(x){
+  const o = S.orders[x.orderId]; const lvl = escLevel(x); const open = OPEN_EXC.includes(x.status);
+  return `<div class="item sev sev-${x.severity}"><div class="body">
+    <div class="ttl">${esc(EXC_TYPES[x.code]?.[0]||x.code)}: ${esc(x.title)}</div>
+    <div class="meta"><button class="link mono" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button><span>${esc(acctOf(o).name)}</span>
+      ${open?`<select class="f inline" data-chg="exc-owner" data-o="${o.id}" data-x="${x.id}" aria-label="Owner">${ownerOptions(x.owner)}</select>`:`<span>${esc(x.owner)}</span>`}
+      <span class="badge ${sevCls(x.severity)}">${x.severity}</span>${open?`<span class="badge ${dueCls(x.due)}">${relDue(x.due)}</span>`:''}
+      <span class="badge ${x.status==='Resolved'?'b-ok':x.status==='Acknowledged'?'b-info':''}">${x.virtual?'New':x.status}</span>
+      ${lvl&&open?`<span class="badge b-crit">Escalated L${lvl}</span>`:''}${x.auto?'<span class="badge">Auto</span>':''}${x.cleared?'<span class="badge b-ok">Condition cleared</span>':''}</div>
+    ${x.status==='Resolved'?`<div class="meta">${esc(x.resolution||'')}${x.rootCause?' · root cause: '+esc(x.rootCause):''}${x.note?' · '+esc(x.note):''}</div>`:''}</div>
+    <div class="acts">${open?`${x.status==='Open'?`<button class="btn sm" data-act="exc-ack" data-o="${o.id}" data-x="${x.id}">Acknowledge</button>`:''}<button class="btn sm" data-act="exc-escalate" data-o="${o.id}" data-x="${x.id}">Escalate</button><button class="btn sm pri" data-act="exc-resolve" data-o="${o.id}" data-x="${x.id}">Resolve</button>`:`<button class="btn sm" data-act="exc-reopen" data-o="${o.id}" data-x="${x.id}">Reopen</button>`}</div></div>`;
+}
+
+function shipLine(sh){
+  const idx = SHIP_STATUSES.indexOf(sh.status||'Not booked');
+  const pts = ['Booked','Collected','Departed','Arrived','Customs','Delivered'];
+  const dates = {Booked:null, Collected:sh.collection, Departed:sh.etd, Arrived:sh.eta, Delivered:sh.delivered};
+  return `<div class="shipline">${pts.map(p=>{ const pi = SHIP_STATUSES.indexOf(p); const on = idx>pi || (idx===pi && p==='Delivered'); const now = idx===pi && p!=='Delivered' || (p==='Departed'&&idx===4);
+    return `<div class="sp ${on||now?'on':''} ${now?'now':''}"><i></i><span>${p}</span><span class="faint num">${dates[p]?fmtDate(dates[p]):''}</span></div>`; }).join('')}</div>`;
+}
+function viewShipments(){
+  const t = today();
+  const rel = openOrders().filter(o=>o.stage>=5 && o.stage<=9);
+  const sh = o=>o.shipment||{};
+  const groups = [
+    ['Delayed', rel.filter(o=>allExc(o).some(x=>(x.code==='SHIP_DELAY'||x.code==='SHIPBY_MISSED')&&OPEN_EXC.includes(x.status)))],
+    ['Collecting in the next 7 days', rel.filter(o=>sh(o).collection && sh(o).collection>=t && diffDays(t,sh(o).collection)<=7 && SHIP_STATUSES.indexOf(sh(o).status||'Not booked')<2)],
+    ['In transit', rel.filter(o=>['Collected','Departed','In transit','Arrived','Customs'].includes(sh(o).status))],
+    ['Arriving in the next 7 days', rel.filter(o=>sh(o).eta && sh(o).eta>=t && diffDays(t,sh(o).eta)<=7 && sh(o).status!=='Delivered')],
+    ['Delivered, awaiting POD', rel.filter(o=>sh(o).status==='Delivered' && !docOk(o,'Proof of delivery (POD)'))],
+    ['Being planned', rel.filter(o=>SHIP_STATUSES.indexOf(sh(o).status||'Not booked')<=1)]
+  ];
+  return `<div class="spread"><div><div class="eyebrow">Stages 5–9</div><h1>Shipments</h1></div></div>
+  ${groups.map(([g,os])=>`<section class="panel"><div class="hd"><h2>${g} <span class="muted num">(${os.length})</span></h2></div>
+    ${os.length?`<div class="items">${os.map(o=>{ const s=sh(o); return `<div class="item"><div class="body">
+      <div class="spread"><div class="ttl"><button class="link mono" data-act="open-order" data-o="${o.id}">${esc(o.no)}</button> · ${esc(acctOf(o).name)} → ${esc(o.destination)}</div>
+      <div class="meta"><span>${esc(s.mode||o.mode||'')}</span><span>${esc(s.forwarder||'No forwarder')}</span><span class="mono">${esc(s.ref||'')}</span><span class="badge ${s.status==='Delivered'?'b-ok':'b-info'}">${esc(s.status||'Not booked')}</span></div></div>
+      ${shipLine(s)}
+      <div class="meta"><span>Collection ${fmtDate(s.collection)}</span><span>ETD ${fmtDate(s.etd)}</span><span>ETA ${fmtDate(s.eta)}</span><span>Requested ${fmtDate(o.requested)}</span></div></div></div>`; }).join('')}</div>`:'<div class="bd muted">None.</div>'}</section>`).join('')}`;
+}
+
+function viewAccounts(){
+  const accts = Object.values(S.accounts).sort((a,b)=>a.name.localeCompare(b.name));
+  return `<div class="spread"><div><div class="eyebrow">Customers & requirements library</div><h1>Accounts</h1></div><button class="btn pri" data-act="new-account">+ New account</button></div>
+  ${accts.length? `<section class="panel"><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th>Account</th><th>Type</th><th class="hide-sm">Region</th><th>Owner</th><th>Rules</th><th>Open orders</th><th style="text-align:right">Open value</th></tr></thead><tbody>
+  ${accts.map(a=>{ const os=openOrders().filter(o=>o.accountId===a.id); return `<tr class="click" data-act="open-account" data-a="${a.id}"><td>${esc(a.name)}${a.example?' <span class="badge">example</span>':''}</td><td>${esc(a.type)}</td><td class="hide-sm">${esc(a.region)}</td><td>${esc(a.owner)}</td><td class="num">${(a.requirements||[]).length}</td><td class="num">${os.length}${os.some(o=>health(o)==='red')?` <span class="dot d-red"></span>`:''}</td><td class="num" style="text-align:right">${money(os.reduce((s,o)=>s+(o.value||0),0), a.currency)}</td></tr>`; }).join('')}
+  </tbody></table></div></div></section>` : `<section class="panel"><div class="empty"><b>No accounts yet.</b><span>An account holds the customer's destinations, contacts, price list and the rules every order must follow.</span><button class="btn pri" data-act="new-account">+ New account</button></div></section>`}`;
+}
+
+function viewReports(){
+  const t = today(); const all = ordersArr();
+  const closed = all.filter(o=>o.status==='Closed' && o.closedAt);
+  const cyc = closed.map(o=>diffDays(o.created.slice(0,10), o.closedAt));
+  const avgCyc = cyc.length ? Math.round(cyc.reduce((a,b)=>a+b,0)/cyc.length) : null;
+  const stageDur = STAGES.map(s=>{ const ds = all.map(o=>(o.stageDates||{})[s.n]).filter(d=>d&&d.start&&d.done).map(d=>diffDays(d.start,d.done)); return [s, ds.length? ds.reduce((a,b)=>a+b,0)/ds.length : 0, ds.length]; });
+  const maxSD = Math.max(1, ...stageDur.map(x=>x[1]));
+  const deliv = all.filter(o=>(o.shipment||{}).delivered);
+  const onTime = deliv.filter(o=>o.shipment.delivered<=o.requested).length;
+  const firstRight = closed.filter(o=>!(o.exceptions||[]).length).length;
+  const last90 = all.filter(o=>o.created && diffDays(o.created.slice(0,10),t)<=90).length;
+  const invoiced = all.filter(o=>(o.finance||{}).invoiceNo);
+  const revByCust = {}; invoiced.forEach(o=>{ const n=acctOf(o).name; revByCust[n]=(revByCust[n]||0)+((o.finance||{}).invoiceAmount||o.value||0); });
+  const custRows = Object.entries(revByCust).sort((a,b)=>b[1]-a[1]); const maxC = Math.max(1,...custRows.map(r=>r[1]));
+  const months = []; for (let i=5;i>=0;i--){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-i); months.push(d.getFullYear()+'-'+z(d.getMonth()+1)); }
+  const revByMonth = months.map(m=>[m, invoiced.filter(o=>((o.finance||{}).invoiceDate||'').startsWith(m)).reduce((s,o)=>s+((o.finance||{}).invoiceAmount||o.value||0),0)]);
+  const maxM = Math.max(1,...revByMonth.map(r=>r[1]));
+  const pendInv = openOrders().filter(o=>o.stage===10);
+  const buckets = [['0–2 days',0,2],['3–5 days',3,5],['6–10 days',6,10],['10+ days',11,9999]].map(([l,a,b])=>[l, pendInv.filter(o=>{ const d=diffDays(((o.stageDates||{})[10]||{}).start||t,t); return d>=a&&d<=b; }).reduce((s,o)=>s+(o.value||0),0)]);
+  const openVal = PHASES.map(p=>[p, openOrders().filter(o=>stageDef(o.stage).phase===p).reduce((s,o)=>s+(o.value||0),0)]);
+  const maxOV = Math.max(1,...openVal.map(r=>r[1]));
+  const sup = {}; all.forEach(o=>{ const k=o.supplier||'Unknown'; sup[k]=sup[k]||{orders:0,exc:0,shipped:0,onTime:0,docExc:0,noresp:0};
+    const s=sup[k]; s.orders++; const ex=o.exceptions||[]; s.exc+=ex.length; s.docExc+=ex.filter(x=>/^DOC/.test(x.code)).length; s.noresp+=ex.filter(x=>x.code==='SUPP_NORESP'||x.code==='SUPP_DELAY').length;
+    const col=(o.shipment||{}).collection; if(col && o.stage>=8){ s.shipped++; if(col<=o.shipBy) s.onTime++; } });
+  const supRows = Object.entries(sup).sort((a,b)=>b[1].orders-a[1].orders);
+  const pct = (a,b)=> b? Math.round(a/b*100)+'%' : '—';
+  return `<div class="spread"><div><div class="eyebrow">Insights</div><h1>Reports</h1></div></div>
+  <h2>Operational performance</h2>
+  <div class="tiles">
+    <div class="tile t-info"><span class="k">Orders received (90d)</span><span class="v">${last90}</span></div>
+    <div class="tile t-info"><span class="k">Orders closed</span><span class="v">${closed.length}</span></div>
+    <div class="tile ${avgCyc==null?'':avgCyc<=45?'t-ok':'t-warn'}"><span class="k">Avg cycle time</span><span class="v">${avgCyc==null?'—':avgCyc+'d'}</span><span class="s">PO to closure</span></div>
+    <div class="tile ${deliv.length&&onTime/deliv.length>=.96?'t-ok':'t-warn'}"><span class="k">On-time delivery</span><span class="v">${pct(onTime,deliv.length)}</span><span class="s">${deliv.length} deliveries</span></div>
+    <div class="tile"><span class="k">First-time right</span><span class="v">${pct(firstRight,closed.length)}</span><span class="s">closed with no exceptions</span></div>
+  </div>
+  <section class="panel"><div class="hd"><h2>Average days per stage</h2><span class="muted">the longest bar is the bottleneck</span></div><div class="bd"><div class="bars">${stageDur.map(([s,d,n])=>`<div class="bar" title="${n} orders measured"><span class="lbl">${s.n}. ${esc(s.name)}</span><span class="trk"><span class="fill" style="width:${d/maxSD*100}%"></span></span><span class="val">${d?d.toFixed(1):'–'}</span></div>`).join('')}</div></div></section>
+  <h2>Financial metrics</h2>
+  <div class="grid2">
+    <section class="panel"><div class="hd"><h2>Revenue by month</h2><span class="muted">invoiced</span></div><div class="bd"><div class="bars">${revByMonth.map(([m,v])=>`<div class="bar"><span class="lbl">${new Date(m+'-15').toLocaleDateString(undefined,{month:'short',year:'numeric'})}</span><span class="trk"><span class="fill acc" style="width:${v/maxM*100}%"></span></span><span class="val">${kmoney(v)}</span></div>`).join('')}</div></div></section>
+    <section class="panel"><div class="hd"><h2>Revenue by customer</h2><span class="muted">invoiced, all time</span></div><div class="bd"><div class="bars">${custRows.length? custRows.map(([c,v])=>`<div class="bar"><span class="lbl">${esc(c)}</span><span class="trk"><span class="fill acc" style="width:${v/maxC*100}%"></span></span><span class="val">${kmoney(v)}</span></div>`).join(''):'<span class="muted">No invoices yet.</span>'}</div></div></section>
+    <section class="panel"><div class="hd"><h2>Pending invoicing by age</h2><span class="muted">${kmoney(pendInv.reduce((s,o)=>s+(o.value||0),0))} total</span></div><div class="bd"><div class="bars">${buckets.map(([l,v],i)=>`<div class="bar"><span class="lbl">${l}</span><span class="trk"><span class="fill ${i>=2?'late':''}" style="width:${v/Math.max(1,...buckets.map(b=>b[1]))*100}%"></span></span><span class="val">${kmoney(v)}</span></div>`).join('')}</div></div></section>
+    <section class="panel"><div class="hd"><h2>Open order value by phase</h2></div><div class="bd"><div class="bars">${openVal.map(([p,v])=>`<div class="bar"><span class="lbl">${p}</span><span class="trk"><span class="fill" style="width:${v/maxOV*100}%"></span></span><span class="val">${kmoney(v)}</span></div>`).join('')}</div></div></section>
+  </div>
+  <h2>Supplier performance</h2>
+  <section class="panel"><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th>Supplier</th><th>Orders</th><th>On-time collection</th><th>Document issues</th><th>Response / delay issues</th><th>Exceptions per order</th></tr></thead><tbody>
+  ${supRows.map(([n,s])=>`<tr><td>${esc(n)}</td><td class="num">${s.orders}</td><td class="num">${pct(s.onTime,s.shipped)}</td><td class="num">${s.docExc}</td><td class="num">${s.noresp}</td><td class="num">${(s.exc/s.orders).toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No orders yet.</td></tr>'}
+  </tbody></table></div></div></section>`;
+}
+
+// ---------- drawer ----------
+function renderDrawer(scrollTop){
+  const r = $('#drawerRoot');
+  if (!UI.drawer) { r.innerHTML=''; return; }
+  let html = '';
+  if (UI.drawer.type==='order') { const o = S.orders[UI.drawer.id]; if (!o) { UI.drawer=null; r.innerHTML=''; return; } html = drawerOrder(o); }
+  else if (UI.drawer.type==='account') { const a = S.accounts[UI.drawer.id]; if (!a) { UI.drawer=null; r.innerHTML=''; return; } html = drawerAccount(a); }
+  r.innerHTML = `<div class="scrim" data-act="close-drawer"></div><aside class="drawer" role="dialog" aria-modal="true">${html}</aside>`;
+  const db = r.querySelector('.db'); if (db && scrollTop) db.scrollTop = scrollTop;
+}
+function fieldInput(o, path, type, label, opts){
+  const v = getPath(o, path) ?? '';
+  if (type==='select') return `<label class="fl">${label}<select class="f" data-chg="of" data-o="${o.id}" data-f="${path}">${opts.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`;
+  return `<label class="fl">${label}<input class="f ${type==='number'?'num':''}" type="${type}" value="${esc(v)}" data-chg="of" data-o="${o.id}" data-f="${path}"></label>`;
+}
+function drawerOrder(o){
+  const a = acctOf(o); const h = health(o); const s = stageDef(o.stage); const exs = allExc(o);
+  const openEx = exs.filter(x=>OPEN_EXC.includes(x.status)); const doneEx = exs.filter(x=>!OPEN_EXC.includes(x.status));
+  const curTasks = (o.tasks||[]).filter(t=>t.stage===o.stage);
+  const oldTasks = (o.tasks||[]).filter(t=>t.stage!==o.stage);
+  const blockers = o.status==='Open' ? gateBlockers(o) : [];
+  const isMgr = roleOf(UI.me)==='Manager';
+  const sh = o.shipment||{}; const fin = o.finance||{};
+  const activeReq = (o.requirements||[]);
+  const hLabel = {red:'At risk',amber:'Watch',green:'On track',done:o.status}[h];
+  return `
+  <div class="dh">
+    <div class="spread"><div class="row"><button class="btn sm ghost" data-act="close-drawer" aria-label="Close">✕</button><span class="mono" style="font-size:16px;font-weight:600">${esc(o.no)}</span><span class="badge ${h==='red'?'b-bad':h==='amber'?'b-warn':h==='green'?'b-ok':''}">${hLabel}</span>${o.status==='On hold'?'<span class="badge b-warn">On hold</span>':''}${o.example?'<span class="badge">example data</span>':''}</div>
+      <div class="row">
+        ${o.status==='Open'?`<button class="btn sm" data-act="order-hold" data-o="${o.id}">Put on hold</button>`:o.status==='On hold'?`<button class="btn sm" data-act="order-resume" data-o="${o.id}">Resume</button>`:''}
+        ${o.status==='Open'||o.status==='On hold'?(UI.confirm==='cancel-'+o.id?`<button class="btn sm danger" data-act="order-cancel" data-o="${o.id}">Confirm cancel</button>`:`<button class="btn sm ghost" data-act="ask-confirm" data-k="cancel-${o.id}">Cancel order</button>`):''}
+      </div></div>
+    <div><h2 style="font-size:18px">${esc(a.name)} <span class="muted" style="font-weight:400">→ ${esc(o.destination)}</span></h2>
+    <div class="muted" style="font-size:13px">Customer PO <span class="mono">${esc(o.customerPo)}</span> · Supplier ${esc(o.supplier)} · ${esc(o.mode)} · ${esc(o.incoterm)} · ${money(o.value,o.currency)}</div></div>
+  </div>
+  <div class="db">
+    <section class="panel"><div class="bd"><div class="kv">
+      <div><span>Owner</span><select class="f inline" data-chg="order-owner" data-o="${o.id}" aria-label="Owner">${ownerOptions(o.owner)}</select></div>
+      <div><span>Status</span><b>${o.status==='Closed'?'Closed '+fmtDate(o.closedAt):esc(s.out.replace(/^Order /,''))+' pending'}</b></div>
+      <div><span>PO date</span><b class="num">${fmtDateY(o.poDate)}</b></div>
+      <div><span>Ship by</span><input class="f inline" type="date" value="${esc(o.shipBy)}" data-chg="of" data-o="${o.id}" data-f="shipBy" aria-label="Ship by"></div>
+      <div><span>Requested delivery</span><input class="f inline" type="date" value="${esc(o.requested)}" data-chg="of" data-o="${o.id}" data-f="requested" aria-label="Requested delivery"></div>
+      <div><span>Order value</span><b class="num">${money(o.value,o.currency)}</b></div>
+    </div></div></section>
+
+    <section class="panel"><div class="hd"><h2>Workflow</h2><span class="muted">Stage ${o.stage} of 12 · ${esc(s.phase)}</span></div><div class="bd">
+      <div class="tracker">${PHASES.map(p=>`<div class="ph"><div class="ph-l">${p}</div><div class="ph-s">${STAGES.filter(x=>x.phase===p).map(x=>{ const st = o.status==='Closed'||x.n<o.stage?'done':x.n===o.stage?'cur':'todo'; const dd=(o.stageDates||{})[x.n]||{};
+        return `<div class="st ${st} ${st==='cur'&&h==='red'?'red':''}" title="${esc(x.n+'. '+x.name+' → '+x.out+(dd.start?' · started '+fmtDate(dd.start):'')+(dd.done?' · done '+fmtDate(dd.done):''))}"><span class="sd">${st==='done'?'✓':x.n}</span><span class="nm">${esc(x.name)}</span></div>`; }).join('')}</div></div>`).join('')}</div>
+    </div></section>
+
+    ${o.status==='Closed'||o.status==='Cancelled'?'':`<section class="panel"><div class="hd"><h2>Next up: ${esc(s.name)}</h2><span class="muted">${curTasks.filter(t=>t.status==='done').length} of ${curTasks.length} done · output: ${esc(s.out)}</span></div><div class="bd">
+      ${curTasks.map(t=>taskRow(o,t)).join('')}
+      <form class="row" data-form="add-task" data-o="${o.id}" style="margin-top:8px"><input class="f" id="addTask-${o.id}" placeholder="Add a task to this stage" style="flex:1 1 200px"><button class="btn sm" type="submit">Add</button></form>
+      <div class="gate"><div>${blockers.length?`<div class="blockers">Before completing: ${esc(blockers.join(' · '))}</div>`:'<div style="color:var(--ok);font-weight:500">Ready to complete this stage.</div>'}</div>
+        <div class="row">${blockers.length && isMgr ? `<button class="btn sm" data-act="stage-override" data-o="${o.id}">Manager override</button>`:''}<button class="btn pri" data-act="stage-complete" data-o="${o.id}" ${blockers.length?'disabled':''}>Complete stage ${o.stage} → ${esc(s.out)}</button></div></div>
+      ${oldTasks.length?`<details><summary>Completed tasks from earlier stages (${oldTasks.length})</summary>${oldTasks.map(t=>`<div class="task done"><span class="chk on">✓</span><span class="tt">${esc(t.title)} <span class="faint">· stage ${t.stage}</span></span><span class="muted" style="font-size:12px">${esc(t.doneBy||t.owner||'')} ${t.doneAt?fmtDate(t.doneAt):''}</span></div>`).join('')}</details>`:''}
+    </div></section>`}
+
+    <section class="panel"><div class="hd"><h2>Exceptions <span class="muted num">(${openEx.length} open)</span></h2><button class="btn sm" data-act="raise-exc" data-o="${o.id}">+ Raise exception</button></div>
+      <div class="items">${openEx.length? openEx.map(excRow).join('') : '<div class="bd muted">No open exceptions.</div>'}
+      ${doneEx.length?`<div class="bd"><details><summary>Resolved (${doneEx.length})</summary><div class="items">${doneEx.map(excRow).join('')}</div></details></div>`:''}</div></section>
+
+    <section class="panel"><div class="hd"><h2>Account requirements that apply</h2><span class="muted">${activeReq.length} rules · surfaced automatically</span></div><div class="bd">
+      ${activeReq.length? activeReq.map(r=>`<div class="req"><span class="cat"><span class="badge b-acc">${esc(r.cat)}</span></span><span style="flex:1">${esc(r.text)}</span><span class="faint" style="font-size:12px;white-space:nowrap">Stage ${esc(r.stage)}</span></div>`).join('') : '<span class="muted">This account has no special requirements.</span>'}
+    </div></section>
+
+    <section class="panel"><div class="hd"><h2>Order lines</h2><span class="muted num">${(o.lines||[]).reduce((s,l)=>s+(+l.qty||0),0).toLocaleString()} bottles</span></div><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th>SKU</th><th>Wine</th><th style="text-align:right">Qty (btl)</th><th style="text-align:right">Unit price</th><th style="text-align:right">List price</th><th style="text-align:right">Line total</th></tr></thead><tbody>
+      ${(o.lines||[]).map(l=>{ const v = l.listPrice ? (l.price-l.listPrice)/l.listPrice*100 : 0; return `<tr><td class="mono">${esc(l.sku)}</td><td>${esc(l.name)}</td><td class="num" style="text-align:right">${(+l.qty).toLocaleString()}</td><td class="num" style="text-align:right">${money(l.price,o.currency).replace(/\.00$/,'')}</td><td class="num" style="text-align:right">${l.listPrice?money(l.listPrice,o.currency):'—'}${Math.abs(v)>1?` <span class="badge b-warn">${v>0?'+':''}${v.toFixed(1)}%</span>`:''}</td><td class="num" style="text-align:right">${money(l.qty*l.price,o.currency)}</td></tr>`; }).join('')}
+    </tbody></table></div></div></section>
+
+    <section class="panel"><div class="hd"><h2>Shipment</h2><span class="badge ${sh.status==='Delivered'?'b-ok':'b-info'}">${esc(sh.status||'Not booked')}</span></div><div class="bd">
+      ${shipLine(sh)}
+      <div class="grid3" style="margin-top:12px">
+        ${fieldInput(o,'shipment.forwarder','text','Forwarder')}${fieldInput(o,'shipment.ref','text','AWB / B/L / container')}${fieldInput(o,'shipment.status','select','Status',SHIP_STATUSES)}
+        ${fieldInput(o,'shipment.collection','date','Collection')}${fieldInput(o,'shipment.etd','date','ETD')}${fieldInput(o,'shipment.eta','date','ETA')}
+        ${fieldInput(o,'shipment.delivered','date','Delivered on')}${fieldInput(o,'shipment.warehouse','text','Warehouse / 3PL')}${fieldInput(o,'shipment.broker','text','Customs broker')}
+      </div></div></section>
+
+    <section class="panel"><div class="hd"><h2>Documents</h2><span class="muted">${(o.reqDocs||[]).filter(t=>docOk(o,t)).length} of ${(o.reqDocs||[]).length} required received</span></div><div class="bd flush"><div class="tbl-wrap"><table class="t"><thead><tr><th>Document</th><th>Status</th><th>Reference / link</th><th>Updated</th></tr></thead><tbody>
+      ${(o.reqDocs||[]).map(t=>{ const d=(o.docs||{})[t]||{}; const st=d.status||'Missing'; return `<tr><td>${esc(t)}</td><td><select class="f inline" data-chg="doc-status" data-o="${o.id}" data-d="${esc(t)}" aria-label="Status of ${esc(t)}">${DOC_STATUSES.map(x=>`<option ${x===st?'selected':''}>${x}</option>`).join('')}</select> ${DOC_OK.includes(st)?'<span class="dot d-green"></span>':st==='Rejected'?'<span class="dot d-red"></span>':''}</td><td><input class="f inline" style="width:100%;min-width:140px" value="${esc(d.ref||'')}" placeholder="e.g. SharePoint link or doc no." data-chg="doc-ref" data-o="${o.id}" data-d="${esc(t)}" aria-label="Reference for ${esc(t)}"></td><td class="muted num" style="white-space:nowrap">${d.at?fmtDate(d.at)+(d.by?' · '+esc(d.by.split(' ')[0]):''):''}</td></tr>`; }).join('')}
+    </tbody></table></div><div class="bd row"><select class="f inline" id="addDoc-${o.id}" aria-label="Add document type"><option value="">Add a document type…</option>${DOC_TYPES.filter(t=>!(o.reqDocs||[]).includes(t)).map(t=>`<option>${esc(t)}</option>`).join('')}</select><button class="btn sm" data-act="doc-add" data-o="${o.id}">Add</button></div></div></section>
+
+    <section class="panel"><div class="hd"><h2>Financials</h2></div><div class="bd">
+      <div class="grid3">
+        ${fieldInput(o,'finance.invoiceNo','text','Customer invoice no.')}${fieldInput(o,'finance.invoiceDate','date','Invoice date')}${fieldInput(o,'finance.invoiceAmount','number','Invoice amount')}
+        ${fieldInput(o,'finance.supplierPo','text','Supplier PO no.')}${fieldInput(o,'finance.supplierInvoiceNo','text','Supplier invoice no.')}${fieldInput(o,'finance.supplierAmount','number','Supplier invoice amount')}
+      </div>
+      <div class="muted" style="font-size:12.5px;margin-top:8px">Order value ${money(o.value,o.currency)}${fin.invoiceAmount && Math.abs(fin.invoiceAmount-o.value)>1?` · <span style="color:var(--warn)">invoice differs from order value by ${money(fin.invoiceAmount-o.value,o.currency)}</span>`:''}${o.cost?` · cost ${money(o.cost,o.currency)} · margin ${Math.round((o.value-o.cost)/o.value*100)}%`:''}</div>
+    </div></section>
+
+    <section class="panel"><div class="hd"><h2>Stakeholders</h2></div><div class="bd">
+      <div class="kv" style="margin-bottom:10px"><div><span>Internal owner</span><b>${esc(o.owner)}</b></div><div><span>Account owner</span><b>${esc(a.owner||'—')}</b></div><div><span>Finance</span><b>${esc(financeOwner('—'))}</b></div><div><span>Supplier</span><b>${esc(o.supplier)}</b></div></div>
+      <label class="fl">Customer, supplier and logistics contacts<textarea class="f" data-chg="of" data-o="${o.id}" data-f="stakeholders" placeholder="One per line: role, name, email, phone">${esc(o.stakeholders||'')}</textarea></label>
+      ${a.contacts?`<details><summary>Account contacts</summary><div style="white-space:pre-wrap;font-size:13px">${esc(a.contacts)}</div></details>`:''}
+    </div></section>
+
+    <section class="panel"><div class="hd"><h2>Activity</h2></div><div class="bd">
+      <form class="row" data-form="comment" data-o="${o.id}" style="margin-bottom:10px"><input class="f" id="comment-${o.id}" placeholder="Add a comment, email summary or call note" style="flex:1 1 220px"><button class="btn sm pri" type="submit">Post</button></form>
+      <div class="timeline">${(o.activity||[]).map(e=>`<div class="ev"><time>${fmtTime(e.at)}</time><div><b style="font-weight:500">${esc(e.who)}</b> <span class="${e.kind==='comment'?'':'muted'}">${esc(e.text)}</span></div></div>`).join('') || '<span class="muted">No activity yet.</span>'}</div>
+    </div></section>
+  </div>`;
+}
+function taskRow(o,t){
+  const done = t.status==='done';
+  return `<div class="task ${done?'done':''}"><button class="chk ${done?'on':''}" data-act="task-toggle" data-o="${o.id}" data-t="${t.id}" aria-label="${done?'Reopen':'Complete'} task">${done?'✓':''}</button>
+    <span class="tt">${esc(t.title)}${t.manual?' <span class="faint" style="font-size:12px">· added</span>':''}</span>
+    ${done?`<span class="muted" style="font-size:12px">${esc(t.doneBy||'')} ${fmtDate(t.doneAt)}</span>`:`<select class="f inline" data-chg="task-owner" data-o="${o.id}" data-t="${t.id}" aria-label="Owner">${ownerOptions(t.owner)}</select>
+    <input class="f inline" type="date" value="${esc(t.due)}" data-chg="task-due" data-o="${o.id}" data-t="${t.id}" aria-label="Due date"><span class="badge ${dueCls(t.due)}">${relDue(t.due)}</span>`}</div>`;
+}
+function drawerAccount(a){
+  const os = ordersArr().filter(o=>o.accountId===a.id); const open = os.filter(o=>o.status==='Open'||o.status==='On hold');
+  const exc = os.reduce((s,o)=>s+(o.exceptions||[]).length,0);
+  const deliv = os.filter(o=>(o.shipment||{}).delivered); const onTime = deliv.filter(o=>o.shipment.delivered<=o.requested).length;
+  const rev = os.filter(o=>(o.finance||{}).invoiceNo).reduce((s,o)=>s+((o.finance||{}).invoiceAmount||o.value||0),0);
+  const byCat = REQ_CATS.map(c=>[c,(a.requirements||[]).filter(r=>r.cat===c)]).filter(x=>x[1].length);
+  return `<div class="dh"><div class="spread"><div class="row"><button class="btn sm ghost" data-act="close-drawer" aria-label="Close">✕</button><h2 style="font-size:18px">${esc(a.name)}</h2>${a.example?'<span class="badge">example data</span>':''}</div>
+    <div class="row"><button class="btn sm" data-act="edit-account" data-a="${a.id}">Edit account</button><button class="btn sm pri" data-act="new-order" data-a="${a.id}">+ New order</button></div></div>
+    <div class="muted">${esc(a.type)} · ${esc(a.region)} · Owner ${esc(a.owner)} · ${esc(a.currency)} · lead time ${esc(a.leadDays)} days · transit ${esc(a.transitDays)} days</div></div>
+  <div class="db">
+    <div class="tiles"><div class="tile t-info"><span class="k">Open orders</span><span class="v">${open.length}</span></div><div class="tile ${deliv.length&&onTime/deliv.length<.92?'t-bad':'t-ok'}"><span class="k">On-time delivery</span><span class="v">${deliv.length?Math.round(onTime/deliv.length*100)+'%':'—'}</span></div><div class="tile"><span class="k">Exceptions / order</span><span class="v">${os.length?(exc/os.length).toFixed(1):'—'}</span></div><div class="tile"><span class="k">Invoiced revenue</span><span class="v">${kmoney(rev)}</span></div></div>
+    <section class="panel"><div class="hd"><h2>Requirements library</h2><span class="muted">attached to every new order</span></div><div class="bd">
+      ${byCat.length? byCat.map(([c,rs])=>rs.map(r=>`<div class="req"><span class="cat"><span class="badge b-acc">${esc(c)}</span></span><span style="flex:1">${esc(r.text)}</span><span class="faint" style="font-size:12px;white-space:nowrap">Checked at stage ${esc(r.stage)}</span></div>`).join('')).join('') : '<span class="muted">No requirements yet. Use Edit account to add label, documentation, packing, shipping, invoice and compliance rules.</span>'}
+    </div></section>
+    <div class="grid2">
+      <section class="panel"><div class="hd"><h2>Destinations</h2></div><div class="bd">${(a.destinations||[]).map(d=>`<div>${esc(d)}</div>`).join('')||'<span class="muted">None</span>'}</div></section>
+      <section class="panel"><div class="hd"><h2>Extra required documents</h2></div><div class="bd">${(a.docRules||[]).map(d=>`<div>${esc(d)}</div>`).join('')||'<span class="muted">Standard set only</span>'}<div class="faint" style="font-size:12px;margin-top:6px">Always: ${BASE_DOCS.join(', ')}</div></div></section>
+      <section class="panel"><div class="hd"><h2>Contacts</h2></div><div class="bd" style="white-space:pre-wrap">${esc(a.contacts||'None recorded')}</div></section>
+      <section class="panel"><div class="hd"><h2>Price list</h2></div><div class="bd flush"><table class="t"><tbody>${Object.entries(a.priceList||{}).map(([k,v])=>`<tr><td class="mono">${esc(k)}</td><td class="num" style="text-align:right">${money(v,a.currency).replace(/\.00$/,'')}</td></tr>`).join('')||'<tr><td class="muted">No prices. Orders will not be price-checked.</td></tr>'}</tbody></table></div></section>
+    </div>
+    <section class="panel"><div class="hd"><h2>Orders</h2></div><div class="bd flush"><div class="tbl-wrap"><table class="t"><tbody>${os.sort((x,y)=>String(y.created).localeCompare(String(x.created))).map(o=>`<tr class="click" data-act="open-order" data-o="${o.id}"><td><span class="dot d-${health(o)}"></span></td><td class="mono">${esc(o.no)}</td><td>${stageBadge(o)}</td><td class="num">${fmtDate(o.requested)}</td><td class="num" style="text-align:right">${money(o.value,o.currency)}</td></tr>`).join('')||'<tr><td class="muted">No orders yet.</td></tr>'}</tbody></table></div></div></section>
+    ${a.lessons&&a.lessons.length?`<section class="panel"><div class="hd"><h2>Lessons learned</h2></div><div class="bd">${a.lessons.map(l=>`<div class="req"><span class="faint num" style="width:70px">${fmtDate(l.at)}</span><span>${esc(l.text)}</span></div>`).join('')}</div></section>`:''}
+  </div>`;
+}
+
+// ---------- modals ----------
+function openModal(title, body, footer){
+  $('#modalRoot').innerHTML = `<div class="modal-wrap" data-act="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="mh"><h2>${esc(title)}</h2><button class="btn sm ghost" data-act="close-modal" aria-label="Close">✕</button></div><div class="mb">${body}</div><div class="mf">${footer}</div></div></div>`;
+  const first = $('#modalRoot').querySelector('input,select,textarea'); if (first) first.focus();
+}
+const closeModal = () => { $('#modalRoot').innerHTML=''; schedule(true); };
+function modalNewOrder(acctId){
+  const accts = Object.values(S.accounts).sort((a,b)=>a.name.localeCompare(b.name));
+  if (!accts.length) { openModal('New order', `<p>Create a customer account first. Orders take their requirements, destinations and price list from the account.</p>`, `<button class="btn" data-act="close-modal">Close</button><button class="btn pri" data-act="new-account">+ New account</button>`); return; }
+  const a = S.accounts[acctId] || accts[0];
+  const req = addDays(today(), (a.leadDays||21)+7);
+  const suppliers = [...new Set(ordersArr().map(o=>o.supplier).filter(Boolean))];
+  openModal('New order', `
+    <div class="grid2">
+      <label class="fl">Account<select class="f" id="no-acct" data-chg="no-acct">${accts.map(x=>`<option value="${x.id}" ${x.id===a.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <label class="fl">Destination<select class="f" id="no-dest">${(a.destinations||['—']).map(d=>`<option>${esc(d)}</option>`).join('')}</select></label>
+      <label class="fl">Customer PO number<input class="f mono" id="no-po" placeholder="e.g. 889213"></label>
+      <label class="fl">PO date<input class="f" type="date" id="no-podate" value="${today()}"></label>
+      <label class="fl">Requested delivery<input class="f" type="date" id="no-req" value="${req}"></label>
+      <label class="fl">Ship by <span class="faint" style="font-weight:400">(blank = delivery − ${esc(a.transitDays||5)} days transit)</span><input class="f" type="date" id="no-shipby"></label>
+      <label class="fl">Supplier / winery<input class="f" id="no-sup" list="supList" placeholder="e.g. Domaine Laurent"><datalist id="supList">${suppliers.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
+      <label class="fl">Owner<select class="f" id="no-owner">${ownerOptions(a.owner)}</select></label>
+      <label class="fl">Transport mode<select class="f" id="no-mode">${['Air','Sea','Road','Courier'].map(m=>`<option>${m}</option>`).join('')}</select></label>
+      <label class="fl">Incoterm<select class="f" id="no-inco">${['FCA','EXW','FOB','CIF','CPT','DAP','DDP'].map(m=>`<option>${m}</option>`).join('')}</select></label>
+    </div>
+    <label class="fl">Order lines: paste from Excel or type one per line as SKU · description · bottles · unit price
+      <textarea class="f mono" id="no-lines" rows="5" placeholder="${esc(Object.keys(a.priceList||{})[0]||'DL-MEU22')}	Meursault 1er Cru 2022	480	58.00"></textarea></label>
+    <div class="muted" style="font-size:12.5px">On create the hub files the PO, attaches ${(a.requirements||[]).length} account requirements and ${BASE_DOCS.length+(a.docRules||[]).length} required documents, creates the stage 1 tasks, and checks price, lead time and quantities.</div>`,
+    `<button class="btn" data-act="close-modal">Cancel</button><button class="btn pri" data-act="create-order">Create order</button>`);
+}
+function parseLines(txt, a){
+  return txt.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const p = l.split(/\t|\s*\|\s*|\s*;\s*|\s*,\s*(?=\S)/).map(x=>x.trim()).filter(x=>x!=='');
+    if (p.length < 3) return null;
+    const nums = p.slice(1).filter(x=>/^[\d.]+$/.test(x.replace(/[€$£,\s]/g,'')));
+    const qty = parseFloat((nums[0]||'0').replace(/[^\d.]/g,'')); const price = parseFloat((nums[1]||'').replace(/[^\d.]/g,'')) || (a.priceList||{})[p[0]] || 0;
+    const name = p.slice(1).filter(x=>!nums.includes(x)).join(' ') || p[0];
+    return {sku:p[0], name, qty, price, listPrice:(a.priceList||{})[p[0]]||null};
+  }).filter(l=>l && l.qty>0);
+}
+function nextOrderNo(){
+  let max = 24000; ordersArr().forEach(o=>{ const n = parseInt(String(o.no).replace(/\D/g,''),10); if (n>max) max=n; });
+  return 'SO-' + (max+1);
+}
+function buildOrder(f, a, createdISO){
+  const start = createdISO.slice(0,10);
+  const o = {
+    no:f.no, accountId:a.id, accountType:a.type, customerPo:f.po, poDate:f.poDate||start, destination:f.dest, supplier:f.supplier||'', owner:f.owner||a.owner,
+    requested:f.requested, shipBy:f.shipBy || addDays(f.requested, -(a.transitDays||5)), mode:f.mode||'Air', incoterm:f.incoterm||'FCA', currency:a.currency||'EUR',
+    lines:f.lines, value: f.lines.reduce((s,l)=>s+l.qty*l.price,0), status:'Open', stage:1, stageDates:{1:{start}},
+    tasks:[], exceptions:[], docs:{'Customer PO':{status:'Received', ref:'Filed on intake', at:start, by:f.by||'System'}},
+    reqDocs:[...new Set(BASE_DOCS.concat(a.docRules||[]))].sort((x,y)=>DOC_TYPES.indexOf(x)-DOC_TYPES.indexOf(y)),
+    requirements:(a.requirements||[]).map(r=>({cat:r.cat,text:r.text,stage:r.stage})),
+    shipment:{status:'Not booked', mode:f.mode||'Air'}, finance:{}, stakeholders:'', activity:[], created:createdISO, updated:createdISO, lastActivity:start
+  };
+  if (f.example) o.example = true;
+  o.tasks = genTasks(o, 1, start);
+  const t1 = o.tasks.find(t=>/File customer PO/.test(t.title)); if (t1) { t1.status='done'; t1.doneBy='System'; t1.doneAt=start; }
+  // automatic intake checks
+  const t = start;
+  const var_ = o.lines.filter(l=>l.listPrice && Math.abs(l.price-l.listPrice)/l.listPrice > 0.01);
+  const priceTask = o.tasks.find(x=>/pricing/.test(x.title));
+  if (var_.length) { const worst = Math.max(...var_.map(l=>Math.abs(l.price-l.listPrice)/l.listPrice*100));
+    o.exceptions.push({id:uid(), code:'PRICE_VAR', title:`${var_.length} line${var_.length>1?'s':''} differ from the price list (up to ${worst.toFixed(1)}%): ${var_.map(l=>l.sku).join(', ')}`, severity: worst>5?'High':'Medium', owner:o.owner, due:addDays(t,1), status:'Open', raisedAt:createdISO, raisedBy:'System', auto:false});
+  } else if (priceTask && o.lines.some(l=>l.listPrice)) { priceTask.status='done'; priceTask.doneBy='System'; priceTask.doneAt=t; }
+  const lead = diffDays(t, o.requested);
+  const leadTask = o.tasks.find(x=>/lead time/.test(x.title));
+  if (lead < (a.leadDays||0)) o.exceptions.push({id:uid(), code:'LEAD_TIME', title:`Requested delivery in ${lead} days; standard lead time for this account is ${a.leadDays} days`, severity:'Medium', owner:o.owner, due:addDays(t,1), status:'Open', raisedAt:createdISO, raisedBy:'System'});
+  else if (leadTask) { leadTask.status='done'; leadTask.doneBy='System'; leadTask.doneAt=t; }
+  o.activity.unshift({at:createdISO, who:f.by||'Someone', text:`Order created from customer PO ${o.customerPo}. ${o.requirements.length} account requirements and ${o.reqDocs.length} required documents attached.`});
+  o.exceptions.forEach(x=>o.activity.unshift({at:createdISO, who:'System', text:`Exception raised: ${EXC_TYPES[x.code][0]}: ${x.title}`}));
+  return o;
+}
+function modalAccount(a){
+  const isNew = !a; a = a || {name:'',type:'Airline',region:'EMEA',owner:UI.me||'',currency:'EUR',leadDays:21,transitDays:5,destinations:[],contacts:'',requirements:[],docRules:[],priceList:{}};
+  const reqTxt = (a.requirements||[]).map(r=>`${r.cat} | ${r.text} | ${r.stage}`).join('\n');
+  const plTxt = Object.entries(a.priceList||{}).map(([k,v])=>`${k} | ${v}`).join('\n');
+  openModal(isNew?'New account':'Edit account', `
+    <div class="grid2">
+      <label class="fl">Account name<input class="f" id="ac-name" value="${esc(a.name)}" placeholder="e.g. Aurelia Airways – Premium Cabins"></label>
+      <label class="fl">Type<select class="f" id="ac-type">${ACCOUNT_TYPES.map(x=>`<option ${x===a.type?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="fl">Region<select class="f" id="ac-region">${['EMEA','APAC','AMER'].map(x=>`<option ${x===a.region?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="fl">Account owner<select class="f" id="ac-owner">${ownerOptions(a.owner)}</select></label>
+      <label class="fl">Currency<select class="f" id="ac-cur">${['EUR','USD','GBP','SEK','AUD','SGD','JPY'].map(x=>`<option ${x===a.currency?'selected':''}>${x}</option>`).join('')}</select></label>
+      <div class="grid2"><label class="fl">Lead time (days)<input class="f num" type="number" id="ac-lead" value="${esc(a.leadDays)}"></label><label class="fl">Transit (days)<input class="f num" type="number" id="ac-transit" value="${esc(a.transitDays)}"></label></div>
+    </div>
+    <label class="fl">Destinations (one per line)<textarea class="f" id="ac-dest" rows="3">${esc((a.destinations||[]).join('\n'))}</textarea></label>
+    <label class="fl">Requirements library: one per line as Category | Rule | Stage it is checked at (${REQ_CATS.join(', ')})<textarea class="f" id="ac-req" rows="6" placeholder="Label | Back label with lot code and cabin code | 6">${esc(reqTxt)}</textarea></label>
+    <fieldset style="border:1px solid var(--line);border-radius:8px;padding:10px"><legend class="muted" style="font-size:12px;padding:0 4px">Extra documents required on every order</legend><div class="grid2">
+      ${DOC_TYPES.filter(t=>!BASE_DOCS.includes(t)&&!['Supplier invoice','Customer invoice'].includes(t)).map((t,i)=>`<label class="row" style="gap:6px;font-size:13px"><input type="checkbox" id="ac-doc-${i}" data-doc="${esc(t)}" ${(a.docRules||[]).includes(t)?'checked':''}> ${esc(t)}</label>`).join('')}</div></fieldset>
+    <label class="fl">Price list: one per line as SKU | unit price<textarea class="f mono" id="ac-pl" rows="4">${esc(plTxt)}</textarea></label>
+    <label class="fl">Contacts<textarea class="f" id="ac-contacts" rows="3" placeholder="Procurement: name, email, phone">${esc(a.contacts||'')}</textarea></label>`,
+    `${!isNew?(UI.confirm==='delacct'?`<button class="btn danger" data-act="delete-account" data-a="${a.id}" style="margin-right:auto">Confirm delete</button>`:`<button class="btn ghost danger" data-act="ask-del-account" data-a="${a.id}" style="margin-right:auto">Delete account</button>`):''}<button class="btn" data-act="close-modal">Cancel</button><button class="btn pri" data-act="save-account" data-a="${isNew?'':a.id}">Save account</button>`);
+}
+function modalRaise(orderId){
+  const os = openOrders().sort((a,b)=>String(a.no).localeCompare(String(b.no)));
+  if (!os.length) { toast('There are no open orders to raise an exception on.'); return; }
+  const o = S.orders[orderId] || os[0];
+  openModal('Raise exception', `
+    <label class="fl">Order<select class="f" id="rx-order">${os.map(x=>`<option value="${x.id}" ${x.id===o.id?'selected':''}>${esc(x.no)} · ${esc(acctOf(x).name)}</option>`).join('')}</select></label>
+    <div class="grid2">
+      <label class="fl">Type<select class="f" id="rx-type">${Object.entries(EXC_TYPES).map(([k,v])=>`<option value="${k}">${esc(v[0])}</option>`).join('')}</select></label>
+      <label class="fl">Severity<select class="f" id="rx-sev"><option value="">Default for type</option>${SEVS.map(s=>`<option>${s}</option>`).join('')}</select></label>
+      <label class="fl">Owner<select class="f" id="rx-owner"><option value="">Order owner</option>${teamNames().map(n=>`<option>${esc(n)}</option>`).join('')}</select></label>
+      <label class="fl">Due<input class="f" type="date" id="rx-due"></label>
+    </div>
+    <label class="fl">What happened?<textarea class="f" id="rx-note" rows="3" placeholder="e.g. Supplier short 300 bottles of Rioja Reserva 2018"></textarea></label>
+    <div class="muted" style="font-size:12.5px">Severity, owner and due date default from the exception type. High and Critical notify the owner immediately and escalate if not acknowledged within 4 hours.</div>`,
+    `<button class="btn" data-act="close-modal">Cancel</button><button class="btn pri" data-act="save-raise">Raise exception</button>`);
+}
+function modalResolve(oid, xid){
+  const o = S.orders[oid]; const x = allExc(o).find(e=>e.id===xid);
+  openModal('Resolve exception', `<div><b>${esc(EXC_TYPES[x.code]?.[0]||x.code)}</b><div class="muted">${esc(x.title)} · ${esc(o.no)}</div></div>
+    <div class="grid2"><label class="fl">Resolution<select class="f" id="rs-res">${RESOLUTIONS.map(r=>`<option>${r}</option>`).join('')}</select></label>
+    <label class="fl">Root cause<select class="f" id="rs-root">${ROOT_CAUSES.map(r=>`<option>${r}</option>`).join('')}</select></label></div>
+    <label class="fl">Note (optional)<textarea class="f" id="rs-note" rows="2"></textarea></label>
+    <label class="row" style="gap:6px;font-size:13px"><input type="checkbox" id="rs-lesson"> Save as a lesson learned on the account</label>`,
+    `<button class="btn" data-act="close-modal">Cancel</button><button class="btn pri" data-act="save-resolve" data-o="${oid}" data-x="${xid}">Resolve</button>`);
+}
+function modalOverride(oid){
+  openModal('Manager override', `<p style="margin:0">Complete stage ${S.orders[oid].stage} even though: <b>${esc(gateBlockers(S.orders[oid]).join(' · '))}</b></p><label class="fl">Reason (recorded on the order)<textarea class="f" id="ov-reason" rows="2"></textarea></label>`,
+  `<button class="btn" data-act="close-modal">Cancel</button><button class="btn pri" data-act="save-override" data-o="${oid}">Override and complete</button>`);
+}
+function modalSettings(){
+  const exN = ordersArr().filter(o=>o.example).length + Object.values(S.accounts).filter(a=>a.example).length;
+  openModal('Team & data', `
+    <div><h3>Team</h3><div class="muted" style="font-size:12.5px">Owners for orders, tasks and exceptions come from this list.</div></div>
+    <div id="teamRows" style="display:flex;flex-direction:column;gap:6px">${S.team.map((m,i)=>teamRow(m,i)).join('')}</div>
+    <div class="row"><input class="f" id="tm-new" placeholder="Full name" style="flex:1 1 180px"><select class="f inline" id="tm-role">${ROLES.map(r=>`<option>${r}</option>`).join('')}</select><button class="btn sm" data-act="team-add">Add member</button></div>
+    <hr style="border:0;border-top:1px solid var(--line);width:100%">
+    <div><h3>Example data</h3><div class="muted" style="font-size:12.5px">Loads 5 fictional accounts, 6 fictional team members and 22 orders at every stage so you can try the workflow. Everything it creates is labelled “example”.</div></div>
+    <div class="row"><button class="btn" data-act="load-examples">Load example data</button>${exN?(UI.confirm==='rmex'?`<button class="btn danger" data-act="remove-examples">Confirm: remove ${exN} example records</button>`:`<button class="btn ghost danger" data-act="ask-confirm-modal" data-k="rmex">Remove example data</button>`):''}</div>
+    <div class="faint" style="font-size:12px">${S.mode==='shared'?'Workspace: shared with everyone who can open this page on claude.ai. Changes appear for others live.':'Workspace: this browser only.'}</div>`,
+    `<button class="btn pri" data-act="close-modal">Done</button>`);
+}
+const teamRow = (m,i) => `<div class="row"><span style="flex:1 1 160px">${esc(m.name)}${m.example?' <span class="badge">example</span>':''}</span><select class="f inline" data-chg="team-role" data-i="${i}" aria-label="Role">${ROLES.map(r=>`<option ${r===m.role?'selected':''}>${r}</option>`).join('')}</select><button class="btn sm ghost danger" data-act="team-remove" data-i="${i}">Remove</button></div>`;
+
+// ---------- example data (loaded only on request) ----------
+function makeExamples(){
+  const t = today(); const now = new Date().toISOString();
+  const team = [['Olivia Park','Coordinator'],['Marco Rossi','Specialist'],['Priya Nair','Coordinator'],['Tom Becker','Coordinator'],['Fatima Haddad','Finance'],['Hannah Cole','Manager']].map(([name,role])=>({name,role,example:true}));
+  const A = [
+    {key:'aur', name:'Aurelia Airways – Premium Cabins', type:'Airline', region:'APAC', owner:'Olivia Park', currency:'EUR', leadDays:21, transitDays:4,
+     destinations:['SIN catering hub','HKG catering hub','SYD catering hub'], docRules:['Certificate of origin','Analysis certificate','Label approval'],
+     requirements:[['Label','Back label with lot code and airline cabin code',6],['Documentation','Commercial invoice shows HS 2204.21 and the airline PO number',6],['Packing','Max 12 bottles per case with dividers; case ≤ 18 kg',7],['Shipping','Temperature-controlled transport June to September',5],['Invoice','One invoice per delivery hub; PO number in header',10]],
+     priceList:{'DL-MEU22':58,'DL-BOU21':24,'KS-RIE23':14.5,'HC-SHZ21':19}, contacts:'Procurement: Mei Lin Tan, wine buyer\nReceiving: SIN hub goods-in desk\nAccounts payable: AP team, Singapore'},
+    {key:'pca', name:'Pacific Crown Airways – Business Class', type:'Airline', region:'APAC', owner:'Marco Rossi', currency:'USD', leadDays:28, transitDays:6,
+     destinations:['LAX catering hub','NRT catering hub'], docRules:['Certificate of origin','Label approval','Health / phytosanitary certificate'],
+     requirements:[['Compliance','US-bound: COLA label approval on file before shipment',6],['Documentation','FDA prior notice filed 24 hours before arrival',8],['Packing','Palletised and shrink-wrapped, max 1.6 m high',7],['Invoice','Invoice in USD, net 45 days',10]],
+     priceList:{'HC-SHZ21':21,'AR-RES18':17.5,'CB-BDX19':16}, contacts:'Procurement: Ken Watanabe, beverage manager\nLAX receiving: bonded dock 4'},
+    {key:'hwd', name:'Harbor Wine Distributors', type:'Distributor', region:'AMER', owner:'Priya Nair', currency:'USD', leadDays:35, transitDays:21,
+     destinations:['Newark bonded warehouse','Oakland bonded warehouse'], docRules:['Certificate of origin','Label approval','Export declaration'],
+     requirements:[['Shipping','Reefer container for all sea freight',5],['Compliance','Importer of record: Harbor Wine Distributors LLC',2],['Documentation','Packing list by pallet with lot numbers',6]],
+     priceList:{'AR-RES18':15.8,'CB-BDX19':14.2,'KS-RIE23':12.9}, contacts:'Purchasing: Dana Ortiz\nLogistics: Sam Greene'},
+    {key:'gmh', name:'Grand Meridian Hotels', type:'Hospitality', region:'EMEA', owner:'Tom Becker', currency:'EUR', leadDays:14, transitDays:3,
+     destinations:['London Mayfair','Dubai Marina','Paris Opéra'], docRules:['Export declaration','Certificate of origin'],
+     requirements:[['Label','Hotel private-label neck tag on house wines',6],['Invoice','Separate invoice per property',10],['Shipping','Delivery slots Tue–Thu, 07:00–11:00',5]],
+     priceList:{'DL-BOU21':22,'CB-BDX19':15,'KS-RIE23':13.5,'DL-MEU22':56}, contacts:'Group sommelier: Élise Martin\nLondon receiving: loading bay, Mayfair'},
+    {key:'nvi', name:'Nordvin Import AB', type:'Distributor', region:'EMEA', owner:'Olivia Park', currency:'EUR', leadDays:21, transitDays:5,
+     destinations:['Stockholm Arlanda warehouse'], docRules:['Excise document (e-AD)','Analysis certificate'],
+     requirements:[['Compliance','Tender spec: exact vintage, no substitutions',2],['Documentation','e-AD issued before dispatch',6]],
+     priceList:{'KS-RIE23':12.5,'AR-RES18':15,'DL-BOU21':21}, contacts:'Buyer: Anders Lund\nWarehouse: Arlanda bonded store'}
+  ];
+  const accounts = {}; const keyToId = {};
+  A.forEach(a=>{ const id='ex-'+a.key; keyToId[a.key]=id; const {key, ...rest} = a; accounts[id] = Object.assign(rest, {id, example:true, requirements:a.requirements.map(([cat,text,stage])=>({id:uid(),cat,text,stage}))}); });
+  const P = {'DL-MEU22':'Meursault 1er Cru 2022','DL-BOU21':'Bourgogne Chardonnay 2021','KS-RIE23':'Riesling Kabinett 2023','HC-SHZ21':'Barossa Shiraz 2021','AR-RES18':'Rioja Reserva 2018','CB-BDX19':'Bordeaux Supérieur 2019'};
+  const SUP = {DL:'Domaine Laurent',KS:'Weingut Kessler',HC:'Hillcrest Estate',AR:'Bodega Alta Rioja',CB:'Château Belmont'};
+  const FWD = ['GlobalFreight Air','Meridian Logistics','Northstar Forwarding','BlueWave Ocean'];
+  let no = 24100;
+  const specs = [
+    // key, stage, created ago, current stage started ago, requested (days from today), mode, lines [sku, qty, priceOverride]
+    ['aur',6,18,3,4,'Air',[['DL-MEU22',480],['DL-BOU21',960]], {shipBy:1, docsMissing:['Certificate of origin','Label approval']}],
+    ['aur',3,5,3,26,'Air',[['KS-RIE23',1200]], {overdue:true}],
+    ['aur',8,24,2,3,'Air',[['HC-SHZ21',720],['DL-BOU21',480]], {eta:2}],
+    ['pca',8,30,3,7,'Air',[['HC-SHZ21',960],['AR-RES18',600]], {eta:9}],
+    ['pca',2,1,0,34,'Air',[['CB-BDX19',1200,17.4],['AR-RES18',600]]],
+    ['hwd',4,12,4,40,'Sea',[['AR-RES18',3600],['CB-BDX19',2400]], {exc:{code:'QTY_SHORT',title:'Bodega Alta Rioja confirms 3,300 of 3,600 bottles of Rioja Reserva 2018',severity:'High',ago:1}}],
+    ['hwd',5,20,5,30,'Sea',[['KS-RIE23',4800]]],
+    ['hwd',6,32,4,19,'Sea',[['CB-BDX19',3000]], {docsMissing:['Export declaration'], overdue:true}],
+    ['gmh',9,16,6,-4,'Road',[['DL-BOU21',600],['CB-BDX19',360]], {delivered:5, noPod:true}],
+    ['gmh',10,22,4,-6,'Road',[['DL-MEU22',120],['KS-RIE23',360]], {delivered:4}],
+    ['gmh',11,35,6,-16,'Road',[['CB-BDX19',720]], {delivered:14}],
+    ['nvi',7,15,1,6,'Road',[['KS-RIE23',2400],['AR-RES18',1200]]],
+    ['nvi',1,0,0,30,'Road',[['DL-BOU21',1440,21]]],
+    ['aur',12,48,2,-20,'Air',[['DL-MEU22',360]], {delivered:21, excResolved:true}],
+    ['pca',5,9,2,21,'Air',[['CB-BDX19',900]]],
+    ['aur',closedSpec(150)], ['pca',closedSpec(128)], ['hwd',closedSpec(110)], ['gmh',closedSpec(92)], ['nvi',closedSpec(75)], ['aur',closedSpec(58)], ['gmh',closedSpec(44)]
+  ];
+  function closedSpec(ago){ return {closed:true, ago}; }
+  const closedLines = {aur:[['DL-MEU22',480],['HC-SHZ21',720]], pca:[['HC-SHZ21',1200]], hwd:[['AR-RES18',4800],['CB-BDX19',2400]], gmh:[['DL-BOU21',720],['CB-BDX19',480]], nvi:[['KS-RIE23',3600]]};
+  const orders = {};
+  specs.forEach((sp,idx)=>{
+    const key = sp[0]; const a = accounts[keyToId[key]];
+    let stage, createdAgo, curAgo, reqIn, mode, lines, extra;
+    if (sp[1] && sp[1].closed) { stage=12; createdAgo=sp[1].ago; curAgo=createdAgo-40; reqIn=-(createdAgo-24); mode=key==='hwd'?'Sea':key==='gmh'||key==='nvi'?'Road':'Air'; lines=closedLines[key]; extra={closed:true, delivered:createdAgo-22}; }
+    else { [, stage, createdAgo, curAgo, reqIn, mode, lines, extra] = sp; extra = extra||{}; }
+    const created = addDays(t, -createdAgo);
+    const ls = lines.map(([sku,qty,pr])=>({sku, name:P[sku], qty, price: pr || a.priceList[sku] || 20, listPrice: a.priceList[sku]||null}));
+    no += 1;
+    const requested = addDays(t, reqIn);
+    const shipBy = extra.shipBy!=null ? addDays(t, extra.shipBy) : addDays(requested, -a.transitDays);
+    const o = buildOrder({no:'SO-'+no, po:String(880000+idx*137+ (key.charCodeAt(0)*7)), poDate:created, dest:a.destinations[idx % a.destinations.length], supplier:SUP[lines[0][0].slice(0,2)], owner:a.owner, requested, shipBy, mode, incoterm:mode==='Sea'?'FOB':'FCA', lines:ls, by:a.owner, example:true}, a, created+'T09:00:00.000Z');
+    // walk the order through its stages with back-dated completions
+    const curStart = addDays(t, -curAgo);
+    const span = Math.max(0, diffDays(created, curStart));
+    for (let s=1; s<stage; s++){
+      const end = addDays(created, Math.round(span*s/(stage-1||1)));
+      o.tasks.forEach(x=>{ if(x.stage===s && x.status!=='done'){ x.status='done'; x.doneBy=x.owner; x.doneAt=end; } });
+      o.exceptions.forEach(x=>{ if(OPEN_EXC.includes(x.status)){ x.status='Resolved'; x.resolution='Customer agreed change'; x.rootCause='Customer change'; x.resolvedAt=end+'T10:00:00.000Z'; } });
+      o.stageDates[s].done = end; o.stage = s+1; o.stageDates[s+1] = {start:end};
+      o.tasks = o.tasks.concat(genTasks(o, s+1, end));
+      o.activity.unshift({at:end+'T15:00:00.000Z', who:o.owner, text:`Stage ${s} ${stageDef(s).name} complete: ${stageDef(s).out}`});
+    }
+    if (stage>1) { o.stageDates[stage] = {start:curStart}; o.tasks.forEach(x=>{ if(x.stage===stage){ const off = stageDef(stage).tasks.find(tt=>tt[0]===x.title); if(off){ x.due = addDays(curStart, off[1]); if (x.due < t && !extra.overdue) x.due = addDays(t, off[1]+1); } } }); }
+    // partial progress in current stage
+    const cur = o.tasks.filter(x=>x.stage===stage);
+    cur.slice(0, Math.floor(cur.length/2)).forEach(x=>{ x.status='done'; x.doneBy=x.owner; x.doneAt=curStart; });
+    if (stage===3) cur.forEach(x=>{ if(/acceptance/.test(x.title)){ x.status='open'; delete x.doneBy; delete x.doneAt; } });
+    // documents
+    const setDoc = (d,st,at) => { o.docs[d] = {status:st, ref: st==='Missing'?'':'On file', at, by:o.owner}; };
+    if (stage>=4) setDoc('Supplier PO','Received', o.stageDates[4]?.start||created);
+    if (stage>=6) { o.reqDocs.forEach(d=>{ if(!POST_SHIP_DOCS.includes(d) && !(extra.docsMissing||[]).includes(d)) setDoc(d, stage>=7?'Approved':'Received', curStart); });
+      if (stage===6) { const pending = o.reqDocs.filter(d=>!POST_SHIP_DOCS.includes(d) && !(extra.docsMissing||[]).includes(d)); if (pending.length>2) setDoc(pending[pending.length-1],'Requested',curStart); } }
+    // shipment
+    const sh = o.shipment;
+    if (stage>=6 || (stage===5 && idx%2)) { sh.forwarder = FWD[(idx+(mode==='Sea'?3:0))%FWD.length]; if(mode==='Sea') sh.forwarder='BlueWave Ocean'; sh.status='Booked'; sh.collection = addDays(shipBy,-1); sh.etd = shipBy; sh.eta = extra.eta!=null ? addDays(t, extra.eta) : addDays(shipBy, a.transitDays-1); sh.ref = mode==='Sea' ? 'MSKU'+(4810000+idx*311) : mode==='Air' ? '057-'+(12345670+idx*97) : 'CMR-'+(5500+idx); }
+    if (stage>=8) { sh.status = stage===8 ? (extra.eta!=null&&extra.eta>2?'In transit':'Departed') : 'Arrived'; sh.collection = addDays(t, -curAgo-1); sh.etd = addDays(t,-curAgo); }
+    if (extra.delivered!=null) { sh.status='Delivered'; sh.delivered=addDays(t,-extra.delivered); sh.eta = sh.eta && sh.eta>sh.delivered ? sh.delivered : (sh.eta||sh.delivered); sh.collection = addDays(sh.delivered,-(a.transitDays+1)); sh.etd = addDays(sh.delivered,-a.transitDays); if(!extra.noPod) setDoc('Proof of delivery (POD)','Received', addDays(sh.delivered,1)); }
+    if (stage>=9) { o.reqDocs.forEach(d=>{ if(!POST_SHIP_DOCS.includes(d)) setDoc(d,'Approved', sh.etd||curStart); }); }
+    o.finance = {supplierPo: stage>=4 ? 'SP-'+(7700+idx) : ''};
+    if (stage>=11) { o.finance.invoiceNo = 'INV-'+(26400+idx); o.finance.invoiceDate = addDays(sh.delivered||curStart, 2); o.finance.invoiceAmount = o.value; setDoc('Customer invoice','Received',o.finance.invoiceDate); }
+    if (stage>=12) { o.finance.supplierInvoiceNo = 'SI-'+(90210+idx); o.finance.supplierAmount = Math.round(o.value*0.72); setDoc('Supplier invoice','Received', addDays(o.finance.invoiceDate,3)); }
+    o.cost = Math.round(o.value*0.72);
+    if (extra.exc) { const e = extra.exc; o.exceptions.push({id:uid(), code:e.code, title:e.title, severity:e.severity, owner:o.owner, due:addDays(t,1), status:'Acknowledged', raisedAt:addDays(t,-e.ago)+'T08:30:00.000Z', raisedBy:o.owner}); o.activity.unshift({at:addDays(t,-e.ago)+'T08:30:00.000Z', who:o.owner, text:`Exception raised: ${EXC_TYPES[e.code][0]}: ${e.title}`}); }
+    if (extra.excResolved) o.exceptions.push({id:uid(), code:'DOC_ERROR', title:'Commercial invoice missing airline PO number', severity:'Medium', owner:o.owner, due:addDays(t,-30), status:'Resolved', raisedAt:addDays(t,-31)+'T08:00:00.000Z', raisedBy:o.owner, resolution:'Document reissued', rootCause:'Internal error', resolvedAt:addDays(t,-30)+'T12:00:00.000Z'});
+    if (extra.closed) { o.tasks.forEach(x=>{ if(x.status!=='done'){ x.status='done'; x.doneBy=x.owner; x.doneAt=curStart; } }); o.stageDates[12].done = curStart; o.status='Closed'; o.closedAt = curStart; o.activity.unshift({at:curStart+'T16:00:00.000Z', who:o.owner, text:'Stage 12 Order Closure complete: Order closed'}); }
+    o.lastActivity = extra.closed ? curStart : addDays(t, -Math.min(curAgo,2));
+    o.updated = now;
+    orders['ex-o'+(no)] = Object.assign(o, {id:'ex-o'+no});
+  });
+  return {team, accounts, orders};
+}
+
+// ---------- actions ----------
+const ACT = {
+  nav(el){ UI.view = el.dataset.v; UI.drawer=null; try{ localStorage.setItem('gwoh-view', UI.view); }catch(e){} window.scrollTo(0,0); render(); },
+  filter(el){ UI.filters[el.dataset.k] = el.dataset.v; render(); },
+  'order-view'(el){ UI.filters.orders = Object.assign({}, UI.filters.orders, {view:el.dataset.v}); render(); },
+  'goto-orders'(el){ UI.filters.orders = {view:el.dataset.f||'open'}; UI.view='orders'; UI.drawer=null; window.scrollTo(0,0); render(); },
+  'set-me'(el){ UI.me = el.dataset.n; try{ localStorage.setItem('gwoh-me', UI.me); }catch(e){} render(); },
+  'open-order'(el,e){ e.stopPropagation(); UI.drawer = {type:'order', id:el.dataset.o}; UI.confirm=null; $('#qres').hidden=true; render(); },
+  'open-account'(el){ UI.drawer = {type:'account', id:el.dataset.a}; $('#qres').hidden=true; render(); },
+  'close-drawer'(){ UI.drawer=null; UI.confirm=null; render(); },
+  'close-modal'(){ UI.confirm=null; closeModal(); },
+  'modal-bg'(el,e){ if (e.target===el) { UI.confirm=null; closeModal(); } },
+  'ask-confirm'(el){ UI.confirm = el.dataset.k; render(); },
+  'ask-confirm-modal'(el){ UI.confirm = el.dataset.k; modalSettings(); },
+  settings(){ UI.confirm=null; modalSettings(); },
+  'new-order'(el){ modalNewOrder(el.dataset.a); },
+  'new-account'(){ modalAccount(null); },
+  'edit-account'(el){ UI.confirm=null; modalAccount(S.accounts[el.dataset.a]); },
+  'ask-del-account'(el){ UI.confirm='delacct'; modalAccount(S.accounts[el.dataset.a]); },
+  'delete-account'(el){ const id=el.dataset.a; const n=ordersArr().filter(o=>o.accountId===id).length; if(n){ toast(`This account has ${n} orders. Close or remove them first.`); return; } write('accounts', id, 'delete'); UI.drawer=null; UI.confirm=null; closeModal(); toast('Account deleted'); },
+  'create-order'(){
+    const a = S.accounts[$('#no-acct').value]; const po = $('#no-po').value.trim(); const req = $('#no-req').value;
+    if (!po) { toast('Enter the customer PO number.'); $('#no-po').focus(); return; }
+    if (!req) { toast('Enter the requested delivery date.'); return; }
+    const dup = ordersArr().find(o=>o.accountId===a.id && o.customerPo===po && o.status!=='Cancelled');
+    if (dup) { toast(`PO ${po} already exists as ${dup.no}.`); return; }
+    const lines = parseLines($('#no-lines').value, a);
+    if (!lines.length) { toast('Add at least one order line: SKU, description, bottles, unit price.'); $('#no-lines').focus(); return; }
+    const o = buildOrder({no:nextOrderNo(), po, poDate:$('#no-podate').value, dest:$('#no-dest').value, supplier:$('#no-sup').value.trim(), owner:$('#no-owner').value, requested:req, shipBy:$('#no-shipby').value, mode:$('#no-mode').value, incoterm:$('#no-inco').value, lines, by:UI.me||'Someone'}, a, new Date().toISOString());
+    const id = uid(); write('orders', id, 'set', o); closeModal(); UI.drawer = {type:'order', id}; UI.view='orders'; UI.filters.orders={view:'open'};
+    toast(`${o.no} created with ${o.tasks.filter(t=>t.status!=='done').length} open tasks${o.exceptions.length?` and ${o.exceptions.length} exception${o.exceptions.length>1?'s':''}`:''}`);
+  },
+  'save-account'(el){
+    const name = $('#ac-name').value.trim(); if (!name) { toast('Enter the account name.'); return; }
+    const reqs = $('#ac-req').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const p=l.split('|').map(x=>x.trim()); const cat = REQ_CATS.find(c=>c.toLowerCase()===(p[0]||'').toLowerCase()) || 'Documentation'; return {id:uid(), cat, text:p.length>1?p[1]:p[0], stage:parseInt(p[2],10)||2}; });
+    const pl = {}; $('#ac-pl').value.split('\n').forEach(l=>{ const p=l.split(/\||\t|,/).map(x=>x.trim()); if(p[0] && parseFloat(p[1])) pl[p[0]] = parseFloat(p[1]); });
+    const docRules = [...document.querySelectorAll('[data-doc]')].filter(c=>c.checked).map(c=>c.dataset.doc);
+    const data = { name, type:$('#ac-type').value, region:$('#ac-region').value, owner:$('#ac-owner').value, currency:$('#ac-cur').value, leadDays:+$('#ac-lead').value||0, transitDays:+$('#ac-transit').value||0,
+      destinations:$('#ac-dest').value.split('\n').map(x=>x.trim()).filter(Boolean), requirements:reqs, docRules, priceList:pl, contacts:$('#ac-contacts').value };
+    const id = el.dataset.a;
+    if (id) write('accounts', id, 'update', data); else { const nid = uid(); write('accounts', nid, 'set', data); UI.drawer={type:'account', id:nid}; UI.view='accounts'; }
+    UI.confirm=null; closeModal(); toast(id?'Account saved. New orders will use the updated rules.':'Account created');
+  },
+  'task-toggle'(el){ const {o,t} = el.dataset; mutateOrder(o, ord=>{ const tk=ord.tasks.find(x=>x.id===t); if(!tk) return; if(tk.status==='done'){ tk.status='open'; delete tk.doneBy; delete tk.doneAt; logTo(ord,`Reopened task: ${tk.title}`); } else { tk.status='done'; tk.doneBy=UI.me||'Someone'; tk.doneAt=today(); logTo(ord,`Completed: ${tk.title}`); } }); },
+  'task-done'(el,e){ e.stopPropagation(); const {o,t} = el.dataset; mutateOrder(o, ord=>{ const tk=ord.tasks.find(x=>x.id===t); if(!tk||tk.status==='done') return; tk.status='done'; tk.doneBy=UI.me||'Someone'; tk.doneAt=today(); logTo(ord,`Completed: ${tk.title}`); }); toast('Task completed'); },
+  'task-snooze'(el,e){ e.stopPropagation(); const {o,t} = el.dataset; mutateOrder(o, ord=>{ const tk=ord.tasks.find(x=>x.id===t); if(!tk) return; const base = tk.due<today()?today():tk.due; tk.due = addDays(base,1); logTo(ord,`Moved “${tk.title}” to ${fmtDate(tk.due)}`); }); toast('Due date moved by one day'); },
+  'stage-complete'(el){ const id=el.dataset.o; const o=S.orders[id]; if (gateBlockers(o).length) return; const n=o.stage; mutateOrder(id, ord=>advanceStage(ord)); toast(n===12?'Order closed':`Stage ${n} complete. Stage ${n+1} tasks created.`); },
+  'stage-override'(el){ modalOverride(el.dataset.o); },
+  'save-override'(el){ const r = $('#ov-reason').value.trim(); if(!r){ toast('Enter a reason for the override.'); return; } const id=el.dataset.o; mutateOrder(id, ord=>{ ord.tasks.forEach(t=>{ if(t.stage===ord.stage && t.status!=='done'){ t.status='done'; t.doneBy=(UI.me||'Manager')+' (override)'; t.doneAt=today(); } }); advanceStage(ord, 'manager override: '+r); }); closeModal(); toast('Stage completed by override'); },
+  'order-hold'(el){ mutateOrder(el.dataset.o, o=>{ o.status='On hold'; logTo(o,'Order put on hold'); }); },
+  'order-resume'(el){ mutateOrder(el.dataset.o, o=>{ o.status='Open'; logTo(o,'Order resumed'); }); },
+  'order-cancel'(el){ mutateOrder(el.dataset.o, o=>{ o.status='Cancelled'; o.closedAt=today(); logTo(o,'Order cancelled'); }); UI.confirm=null; toast('Order cancelled'); },
+  'doc-add'(el){ const id=el.dataset.o; const sel=$('#addDoc-'+id); if(!sel.value) return; const d=sel.value; mutateOrder(id, o=>{ o.reqDocs=(o.reqDocs||[]).concat(d); logTo(o,`Added required document: ${d}`); }); },
+  'raise-exc'(el){ modalRaise(el.dataset.o); },
+  'save-raise'(){ const id=$('#rx-order').value; const code=$('#rx-type').value; const d=EXC_TYPES[code]; const note=$('#rx-note').value.trim();
+    if (!note) { toast('Describe what happened so the owner can act on it.'); $('#rx-note').focus(); return; }
+    mutateOrder(id, o=>{ const x={id:uid(), code, title:note, severity:$('#rx-sev').value||d[1], owner:$('#rx-owner').value||o.owner, due:$('#rx-due').value||addDays(today(),d[2]), status:'Open', raisedAt:new Date().toISOString(), raisedBy:UI.me||'Someone'}; o.exceptions=(o.exceptions||[]).concat(x); logTo(o,`Exception raised (${x.severity}): ${d[0]}: ${note}. Owner ${x.owner}`); });
+    closeModal(); toast('Exception raised'); },
+  'exc-ack'(el,e){ e.stopPropagation(); const {o,x} = el.dataset; const vx = allExc(S.orders[o]).find(v=>v.id===x); mutateOrder(o, ord=>{ const s=persistExc(ord, vx); s.status='Acknowledged'; s.ackAt=new Date().toISOString(); logTo(ord,`Acknowledged exception: ${s.title}`); }); },
+  'exc-escalate'(el,e){ e.stopPropagation(); const {o,x} = el.dataset; const vx = allExc(S.orders[o]).find(v=>v.id===x); mutateOrder(o, ord=>{ const s=persistExc(ord, vx); s.level=Math.min(3,Math.max(escLevel(vx),s.level||0)+1); s.status='Escalated'; const mgr=(S.team.find(m=>m.role==='Manager')||{}).name; logTo(ord,`Escalated to level ${s.level}${mgr?' ('+mgr+' notified)':''}: ${s.title}`); }); toast('Exception escalated'); },
+  'exc-resolve'(el,e){ e.stopPropagation(); modalResolve(el.dataset.o, el.dataset.x); },
+  'save-resolve'(el){ const {o,x} = el.dataset; const vx = allExc(S.orders[o]).find(v=>v.id===x); const res=$('#rs-res').value, root=$('#rs-root').value, note=$('#rs-note').value.trim(), lesson=$('#rs-lesson').checked;
+    mutateOrder(o, ord=>{ const s=persistExc(ord, vx); s.status='Resolved'; s.resolution=res; s.rootCause=root; s.note=note; s.resolvedAt=new Date().toISOString(); s.resolvedBy=UI.me||'Someone'; logTo(ord,`Resolved: ${s.title} (${res}; root cause ${root})${note?'. '+note:''}`); });
+    if (lesson) { const ord=S.orders[o]; const a=S.accounts[ord.accountId]; if(a) write('accounts', a.id, 'update', {lessons:(a.lessons||[]).concat({at:today(), text:`${ord.no}: ${EXC_TYPES[vx.code]?.[0]||vx.code}. ${note||vx.title} (root cause: ${root})`})}); }
+    closeModal(); toast('Exception resolved'); },
+  'exc-reopen'(el,e){ e.stopPropagation(); const {o,x}=el.dataset; mutateOrder(o, ord=>{ const s=(ord.exceptions||[]).find(v=>v.id===x); if(!s) return; s.status='Open'; s.severity=SEVS[Math.max(0,SEVS.indexOf(s.severity)-1)]; s.raisedAt=new Date().toISOString(); logTo(ord,`Reopened exception (severity raised to ${s.severity}): ${s.title}`); }); },
+  'team-add'(){ const n=$('#tm-new').value.trim(); if(!n) return; if(teamNames().includes(n)){ toast(`${n} is already on the team.`); return; } const members=S.team.concat({name:n, role:$('#tm-role').value}); write('config','team','set',{members}); if(!UI.me){ UI.me=n; try{localStorage.setItem('gwoh-me',n);}catch(e){} } S.team=members; modalSettings(); },
+  'team-remove'(el){ const members=S.team.filter((_,i)=>i!==+el.dataset.i); write('config','team','set',{members}); S.team=members; modalSettings(); },
+  async 'load-examples'(){
+    if (Object.values(S.accounts).some(a=>a.example)) { toast('Example data is already loaded.'); return; }
+    const ex = makeExamples(); toast('Loading example data…');
+    const members = S.team.filter(m=>!ex.team.some(e=>e.name===m.name)).concat(ex.team);
+    await write('config','team','set',{members});
+    for (const [id,a] of Object.entries(ex.accounts)) await write('accounts', id, 'set', a);
+    await Promise.all(Object.entries(ex.orders).map(([id,o])=>write('orders', id, 'set', o)));
+    if (!UI.me) { UI.me='Olivia Park'; try{localStorage.setItem('gwoh-me',UI.me);}catch(e){} }
+    closeModal(); UI.view='work'; render(); toast('Example data loaded. You are viewing as Olivia Park.');
+  },
+  async 'remove-examples'(){
+    const os = ordersArr().filter(o=>o.example).map(o=>o.id), as = Object.values(S.accounts).filter(a=>a.example).map(a=>a.id);
+    UI.drawer=null; UI.confirm=null;
+    await Promise.all(os.map(id=>write('orders',id,'delete')));
+    for (const id of as) await write('accounts',id,'delete');
+    const members = S.team.filter(m=>!m.example); await write('config','team','set',{members}); S.team = members;
+    if (UI.me && !members.some(m=>m.name===UI.me)) { UI.me=''; try{localStorage.removeItem('gwoh-me');}catch(e){} }
+    closeModal(); toast('Example data removed');
+  },
+  'copy-csv'(){
+    const ids = UI.lastOrderList || []; const rows = [['Order','Account','Customer PO','Stage','Status','Health','Owner','Supplier','Destination','Ship by','Requested delivery','ETA','Value','Currency','Open exceptions']];
+    ids.forEach(id=>{ const o=S.orders[id]; if(!o) return; rows.push([o.no, acctOf(o).name, o.customerPo, o.stage+' '+stageDef(o.stage).name, o.status, health(o), o.owner, o.supplier, o.destination, o.shipBy, o.requested, (o.shipment||{}).eta||'', Math.round(o.value), o.currency, allExc(o).filter(x=>OPEN_EXC.includes(x.status)).length]); });
+    const csv = rows.map(r=>r.map(v=>{ v=String(v??''); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(',')).join('\n');
+    const done = () => toast(`Copied ${rows.length-1} orders. Paste into Excel.`);
+    try { navigator.clipboard.writeText(csv).then(done, ()=>fallbackCopy(csv)); } catch(e){ fallbackCopy(csv); }
+  }
+};
+function fallbackCopy(txt){
+  openModal('Copy orders as CSV', `<p style="margin:0" class="muted">Select all and copy, then paste into Excel.</p><textarea class="f mono" id="csvOut" rows="12">${esc(txt)}</textarea>`, `<button class="btn pri" data-act="close-modal">Done</button>`);
+  const ta = $('#csvOut'); ta.focus(); ta.select();
+}
+const CHG = {
+  'of'(el){ const {o,f} = el.dataset; let v = el.value; if (el.type==='number') v = v===''?null:parseFloat(v);
+    mutateOrder(o, ord=>{ const old = getPath(ord,f); if (old===v) return; setPath(ord,f,v); const label = el.closest('label')?.firstChild?.textContent?.trim() || el.getAttribute('aria-label') || f; if (f!=='stakeholders') logTo(ord, `${label} set to ${v===''||v==null?'blank':(el.type==='date'?fmtDate(v):v)}`); else logTo(ord,'Updated stakeholders'); if (f==='shipment.status' && v==='Delivered' && !ord.shipment.delivered) ord.shipment.delivered = today(); }); },
+  'order-owner'(el){ mutateOrder(el.dataset.o, o=>{ const old=o.owner; o.owner=el.value; (o.tasks||[]).forEach(t=>{ if(t.status!=='done' && t.owner===old) t.owner=el.value; }); (o.exceptions||[]).forEach(x=>{ if(OPEN_EXC.includes(x.status) && x.owner===old) x.owner=el.value; }); logTo(o,`Owner changed from ${old} to ${el.value}; open tasks moved`); }); },
+  'task-owner'(el){ const {o,t}=el.dataset; mutateOrder(o, ord=>{ const tk=ord.tasks.find(x=>x.id===t); if(tk){ tk.owner=el.value; logTo(ord,`Assigned “${tk.title}” to ${el.value}`); } }); },
+  'task-due'(el){ const {o,t}=el.dataset; if(!el.value) return; mutateOrder(o, ord=>{ const tk=ord.tasks.find(x=>x.id===t); if(tk){ tk.due=el.value; logTo(ord,`Due date of “${tk.title}” set to ${fmtDate(el.value)}`); } }); },
+  'exc-owner'(el){ const {o,x}=el.dataset; const vx = allExc(S.orders[o]).find(v=>v.id===x); mutateOrder(o, ord=>{ const s=persistExc(ord,vx); s.owner=el.value; logTo(ord,`Exception reassigned to ${el.value}: ${s.title}`); }); },
+  'doc-status'(el){ const {o,d}=el.dataset; mutateOrder(o, ord=>{ ord.docs=ord.docs||{}; ord.docs[d]=Object.assign({}, ord.docs[d], {status:el.value, at:today(), by:UI.me||'Someone'}); logTo(ord,`${d}: ${el.value}`);
+      if (el.value==='Rejected') { ord.exceptions=(ord.exceptions||[]).concat({id:uid(), code:'DOC_ERROR', title:`${d} rejected on review`, severity:'Medium', owner:ord.owner, due:addDays(today(),1), status:'Open', raisedAt:new Date().toISOString(), raisedBy:UI.me||'Someone'}); logTo(ord,`Exception raised: Document error: ${d} rejected`, 'System'); } }); },
+  'doc-ref'(el){ const {o,d}=el.dataset; mutateOrder(o, ord=>{ ord.docs=ord.docs||{}; const cur=ord.docs[d]||{status:'Missing'}; if((cur.ref||'')===el.value) return; ord.docs[d]=Object.assign({}, cur, {ref:el.value, at:today(), by:UI.me||'Someone', status: cur.status==='Missing'&&el.value?'Received':cur.status}); logTo(ord,`${d} reference updated${cur.status==='Missing'&&el.value?' and marked Received':''}`); }); },
+  'team-role'(el){ const members = S.team.map((m,i)=>i===+el.dataset.i?Object.assign({},m,{role:el.value}):m); S.team=members; write('config','team','set',{members}); },
+  'dash-f'(el){ UI.filters.dash = Object.assign({}, UI.filters.dash, {[el.dataset.k]:el.value}); render(); },
+  'order-f'(el){ UI.filters.orders = Object.assign({view:'open'}, UI.filters.orders, {[el.dataset.k]:el.value}); render(); },
+  'no-acct'(el){ const a=S.accounts[el.value]; $('#no-dest').innerHTML=(a.destinations||['—']).map(d=>`<option>${esc(d)}</option>`).join(''); $('#no-owner').innerHTML=ownerOptions(a.owner); $('#no-req').value = addDays(today(), (a.leadDays||21)+7); }
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.tagName==='TR' && e.target.closest('button,select,input,a')) return;
+  const fn = ACT[el.dataset.act]; if (fn) fn(el, e);
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-chg]'); if (!el) return;
+  const fn = CHG[el.dataset.chg]; if (fn) { fn(el, e); if (el.tagName==='SELECT') schedule(true); }
+});
+document.addEventListener('submit', e => {
+  const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  const id = f.dataset.o;
+  if (f.dataset.form==='comment') { const inp=$('#comment-'+id); const v=inp.value.trim(); if(!v) return; inp.value=''; mutateOrder(id, o=>{ logTo(o, v); o.activity[0].kind='comment'; }); inp.blur(); }
+  if (f.dataset.form==='add-task') { const inp=$('#addTask-'+id); const v=inp.value.trim(); if(!v) return; inp.value=''; mutateOrder(id, o=>{ o.tasks=o.tasks.concat({id:uid(), stage:o.stage, title:v, owner:UI.me||o.owner, due:addDays(today(),1), status:'open', manual:true}); logTo(o,`Added task: ${v}`); }); inp.blur(); }
+});
+$('#meSel').addEventListener('change', e => { UI.me = e.target.value; try{ localStorage.setItem('gwoh-me', UI.me); }catch(err){} render(); });
+
+// search
+const q = $('#q'), qres = $('#qres'); let qSel = 0, qItems = [];
+function runSearch(){
+  const s = q.value.trim().toLowerCase(); if (!s) { qres.hidden = true; return; }
+  const hits = [];
+  ordersArr().forEach(o=>{ const hay = [o.no,o.customerPo,acctOf(o).name,o.supplier,o.destination,(o.shipment||{}).ref,(o.finance||{}).invoiceNo,(o.lines||[]).map(l=>l.sku+' '+l.name).join(' ')].join(' ').toLowerCase(); if (hay.includes(s)) hits.push({t:'o', o}); });
+  Object.values(S.accounts).forEach(a=>{ if ((a.name+' '+(a.destinations||[]).join(' ')).toLowerCase().includes(s)) hits.push({t:'a', a}); });
+  qItems = hits.slice(0,10); qSel = 0;
+  qres.innerHTML = qItems.length ? qItems.map((h,i)=> h.t==='o'
+    ? `<button class="${i===qSel?'hi':''}" data-act="open-order" data-o="${h.o.id}"><span class="dot d-${health(h.o)}"></span><span class="mono">${esc(h.o.no)}</span><span>${esc(acctOf(h.o).name)}</span><span class="muted" style="margin-left:auto;font-size:12px">PO ${esc(h.o.customerPo)} · ${h.o.status==='Open'?'stage '+h.o.stage:esc(h.o.status)}</span></button>`
+    : `<button class="${i===qSel?'hi':''}" data-act="open-account" data-a="${h.a.id}">${icon('acct',14)}<span>${esc(h.a.name)}</span><span class="muted" style="margin-left:auto;font-size:12px">Account</span></button>`).join('')
+    : `<div class="muted" style="padding:10px 12px">No orders or accounts match “${esc(q.value)}”.</div>`;
+  qres.hidden = false;
+}
+q.addEventListener('input', runSearch);
+q.addEventListener('focus', runSearch);
+q.addEventListener('keydown', e => {
+  if (e.key==='Escape') { q.value=''; qres.hidden=true; q.blur(); }
+  if (e.key==='ArrowDown' || e.key==='ArrowUp') { e.preventDefault(); if(!qItems.length) return; qSel = (qSel + (e.key==='ArrowDown'?1:-1) + qItems.length) % qItems.length; [...qres.querySelectorAll('button')].forEach((b,i)=>b.classList.toggle('hi', i===qSel)); }
+  if (e.key==='Enter' && qItems[qSel]) { const h=qItems[qSel]; UI.drawer = h.t==='o'?{type:'order',id:h.o.id}:{type:'account',id:h.a.id}; qres.hidden=true; q.blur(); render(); }
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search')) qres.hidden = true; });
+document.addEventListener('keydown', e => {
+  if (e.key==='/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) { e.preventDefault(); q.focus(); }
+  if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k') { e.preventDefault(); q.focus(); }
+  if (e.key==='Escape' && !q.matches(':focus')) { if ($('#modalRoot').innerHTML) closeModal(); else if (UI.drawer) { UI.drawer=null; render(); } }
+});
+// refresh time-based rules (overdue, escalations) every 5 minutes without writing anything
+setInterval(()=>schedule(), 5*60*1000);
+
+render();
+initStore();
+</script>
