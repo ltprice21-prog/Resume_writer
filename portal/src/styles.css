@@ -713,15 +713,69 @@ svg.chart .col:hover { filter: brightness(1.15); }
 svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; font-family: var(--sans); }
 .chart-empty { font-size: 12.5px; color: var(--faint); text-align: center; padding: 26px 0; margin: 0; }
 
+/* ---------- workflow trail ----------
+ *
+ * One mark per stage, grouped by phase. State is carried by shape as well as
+ * fill: done is filled with its phase weave, current is filled and ringed,
+ * unrecorded is hollow with a cross-bar, pending is a hollow outline. A gate
+ * stage is drawn as a diamond, because it can only ever be set by a person.
+ */
+
+.trail { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.trail-phase { display: inline-flex; gap: 2px; }
+.trail-mark {
+  position: relative;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  background-clip: padding-box;
+}
+.trail-mark.trail-gate { transform: rotate(45deg) scale(.82); }
+.trail-done { border-color: var(--fill-ink, var(--border-strong)); }
+.trail-current { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+.trail-pending { background: transparent; }
+.trail-unrecorded { background: transparent; border-style: dashed; }
+.trail-unrecorded::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 4px;
+  height: 1px;
+  background: var(--muted);
+}
+
 /* ---------- kanban ---------- */
 
 .kanban {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(212px, 1fr);
-  gap: 10px;
+  display: flex;
+  gap: 14px;
   overflow-x: auto;
   padding-bottom: 6px;
+  align-items: flex-start;
+}
+
+/* Twelve stages sit in four phase groups, so the board reads as the workflow
+ * does: intake, supply, shipment, close. */
+.kan-phase { display: flex; flex-direction: column; gap: 8px; flex: none; }
+
+.kan-phase-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 4px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.kan-phase-title { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+
+.kan-phase-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 184px;
+  gap: 8px;
   align-items: start;
 }
 
@@ -733,6 +787,9 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
   flex-direction: column;
   min-height: 120px;
 }
+
+.kan-col-gate { border-style: dashed; border-color: var(--border-strong); }
+.kan-gate-note { font-size: 10.5px; color: var(--muted); padding: 5px 11px 0; font-style: italic; }
 
 .kan-col.drop-target { border-color: var(--accent); background: var(--accent-soft); }
 
@@ -815,6 +872,8 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 .kan-po { font-weight: 700; font-family: var(--mono); font-size: 12px; }
 .kan-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
 .kan-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.kan-next { color: var(--faint); font-size: 10.5px; margin-top: 3px; }
+.kan-card-behind { outline: 1px dashed var(--warning); outline-offset: -1px; }
 .kan-age { font-size: 10.5px; color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
 .kan-empty { font-size: 11.5px; color: var(--faint); text-align: center; padding: 12px 4px; }
 

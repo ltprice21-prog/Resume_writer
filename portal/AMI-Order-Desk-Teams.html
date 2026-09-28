@@ -719,15 +719,69 @@ svg.chart .col:hover { filter: brightness(1.15); }
 svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; font-family: var(--sans); }
 .chart-empty { font-size: 12.5px; color: var(--faint); text-align: center; padding: 26px 0; margin: 0; }
 
+/* ---------- workflow trail ----------
+ *
+ * One mark per stage, grouped by phase. State is carried by shape as well as
+ * fill: done is filled with its phase weave, current is filled and ringed,
+ * unrecorded is hollow with a cross-bar, pending is a hollow outline. A gate
+ * stage is drawn as a diamond, because it can only ever be set by a person.
+ */
+
+.trail { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.trail-phase { display: inline-flex; gap: 2px; }
+.trail-mark {
+  position: relative;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  background-clip: padding-box;
+}
+.trail-mark.trail-gate { transform: rotate(45deg) scale(.82); }
+.trail-done { border-color: var(--fill-ink, var(--border-strong)); }
+.trail-current { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+.trail-pending { background: transparent; }
+.trail-unrecorded { background: transparent; border-style: dashed; }
+.trail-unrecorded::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 4px;
+  height: 1px;
+  background: var(--muted);
+}
+
 /* ---------- kanban ---------- */
 
 .kanban {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(212px, 1fr);
-  gap: 10px;
+  display: flex;
+  gap: 14px;
   overflow-x: auto;
   padding-bottom: 6px;
+  align-items: flex-start;
+}
+
+/* Twelve stages sit in four phase groups, so the board reads as the workflow
+ * does: intake, supply, shipment, close. */
+.kan-phase { display: flex; flex-direction: column; gap: 8px; flex: none; }
+
+.kan-phase-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 4px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.kan-phase-title { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+
+.kan-phase-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 184px;
+  gap: 8px;
   align-items: start;
 }
 
@@ -739,6 +793,9 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
   flex-direction: column;
   min-height: 120px;
 }
+
+.kan-col-gate { border-style: dashed; border-color: var(--border-strong); }
+.kan-gate-note { font-size: 10.5px; color: var(--muted); padding: 5px 11px 0; font-style: italic; }
 
 .kan-col.drop-target { border-color: var(--accent); background: var(--accent-soft); }
 
@@ -821,6 +878,8 @@ svg.chart .col-label { fill: var(--muted); font-size: 10.5px; font-weight: 700; 
 .kan-po { font-weight: 700; font-family: var(--mono); font-size: 12px; }
 .kan-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
 .kan-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.kan-next { color: var(--faint); font-size: 10.5px; margin-top: 3px; }
+.kan-card-behind { outline: 1px dashed var(--warning); outline-offset: -1px; }
 .kan-age { font-size: 10.5px; color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
 .kan-empty { font-size: 11.5px; color: var(--faint); text-align: center; padding: 12px 4px; }
 
@@ -2641,10 +2700,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * presence makes the chase pointless — the work moved on without the answer.
    * A superseded item is reported, not discarded: a gap in the tracker is worth
    * seeing even once it stops being urgent.
+   *
+   * `stage` is the workflow stage the missing answer belongs to. The winery
+   * invoice, proof of export and forwarder's invoice belong to Supplier
+   * Settlement, which comes after Customer Invoicing — so a NAV invoice number
+   * does not overtake them. They stay live until the column is filled.
    */
   const FOLLOW_UP_RULES = [
     {
       id: 'winery-confirm',
+      stage: 'supply-confirmed',
       supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Winery Confirmed Available Date/i,
@@ -2655,6 +2720,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'bottling-date',
+      stage: 'documents',
       supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Bottling Date Confirmed/i,
@@ -2665,6 +2731,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'lot-number',
+      stage: 'documents',
       supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Lot Number/i,
@@ -2675,6 +2742,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'collection',
+      stage: 'shipped',
       supersededBy: [/^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'forwarder',
       missing: /^Actual Collection Date/i,
@@ -2685,6 +2753,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'delivery',
+      stage: 'delivered',
       supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -2695,7 +2764,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'winery-invoice',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      supersededBy: [],
       party: 'winery',
       missing: /^Winery invoice received/i,
       after: /^Actual Collection Date/i,
@@ -2705,7 +2775,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'proof-of-export',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      supersededBy: [],
       party: 'internal',
       missing: /^Proof of [Ee]xport/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -2716,7 +2787,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'forwarder-invoice',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      // Accounts logging the invoice as received is the settlement step itself.
+      supersededBy: [/^Forwarder.s invoice received date/i],
       party: 'forwarder',
       missing: /^Forwarder's invoice$/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -2787,7 +2860,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
         const overtaken = supersededBy(sheet, header, r, rule);
         out.push({
-          row: r, po, ruleId: rule.id, party: rule.party,
+          row: r, po, ruleId: rule.id, party: rule.party, stage: rule.stage || '',
           missingHeader: header.columns.find((c) => c.col === missingCol).header,
           anchorHeader: header.columns.find((c) => c.col === afterCol).header,
           anchorDate: anchor, ageDays: age,
@@ -4675,7 +4748,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 </script>
-<script>/* Order status model: the five pipeline stages, where a status is stored,
+<script>/* Order status model: the division's twelve-stage workflow, where a status is stored,
  * what the tracker itself already implies, and the roll-ups the dashboard needs.
  *
  * A status is either SET by a person or DERIVED from dated columns already in the
@@ -4693,39 +4766,166 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   const STATUS_PATH = 'order-status.json';
 
   /**
-   * The pipeline, in order. `step` drives the ordinal ramp and the kanban column
-   * order; `open` marks the stages that still need work; `pattern` is the fill
-   * that carries the stage without relying on hue.
+   * The division's workflow, in order — twelve stages, grouped into four phases.
    *
-   * Invoicing ends the order. This workspace draws no line between billed and
-   * reconciled, so the two are one terminal stage rather than a rule that moves
-   * orders from one to the other.
+   * A stage is REACHED when its work is done: an order sits at the furthest
+   * stage it has completed, and `nextStatus` names the one it is waiting on.
+   *
+   * Nine stages are recorded by a tracker column, so the tracker can show them
+   * on its own. Three are not: Order Validation and Pre-Shipment Review are
+   * checks a person makes (`gate: true`), and nothing on the sheet records that
+   * they happened. The portal never infers a gate from the columns around it —
+   * only a person can mark one done.
+   *
+   * Order Closure & Reporting is the one terminal stage. The tracker reaches it
+   * only when the customer invoice and every supplier-settlement column are
+   * filled; a person can also close an order directly.
+   *
+   * Twelve stages cannot each have a fill that stays distinct for a reader with
+   * colour vision deficiency, so fills belong to the four PHASES — one hue and
+   * one weave each — and the stage itself is always named in words.
    */
-  const ORDER_STATUSES = [
+  const PHASES = [
     {
-      id: 'placed', step: 1, open: true, pattern: 'solid',
-      label: 'Order placed – awaiting shipment', short: 'Awaiting shipment',
-      hint: 'Sent to the winery; nothing has been collected yet.',
+      id: 'intake', fill: 1, pattern: 'solid', label: 'Order intake', short: 'Order intake',
+      hint: 'The customer PO is in, checked, and passed to the supplier.',
     },
     {
-      id: 'transit', step: 2, open: true, pattern: 'diagonal',
-      label: 'In transit', short: 'In transit',
-      hint: 'Collected from the cellars, not yet delivered.',
+      id: 'supply', fill: 2, pattern: 'diagonal', label: 'Supply & preparation', short: 'Supply & preparation',
+      hint: 'The winery confirms, the collection is planned, the documents are gathered and the shipment is reviewed.',
     },
     {
-      id: 'delivered', step: 3, open: true, pattern: 'horizontal',
-      label: 'Delivered', short: 'Delivered',
-      hint: 'Arrived at the delivery point, not yet invoiced.',
+      id: 'shipment', fill: 3, pattern: 'horizontal', label: 'Shipment', short: 'Shipment',
+      hint: 'Collected from the cellars and delivered.',
     },
     {
-      id: 'invoiced', step: 4, open: false, pattern: 'vertical', terminal: true,
-      label: 'Invoiced and Closed', short: 'Invoiced and Closed',
-      hint: 'Billed out, and closed by that fact — an invoiced order is finished here.',
+      id: 'close', fill: 4, pattern: 'vertical', label: 'Financial close', short: 'Financial close',
+      hint: 'The customer is invoiced, the suppliers are settled and the order is closed.',
     },
   ];
 
-  /* Statuses stored before the two terminal stages became one. */
-  const LEGACY_STATUS_IDS = { closed: 'invoiced' };
+  /*
+   * `evidence` lists the tracker headings that record a stage. Every heading the
+   * sheet carries must be filled; a heading the sheet does not carry is skipped,
+   * so an older cycle sheet with fewer columns is judged on what it has. A stage
+   * with no evidence heading on the sheet at all cannot be read from it.
+   */
+  const STAGE_DEFS = [
+    {
+      id: 'received', phase: 'intake', label: 'Purchase Order Received', short: 'PO received',
+      hint: 'Done when the tracker records the date the customer PO came in.',
+      evidence: [{ re: /^PO Received Date/i, name: 'PO Received Date' }],
+      reason: 'a PO received date is recorded',
+    },
+    {
+      id: 'validated', phase: 'intake', label: 'Order Validation', short: 'Validated', gate: true,
+      hint: 'A person confirms the PO is sound — the right item, not already on the tracker, within the contract. '
+        + 'The tracker has no column for this, so only a person can mark it done.',
+    },
+    {
+      id: 'supplier-po', phase: 'intake', label: 'Supplier PO Creation', short: 'Supplier PO sent',
+      hint: 'Done when the tracker records the date the PO was sent to the winery.',
+      evidence: [{ re: /^PO date sent to winery/i, name: 'PO date sent to winery' }],
+      reason: 'the PO has been sent to the winery',
+    },
+    {
+      id: 'supply-confirmed', phase: 'supply', label: 'Supply Confirmation', short: 'Supply confirmed',
+      hint: 'Done when the tracker records the date the winery confirmed the goods available.',
+      evidence: [{ re: /^Winery Confirmed Available Date/i, name: 'Winery Confirmed Available Date' }],
+      reason: 'the winery has confirmed an available date',
+    },
+    {
+      id: 'logistics', phase: 'supply', label: 'Logistics Planning', short: 'Logistics planned',
+      hint: 'Done when the tracker records the truck type booked. The requested collection date is a formula '
+        + 'and the forwarder comes off the PO, so neither of those shows planning has happened.',
+      evidence: [{ re: /^Truck Type/i, name: 'Truck Type' }],
+      reason: 'a truck type is recorded',
+    },
+    {
+      id: 'documents', phase: 'supply', label: 'Documentation Management', short: 'Documents in',
+      hint: 'Done when the tracker records both the confirmed bottling date and the lot number.',
+      evidence: [
+        { re: /^Bottling Date Confirmed/i, name: 'Bottling Date Confirmed' },
+        { re: /^Lot Number/i, name: 'Lot Number' },
+      ],
+      reason: 'the bottling date and lot number are recorded',
+    },
+    {
+      id: 'pre-shipment', phase: 'supply', label: 'Pre-Shipment Review', short: 'Pre-shipment reviewed', gate: true,
+      hint: 'A person confirms the shipment is ready to go — supply confirmed, collection booked, documents in hand. '
+        + 'The tracker has no column for this, so only a person can mark it done.',
+    },
+    {
+      id: 'shipped', phase: 'shipment', label: 'Shipment Execution', short: 'Shipped',
+      hint: 'Done when the tracker records the actual collection date from the cellars.',
+      evidence: [{ re: /^Actual Collection Date/i, name: 'Actual Collection Date' }],
+      reason: 'a collection date is recorded',
+    },
+    {
+      id: 'delivered', phase: 'shipment', label: 'Delivery Confirmation', short: 'Delivered',
+      hint: 'Done when the tracker records the delivery date.',
+      evidence: [{ re: /^(Delivery date to CDG|Actual delivery date)/i, name: 'Delivery date' }],
+      reason: 'a delivery date is recorded',
+    },
+    {
+      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced',
+      hint: 'Done when the tracker records a NAV invoice number.',
+      evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
+      reason: 'a NAV invoice number is recorded',
+    },
+    {
+      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled',
+      hint: 'Done when the tracker records the winery invoice received, proof of export sent to the winery, '
+        + 'and the forwarder’s invoice received for accounts.',
+      evidence: [
+        { re: /^Winery invoice received/i, name: 'Winery invoice received' },
+        { re: /^Proof of [Ee]xport/i, name: 'Proof of Export Sent to Winery' },
+        { re: /^Forwarder.s invoice received/i, name: 'Forwarder’s invoice received date for ACCT' },
+      ],
+      reason: 'the winery invoice, proof of export and forwarder’s invoice are all recorded',
+    },
+    {
+      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true,
+      hint: 'The order is finished. The tracker puts an order here when it is invoiced to the customer and every '
+        + 'supplier-settlement column is filled; a person can also close it directly.',
+      requires: ['customer-invoiced', 'settled'],
+      reason: 'it is invoiced to the customer and every supplier-settlement column is filled',
+    },
+  ];
+
+  const phaseById = (id) => PHASES.find((p) => p.id === id) || null;
+
+  const ORDER_STATUSES = STAGE_DEFS.map((d, i) => {
+    const phase = phaseById(d.phase);
+    return Object.assign({}, d, {
+      step: i + 1,
+      open: !d.terminal,
+      terminal: !!d.terminal,
+      gate: !!d.gate,
+      fill: phase.fill,
+      pattern: phase.pattern,
+      phaseLabel: phase.label,
+    });
+  });
+
+  for (const p of PHASES) p.stages = ORDER_STATUSES.filter((s) => s.phase === p.id).map((s) => s.id);
+
+  /*
+   * Statuses stored under the four-stage pipeline, and what each one asserted.
+   * "Invoiced and Closed" was the only way to close an order then, and a person
+   * who chose it meant closed — so it keeps meaning closed rather than quietly
+   * reopening at Customer Invoicing.
+   */
+  const LEGACY_STATUS_IDS = {
+    placed: 'supplier-po',
+    transit: 'shipped',
+    invoiced: 'closed',
+  };
+  const LEGACY_LABELS = {
+    placed: 'Order placed – awaiting shipment',
+    transit: 'In transit',
+    invoiced: 'Invoiced and Closed',
+  };
 
   const canonicalStatusId = (id) => {
     const s = String(id == null ? '' : id);
@@ -4735,6 +4935,27 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
+  const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);
+
+  /**
+   * The stage an order is waiting on: the one after whichever is further along,
+   * its effective status or what the tracker shows — so a status set behind the
+   * tracker never names a stage the tracker already shows done.
+   */
+  function nextForOrder(order) {
+    const st = order.status || {};
+    const a = statusById(st.statusId);
+    const b = statusById(st.trackerStatusId || (order.derived && order.derived.statusId));
+    const at = a && b ? (b.step > a.step ? b : a) : (a || b);
+    return at ? nextStatus(at.id) : ORDER_STATUSES[0];
+  }
+
+  /** The stage an order at `id` is waiting on, or null once it is closed. */
+  function nextStatus(id) {
+    const s = statusById(id);
+    if (!s) return ORDER_STATUSES[0];
+    return ORDER_STATUSES.find((x) => x.step === s.step + 1) || null;
+  }
 
   /* ------------------------------------------------------------------ *
    * Store
@@ -4811,14 +5032,6 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * Reading orders out of a tracker
    * ------------------------------------------------------------------ */
 
-  /* Tracker columns the status model reads, most advanced stage first. */
-  const STAGE_COLUMNS = [
-    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded, which closes the order' },
-    { statusId: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, reason: 'a delivery date is recorded' },
-    { statusId: 'transit', re: /^Actual Collection Date/i, reason: 'a collection date is recorded' },
-    { statusId: 'placed', re: /^PO date sent to winery/i, reason: 'the PO has been sent to the winery' },
-  ];
-
   const DATE_COLUMNS = [
     { key: 'poReceived', re: /^PO Received Date/i, label: 'PO received' },
     { key: 'poSent', re: /^PO date sent to winery/i, label: 'PO sent to winery' },
@@ -4852,18 +5065,54 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     return c ? c.col : null;
   };
 
-  /** What the tracker's own dated columns already say about an order. */
-  function deriveStatus(sheet, header, row) {
-    for (const stage of STAGE_COLUMNS) {
-      const col = colFor(header, stage.re);
-      if (!col) continue;
-      const cell = sheet.cell(row, col);
-      if (!cell) continue;
-      const text = String(cell.text || '').trim();
-      if (!text || /^to fill$/i.test(text)) continue;
-      return { statusId: stage.statusId, reason: stage.reason };
+  const isBlankText = (text) => !text || /^to fill$/i.test(text);
+
+  /**
+   * Every stage the tracker's own columns show as done for one row, keyed by
+   * stage id, each with the cells that show it. Gates never appear here.
+   */
+  function stageEvidence(sheet, header, row) {
+    const out = {};
+    for (const stage of ORDER_STATUSES) {
+      if (!stage.evidence) continue;
+      const cells = [];
+      let complete = true;
+      for (const ev of stage.evidence) {
+        const column = header.columns.find((x) => ev.re.test(x.header));
+        if (!column) continue;
+        const cell = sheet.cell(row, column.col);
+        const text = cell ? String(cell.text || '').trim() : '';
+        if (isBlankText(text)) { complete = false; break; }
+        // A number is only a date when its heading says so, or an invoice number
+        // becomes a day in 1926.
+        const date = /date/i.test(column.header) && cell.num != null && Number.isFinite(cell.num) && cell.num >= 1
+          ? AMI.serialToDate(cell.num) : null;
+        cells.push({ col: column.col, header: column.header, text, date });
+      }
+      if (complete && cells.length) out[stage.id] = { cells, reason: stage.reason };
+    }
+    for (const stage of ORDER_STATUSES) {
+      if (!stage.requires || !stage.requires.every((id) => out[id])) continue;
+      out[stage.id] = {
+        cells: stage.requires.reduce((all, id) => all.concat(out[id].cells), []),
+        reason: stage.reason,
+      };
+    }
+    return out;
+  }
+
+  /** The furthest stage the tracker itself shows as done, from its evidence. */
+  function furthestEvidenced(evidence) {
+    for (let i = ORDER_STATUSES.length - 1; i >= 0; i--) {
+      const s = ORDER_STATUSES[i];
+      if (evidence[s.id]) return { statusId: s.id, reason: evidence[s.id].reason };
     }
     return null;
+  }
+
+  /** What the tracker's own columns already say about an order. */
+  function deriveStatus(sheet, header, row) {
+    return furthestEvidenced(stageEvidence(sheet, header, row));
   }
 
   /** Every order on one item's tracker, with the values the dashboard needs. */
@@ -4907,6 +5156,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         values[v.key] = cell.num != null && Number.isFinite(cell.num) ? cell.num : String(cell.text || '').trim();
       }
 
+      const evidence = stageEvidence(sheet, header, row);
       out.push({
         key: statusKey(ctx.accountId || '', ctx.itemId || '', po),
         po, row,
@@ -4915,7 +5165,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         itemId: ctx.itemId || '', itemName: ctx.itemName || '',
         dates, values, dateIssues,
         lastEvent, lastEventLabel,
-        derived: deriveStatus(sheet, header, row),
+        evidence,
+        derived: furthestEvidenced(evidence),
       });
     }
     return out;
@@ -4932,27 +5183,79 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    */
   function effectiveStatus(order, statusDoc) {
     const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
+    const tracker = order.derived && statusById(order.derived.statusId) ? order.derived : null;
     if (entry && statusById(entry.status)) {
-      // A status recorded as "closed" before the terminal stages merged reads as
-      // the merged stage now, so old records keep meaning what they meant.
+      // A status stored under the four-stage pipeline reads as the stage it now
+      // corresponds to, and says so, so old records keep meaning what they meant.
       const canonical = canonicalStatusId(entry.status);
-      const renamed = canonical !== entry.status;
+      const legacy = canonical !== entry.status ? LEGACY_LABELS[entry.status] || entry.status : '';
+      // A person's choice stands, but if the tracker has since moved further
+      // along, that is worth knowing rather than hiding.
+      const behind = tracker && statusById(tracker.statusId).step > statusById(canonical).step
+        ? statusById(tracker.statusId) : null;
       return {
         statusId: canonical, source: 'set',
         updated: entry.updated || '', updatedBy: entry.updatedBy || '', note: entry.note || '',
+        trackerStatusId: tracker ? tracker.statusId : '',
+        behindTracker: !!behind,
         reason: 'set by ' + (entry.updatedBy || 'someone')
           + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '')
-          + (renamed ? ' (recorded as “closed”, before invoiced and closed became one stage)' : ''),
+          + (legacy ? ' (recorded as “' + legacy + '” under the four-stage pipeline)' : '')
+          + (behind ? '; the tracker already shows ' + behind.label : ''),
       };
     }
-    if (order.derived) {
+    if (tracker) {
       return {
-        statusId: order.derived.statusId, source: 'derived',
+        statusId: tracker.statusId, source: 'derived',
         updated: '', updatedBy: '', note: '',
-        reason: 'From the tracker: ' + order.derived.reason + '.',
+        trackerStatusId: tracker.statusId, behindTracker: false,
+        reason: 'From the tracker: ' + tracker.reason + '.',
       };
     }
-    return { statusId: '', source: 'none', updated: '', updatedBy: '', note: '', reason: 'nothing in the tracker indicates a stage' };
+    return {
+      statusId: '', source: 'none', updated: '', updatedBy: '', note: '',
+      trackerStatusId: '', behindTracker: false,
+      reason: 'nothing in the tracker indicates a stage',
+    };
+  }
+
+  /**
+   * One order's path through all twelve stages, for the per-order trail.
+   *
+   *   done        the tracker's columns show it — `cells` says which
+   *   current     the stage the order is at, set by a person (when the tracker
+   *               shows it too, it reads `done`)
+   *   unrecorded  behind the current stage, but nothing records it — for a
+   *               gate, because no column can; otherwise the column is blank
+   *   pending     not reached yet
+   *
+   * Nothing is filled in to make the path look continuous. A gap is a gap.
+   */
+  function stageTrail(order, status) {
+    const st = status || order.status || { statusId: '' };
+    const current = statusById(st.statusId);
+    const evidence = order.evidence || {};
+    return ORDER_STATUSES.map((s) => {
+      const ev = evidence[s.id];
+      let state;
+      let detail;
+      if (ev) {
+        state = 'done';
+        detail = ev.cells.map((c) => c.header + ': ' + (c.date ? AMI.formatShort(c.date) : c.text)).join(' · ');
+      } else if (current && s.id === current.id) {
+        state = 'current';
+        detail = st.reason || '';
+      } else if (current && s.step < current.step) {
+        state = 'unrecorded';
+        detail = s.gate
+          ? 'a person check with no tracker column — not marked done'
+          : (s.requires ? 'not every column it needs is filled' : 'passed, but the tracker column is blank');
+      } else {
+        state = 'pending';
+        detail = s.gate ? 'a person check — set it when done' : 'not reached';
+      }
+      return { status: s, state, detail, cells: ev ? ev.cells : [] };
+    });
   }
 
   function daysSince(date, today) {
@@ -5207,6 +5510,17 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     });
   }
 
+  function countByPhase(orders) {
+    const counts = { unset: 0 };
+    for (const p of PHASES) counts[p.id] = 0;
+    for (const o of orders) {
+      const st = statusById(o.status.statusId);
+      if (!st) counts.unset++;
+      else counts[st.phase]++;
+    }
+    return counts;
+  }
+
   function countByStatus(orders) {
     const counts = emptyCounts();
     for (const o of orders) {
@@ -5334,19 +5648,22 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       (a, b) => (a.itemName || '').localeCompare(b.itemName || '') || a.po.localeCompare(b.po));
 
     const countRows = ORDER_STATUSES.map((s) =>
-      '<tr><td style="' + TD + '">' + esc(s.label) + '</td>'
+      '<tr><td style="' + TD + 'color:#5c5c5c;">' + esc(s.phaseLabel) + '</td>'
+      + '<td style="' + TD + '">' + s.step + '. ' + esc(s.label) + (s.gate ? ' (person check)' : '') + '</td>'
       + '<td style="' + TD + 'text-align:right;">' + counts[s.id] + '</td></tr>').join('')
-      + (counts.unset ? '<tr><td style="' + TD + '">No status set</td><td style="' + TD
+      + (counts.unset ? '<tr><td style="' + TD + '"></td><td style="' + TD + '">No status set</td><td style="' + TD
         + 'text-align:right;">' + counts.unset + '</td></tr>' : '');
 
-    const headers = ['PO #', 'Item', 'Cases', 'Status', 'Status source', 'Last dated activity', 'Days'];
+    const headers = ['PO #', 'Item', 'Cases', 'Stage reached', 'Next stage', 'Status source', 'Last dated activity', 'Days'];
     const rows = shown.map((x) => {
       const st = statusById(x.status.statusId);
+      const next = nextForOrder(x);
       return '<tr>'
         + '<td style="' + TD + '">' + esc(x.po) + '</td>'
         + '<td style="' + TD + '">' + esc(x.itemName) + '</td>'
         + '<td style="' + TD + 'text-align:right;">' + esc(x.values.cases != null ? x.values.cases : '') + '</td>'
-        + '<td style="' + TD + '">' + esc(st ? st.label : 'Not set') + '</td>'
+        + '<td style="' + TD + '">' + esc(st ? st.step + '. ' + st.label : 'Not set') + '</td>'
+        + '<td style="' + TD + '">' + esc(next ? next.step + '. ' + next.label : 'Complete') + '</td>'
         + '<td style="' + TD + '">' + esc(x.status.reason) + '</td>'
         + '<td style="' + TD + '">' + esc(x.lastEvent ? AMI.formatShort(x.lastEvent) + ' (' + x.lastEventLabel + ')' : '—') + '</td>'
         + '<td style="' + TD + 'text-align:right;">' + esc(x.ageDays == null ? '—' : x.ageDays) + '</td>'
@@ -5363,7 +5680,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       '<p style="margin:0 0 10px;"><strong>' + open.length + '</strong> open order(s) of <strong>'
       + orders.length + '</strong> on the tracker'
       + (o.itemNames && o.itemNames.length ? ', across ' + esc(o.itemNames.join(', ')) : '') + '.</p>',
-      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">Orders by status</h3>',
+      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">Orders by workflow stage</h3>',
       '<table style="border-collapse:collapse;"><tbody>' + countRows + '</tbody></table>',
       '<h3 style="font-size:11.5pt;margin:16px 0 6px;">'
       + (o.openOnly === false ? 'All orders' : 'Open orders') + '</h3>',
@@ -5373,7 +5690,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           + '</tr></thead><tbody>' + rows + '</tbody></table>'
         : '<p style="margin:0;">Nothing open.</p>',
       '<p style="margin:16px 0 0;color:#5c5c5c;font-size:9.5pt;">'
-      + 'Status source shows whether a person set the stage or it was read from the tracker’s dated columns. '
+      + 'Stage reached is the furthest workflow stage completed. Status source shows whether a person set it '
+      + 'or it was read from the tracker’s columns; Order Validation and Pre-Shipment Review have no tracker '
+      + 'column and are only ever set by a person. '
       + 'Days counts from the last dated activity on the row.</p>',
       '</div>',
     ].join('\n');
@@ -5382,10 +5701,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   }
 
   Object.assign(AMI, {
-    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS,
-    statusById, isOpenStatus, statusKey, canonicalStatusId,
+    STATUS_PATH, ORDER_STATUSES, PHASES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS, GATE_STATUSES,
+    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
-    deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
+    stageEvidence, deriveStatus, readOrders, effectiveStatus, stageTrail,
+    decorate, countByStatus, countByPhase, emptyCounts, plausibleWindow,
     partitionClosed, summariseAccount, buildAccountSummary, daysSince,
     CONTRACT_STATES, contractStanding,
     scheduleFlags, withSchedule, scheduleEntries, groupSchedule, startOfWeek, MONTH_NAMES,
@@ -5418,9 +5738,13 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * ------------------------------------------------------------------ *
    *
    * A stage is drawn with a hue AND a weave, because hue alone excludes a
-   * reader with colour vision deficiency — and on this pipeline the four stages
-   * sit on one hue by design, which makes them the hardest case. The weave order
-   * is solid, diagonal, horizontal, vertical, matching pipeline order.
+   * reader with colour vision deficiency — and the fills sit on one hue by
+   * design, which makes them the hardest case. The weave order is solid,
+   * diagonal, horizontal, vertical, matching workflow order.
+   *
+   * Fills belong to the four workflow PHASES, not the twelve stages: four weaves
+   * stay distinct, twelve would not. Anything showing a stage names it in words
+   * as well. `fill` is the phase number (1–4); `step` the stage number (1–12).
    */
 
   const PATTERN_WORD = {
@@ -5428,8 +5752,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     horizontal: 'horizontal stripes', vertical: 'vertical stripes',
   };
 
-  /** The class that paints a stage. Everything showing a stage uses this. */
-  const stageClass = (step) => 'stage-fill stage-' + step;
+  /** The class that paints a phase fill (1–4). Everything showing a stage uses this. */
+  const stageClass = (fill) => 'stage-fill stage-' + fill;
+
+  /* A status, phase or segment's fill number. */
+  const fillOf = (s) => (s && (s.fill || s.step)) || 1;
 
   /** Spoken form of a stage's fill, for tooltips and screen readers. */
   const patternWord = (status) => PATTERN_WORD[(status && status.pattern) || 'solid'] || 'solid';
@@ -5500,13 +5827,13 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     }
     const parts = segments.filter((s) => s.value > 0).map((s) => {
       const pct = (s.value / total) * 100;
-      const patterned = s.step && s.step !== 1;
+      const patterned = fillOf(s) !== 1;
       const label = pct >= (o.labelThreshold || 11)
         ? '<span class="bar-inline' + (patterned ? ' on-pattern' : '') + '">' + esc(s.value) + '</span>'
         : '';
       const tip = s.label + ': ' + fmt(s.value) + ' of ' + fmt(total) + ' (' + Math.round(pct) + '%)'
         + (s.patternWord ? ' · ' + s.patternWord : '');
-      return '<span class="bar-seg ' + esc(stageClass(s.step || 1)) + '"'
+      return '<span class="bar-seg ' + esc(stageClass(fillOf(s))) + '"'
         + ' style="flex:' + s.value + ';"'
         + (s.key ? ' data-drill="' + esc(s.key) + '" tabindex="0" role="button"' : '')
         + ' data-tip="' + esc(tip) + '">' + label + '</span>';
@@ -5523,7 +5850,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const n = counts ? counts[s.id] : null;
       const word = patternWord(s);
       return '<li data-tip="' + esc(s.hint + ' Shown as ' + word + '.') + '">'
-        + '<span class="swatch ' + esc(stageClass(s.step)) + '" aria-hidden="true"></span>'
+        + '<span class="swatch ' + esc(stageClass(fillOf(s))) + '" aria-hidden="true"></span>'
         + '<span class="legend-label">' + esc(s.short) + '</span>'
         + '<span class="legend-pattern">' + esc(word) + '</span>'
         + (n != null ? '<span class="legend-value">' + fmt(n) + '</span>' : '')
@@ -5552,7 +5879,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       // A row that measures something other than pipeline position (an age, a
       // count) takes the reserved status palette, never a stage weave — a weave
       // there would claim a stage the row does not have.
-      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.step || 3);
+      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.fill || r.step || 3);
       const inner = r.segments
         ? stackedBar(r.segments, { labelThreshold: 14 })
         : '<div class="bar-track"><span class="bar-seg ' + esc(paint) + '"'
@@ -5647,8 +5974,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       return '<span class="pill pill-unset"' + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>Not set</span>';
     }
     const tip = [o.tip, 'Shown as ' + patternWord(status) + '.'].filter(Boolean).join(' ');
-    return '<span class="pill pill-stage ' + esc(stageClass(status.step)) + '"'
-      + ' data-tip="' + esc(tip) + '">' + esc(o.short ? status.short : status.label) + '</span>';
+    return '<span class="pill pill-stage ' + esc(stageClass(fillOf(status))) + '"'
+      + ' data-tip="' + esc(tip) + '">' + (status.step ? status.step + '. ' : '')
+      + esc(o.short ? status.short : status.label) + '</span>';
   }
 
   /* ------------------------------------------------------------------ *
@@ -5681,7 +6009,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   Object.assign(AMI, {
     statTiles, stackedBar, statusLegend, barList, columnChart,
     healthPill, statusPill, monthlySeries, MONTH_SHORT,
-    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD,
+    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD, fillOf,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
@@ -5976,9 +6304,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     });
     return el('label', {
       class: 'check-inline',
-      'data-tip': 'Leaves out orders at the Invoiced and Closed stage. Nothing is deleted — '
-        + 'the counts and totals on this page follow the switch.',
-    }, [box, document.createTextNode('Hide invoiced and closed')]);
+      'data-tip': 'Leaves out orders at Order Closure & Reporting, the last workflow stage. Nothing is '
+        + 'deleted — the counts and totals on this page follow the switch.',
+    }, [box, document.createTextNode('Hide closed orders')]);
   }
 
   function poColumn(header) {
@@ -8491,6 +8819,31 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   const PARTY_LABEL = { winery: 'Winery', forwarder: 'Forwarder', internal: 'Internal' };
   const PARTY_TO_ROLE = { winery: 'vendor', forwarder: 'trucker', internal: 'internal' };
 
+  /**
+   * A chase on an order a person has closed is overtaken, the same as one the
+   * tracker's own columns overtook. Order Closure is the end of the workflow, so
+   * nothing on a closed order is chased — but the blank is still listed.
+   */
+  function withClosure(followUp, accountId, itemId) {
+    if (followUp.superseded) return followUp;
+    const doc = state.statusDoc;
+    const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
+    if (!entry || AMI.isOpenStatus(entry.status)) return followUp;
+    return Object.assign({}, followUp, {
+      superseded: { header: 'Order status', value: 'closed', date: null },
+      supersededReason: 'still blank, but ' + (entry.updatedBy || 'someone') + ' closed the order'
+        + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '') + ' — nothing on a closed order is chased',
+    });
+  }
+
+  /** An item tracker's follow-ups, with person-closed orders set aside. */
+  const chasesFor = (p) => p.followUps.map((f) => withClosure(f, p.account.id, p.item.id));
+
+  const stageName = (id) => {
+    const st = AMI.statusById(id);
+    return st ? st.step + '. ' + st.label : '—';
+  };
+
   function renderFollowUps() {
     const host = $('#followBody');
     clear(host);
@@ -8503,7 +8856,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const st = itemState(item.id);
       if (!st || !st.base) continue;
       for (const oi of AMI.findOpenItems(st.base.sheet, st.base.header, new Date())) {
-        state.openItems.push(Object.assign(oi, { itemId: item.id, itemName: item.name }));
+        state.openItems.push(Object.assign(withClosure(oi, account.id, item.id), { itemId: item.id, itemName: item.name }));
       }
     }
     state.openItems.sort((a, b) => b.ageDays - a.ageDays);
@@ -8541,8 +8894,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const items = byParty[party];
       const tbl = el('table', { class: 'data' });
       tbl.appendChild(el('thead', {}, [el('tr', {}, [
-        el('th', {}), el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Outstanding' }),
-        el('th', { text: 'Measured from' }), el('th', { text: 'Age' }),
+        el('th', {}), el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Workflow stage' }),
+        el('th', { text: 'Outstanding' }), el('th', { text: 'Measured from' }), el('th', { text: 'Age' }),
       ])]));
       const tbody = el('tbody');
       for (const entry of items) {
@@ -8554,6 +8907,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           })]),
           el('td', { text: entry.itemName }),
           el('td', { class: 'mono', text: entry.po }),
+          el('td', { text: stageName(entry.stage) }),
           el('td', { text: entry.missingHeader + (entry.placeholder ? ' ("' + entry.placeholder + '")' : '') }),
           el('td', { text: entry.anchorHeader + ': ' + AMI.formatShort(entry.anchorDate) }),
           el('td', { class: 'num', text: entry.ageDays + ' d' }),
@@ -8620,9 +8974,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       el('div', { class: 'body' }, [
         el('p', {
           class: 'help',
-          text: 'These columns are still blank, but the order has since been collected, delivered '
-            + 'or invoiced — so the answer would no longer change what happens next. Nothing was '
-            + 'deleted, and no email is drafted for them.',
+          text: 'These columns are still blank, but the order has since moved past the stage they '
+            + 'belong to, or a person has closed it — so the answer would no longer change what happens '
+            + 'next. Nothing was deleted, and no email is drafted for them.',
         }),
         details,
       ]),
@@ -9166,7 +9520,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           el('option', { value: '', text: 'Any status', selected: !f.statusId }),
           el('option', { value: '__open', text: 'Open only', selected: f.statusId === '__open' }),
           el('option', { value: '__unset', text: 'No status set', selected: f.statusId === '__unset' }),
-          ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, selected: s.id === f.statusId, text: s.label })),
+          ...stageOptions((s) => s.id === f.statusId),
         ]),
       ]));
     }
@@ -9228,8 +9582,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const unset = orders.filter((o) => !o.status.statusId);
     // Only chases that still matter — the ones the workflow overtook are shown
     // on the Follow-ups page but never counted as outstanding work.
-    const followUps = scope.reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
-    const settledFollowUps = scope.reduce((n, p) => n + p.followUps.filter((f) => f.superseded).length, 0);
+    const followUps = scope.reduce((n, p) => n + chasesFor(p).filter((f) => !f.superseded).length, 0);
+    const settledFollowUps = scope.reduce((n, p) => n + chasesFor(p).filter((f) => f.superseded).length, 0);
     const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
 
     host.appendChild(pageHeader(
@@ -9353,7 +9707,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         el('span', { class: 'icon', text: 'i' }),
         el('div', {}, [
           el('strong', { text: unset.length + ' order(s) have no status set.' }),
-          el('span', { class: 'detail', text: 'Where the tracker has a dated collection, delivery or invoice, the stage shown is read from it. Set them explicitly on the Order status page.' }),
+          el('span', { class: 'detail', text: 'Nothing on the tracker records a stage for them yet. Where it does, the stage shown is read from it. Set them on the Order status page.' }),
         ]),
       ]));
     }
@@ -9374,31 +9728,60 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
     /* ---------------- Pipeline ---------------- */
 
-    grid.appendChild(sectionHead('Pipeline',
-      'Where the orders themselves stand.'));
+    grid.appendChild(sectionHead('Workflow',
+      'Where the orders stand in the division’s twelve-stage workflow.'));
 
-    const stageSegments = (list, prefix, keyPrefix) => {
-      const c = AMI.countByStatus(list);
-      return AMI.ORDER_STATUSES.map((s) => {
-        const key = keyPrefix + s.id;
-        drill(key, (prefix ? prefix + ' — ' : '') + s.label,
-          s.hint, list.filter((o) => o.status.statusId === s.id));
+    // The bar is drawn by phase — four fills that stay distinct — and the
+    // twelve stages are listed beneath it by name, so no stage has to be told
+    // apart by shade alone.
+    const phaseSegments = (list, prefix, keyPrefix) => {
+      const c = AMI.countByPhase(list);
+      return AMI.PHASES.map((p) => {
+        const key = keyPrefix + p.id;
+        drill(key, (prefix ? prefix + ' — ' : '') + p.label,
+          p.hint, list.filter((o) => {
+            const st = AMI.statusById(o.status.statusId);
+            return st && st.phase === p.id;
+          }));
         return {
-          label: (prefix ? prefix + ' — ' : '') + s.label,
-          value: c[s.id], step: s.step, key,
-          patternWord: AMI.patternWord(s),
+          label: (prefix ? prefix + ' — ' : '') + p.label,
+          value: c[p.id], fill: p.fill, key,
+          patternWord: AMI.patternWord(p),
         };
       });
     };
+    const phaseCounts = AMI.countByPhase(orders);
 
     grid.appendChild(chartCard({
-      title: 'Order pipeline',
+      title: 'Workflow by phase',
       note: orders.length + ' order(s) in scope',
       span: 2,
       build: () => [
-        el('div', { html: AMI.stackedBar(stageSegments(orders, '', 'stage:'), { emptyText: 'No orders' }) }).firstChild,
-        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
-        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each stage has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in pipeline order. Click a band to list the orders in it.' }),
+        el('div', { html: AMI.stackedBar(phaseSegments(orders, '', 'phase:'), { emptyText: 'No orders' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.PHASES, phaseCounts) }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each phase has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in workflow order. Click a band to list the orders in it.' }),
+      ],
+    }));
+
+    const stageRows = AMI.ORDER_STATUSES.map((s) => {
+      const key = 'stage:' + s.id;
+      const list = orders.filter((o) => o.status.statusId === s.id);
+      drill(key, s.step + '. ' + s.label, s.hint, list);
+      return {
+        label: s.step + '. ' + s.label,
+        sub: s.phaseLabel + (s.gate ? ' · person check, no tracker column' : ''),
+        value: counts[s.id], fill: s.fill, key,
+        tip: s.label + ': ' + counts[s.id] + ' order(s). ' + s.hint,
+      };
+    });
+
+    grid.appendChild(chartCard({
+      title: 'Orders at each stage',
+      note: 'the furthest stage each order has completed',
+      span: 2,
+      build: () => [
+        el('div', { html: AMI.barList(stageRows, { emptyText: 'No orders' }) }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Order Validation and Pre-Shipment Review have no tracker column, so an order only sits there when a person has set it. The tracker can carry an order past them — that shows it moved on, not that the check was made. Click a bar to list the orders.' }),
       ],
     }));
 
@@ -9414,7 +9797,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       accountRows.push({
         label: account.name,
         sub: AMI.divisionName(state.workspace, account.divisionId),
-        segments: stageSegments(list, account.name, 'acct:' + accountId + ':'),
+        segments: phaseSegments(list, account.name, 'acct:' + accountId + ':'),
         meta: list.filter((x) => x.isOpen).length + ' open',
       });
     }
@@ -9424,7 +9807,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       title: 'Orders by account',
       build: () => [
         el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
-        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.PHASES) }).firstChild,
       ],
     }));
 
@@ -9455,7 +9838,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     }));
 
     grid.appendChild(el('div', { class: 'card span-2' }, [
-      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
+      el('h2', {}, [document.createTextNode('Workflow board'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
       el('div', { class: 'body' }, [buildKanban(orders)]),
     ]));
@@ -9510,7 +9893,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       const list = orders.filter((o) => o.accountId === accountId);
       const fu = scope.filter((p) => p.account.id === accountId)
-        .reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
+        .reduce((n, p) => n + chasesFor(p).filter((f) => !f.superseded).length, 0);
       const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId),
         list, fu, null, new Date());
       healthBody.appendChild(el('tr', {}, [
@@ -9959,17 +10342,21 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
       for (const o of list) cards.appendChild(makeCard(o));
 
-      // The heading carries the stage's weave, so the columns stay apart at a
-      // glance without depending on their shade.
+      // The heading carries its phase's weave, so the phases stay apart at a
+      // glance without depending on their shade; the stage is named in words.
       const head = el('div', {
-        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.step) : ' kan-head-unset'),
-        'data-tip': hint + (stage ? ' Shown as ' + AMI.patternWord(stage) + '.' : ''),
+        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.fill) : ' kan-head-unset'),
+        'data-tip': hint + (stage ? ' ' + stage.phaseLabel + ' phase, shown as ' + AMI.patternWord(stage) + '.' : ''),
       }, [
         el('span', { class: 'kan-title', text: title }),
         el('span', { class: 'kan-count', text: String(list.length) }),
       ]);
 
-      const col = el('div', { class: 'kan-col' }, [head, cards]);
+      const col = el('div', { class: 'kan-col' + (stage && stage.gate ? ' kan-col-gate' : '') }, [
+        head,
+        stage && stage.gate ? el('div', { class: 'kan-gate-note', text: 'Person check — no tracker column' }) : null,
+        cards,
+      ].filter(Boolean));
 
       if (statusId) {
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
@@ -9988,14 +10375,34 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       return col;
     };
 
-    for (const c of columns) {
-      board.appendChild(makeColumn(c.status.short, c.status, c.orders, c.status.id, c.status.hint));
+    for (const phase of AMI.PHASES) {
+      const cols = columns.filter((c) => c.status.phase === phase.id);
+      const n = cols.reduce((a, c) => a + c.orders.length, 0);
+      board.appendChild(el('div', { class: 'kan-phase' }, [
+        el('div', { class: 'kan-phase-head', 'data-tip': phase.hint }, [
+          el('span', { class: 'swatch ' + AMI.stageClass(phase.fill), 'aria-hidden': 'true' }),
+          el('span', { class: 'kan-phase-title', text: phase.label }),
+          el('span', { class: 'kan-count', text: String(n) }),
+        ]),
+        el('div', { class: 'kan-phase-cols' }, cols.map((c) =>
+          makeColumn(c.status.step + '. ' + c.status.short, c.status, c.orders, c.status.id, c.status.hint))),
+      ]));
     }
     if (unset.length) {
-      board.appendChild(makeColumn('No status', null, unset, '',
-        'Nothing in the tracker indicates a stage, and nobody has set one.'));
+      board.appendChild(el('div', { class: 'kan-phase' }, [
+        el('div', { class: 'kan-phase-head' }, [el('span', { class: 'kan-phase-title', text: 'Not started' })]),
+        el('div', { class: 'kan-phase-cols' }, [makeColumn('No status', null, unset, '',
+          'Nothing in the tracker indicates a stage, and nobody has set one.')]),
+      ]));
     }
     return board;
+  }
+
+  /** What an order is waiting on — the next stage, by name. */
+  function nextLine(order) {
+    const next = AMI.nextForOrder(order);
+    if (!next) return el('div', { class: 'kan-next', text: 'Workflow complete' });
+    return el('div', { class: 'kan-next', text: 'Next: ' + next.step + '. ' + next.label }, []);
   }
 
   function makeCard(order) {
@@ -10003,7 +10410,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     // Only the stage tokens, not the fill — a card is mostly text and needs a
     // plain ground. Its left rail carries the weave instead.
     const card = el('div', {
-      class: 'kan-card ' + (st ? 'stage-' + st.step : 'kan-card-unset'),
+      class: 'kan-card ' + (st ? 'stage-' + st.fill : 'kan-card-unset')
+        + (order.status.behindTracker ? ' kan-card-behind' : ''),
       draggable: 'true',
       'data-tip': order.status.reason,
       'data-po': order.po,
@@ -10011,6 +10419,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       el('div', { class: 'kan-po', text: order.po }),
       el('div', { class: 'kan-meta', text: order.accountName + ' · ' + order.itemName }),
       el('div', { class: 'kan-meta', text: (order.values.cases != null ? order.values.cases + ' cs' : '') }),
+      nextLine(order),
       el('div', { class: 'kan-foot' }, [
         el('span', {
           class: 'chip ' + SOURCE_CHIP[order.status.source],
@@ -10031,6 +10440,78 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   /* ------------------------------------------------------------------ *
    * Order status page
    * ------------------------------------------------------------------ */
+
+  /** The twelve stages as options, grouped by phase and numbered. */
+  function stageOptions(isSelected) {
+    return AMI.PHASES.map((p) => el('optgroup', { label: p.label },
+      AMI.ORDER_STATUSES.filter((s) => s.phase === p.id).map((s) => el('option', {
+        value: s.id, selected: !!(isSelected && isSelected(s)),
+        text: s.step + '. ' + s.label + (s.gate ? ' (person check)' : ''),
+      }))));
+  }
+
+  /**
+   * One order's path through the twelve stages, as a strip of marks. Each mark
+   * names its stage and what shows it done, or that nothing does.
+   */
+  const TRAIL_WORD = {
+    done: 'done — from the tracker', current: 'current stage — set by a person',
+    unrecorded: 'not recorded', pending: 'not yet',
+  };
+  function stageTrailStrip(order) {
+    const trail = AMI.stageTrail(order);
+    const groups = AMI.PHASES.map((p) => el('span', { class: 'trail-phase' },
+      trail.filter((t) => t.status.phase === p.id).map((t) => el('span', {
+        class: 'trail-mark trail-' + t.state + (t.status.gate ? ' trail-gate' : '')
+          + (t.state === 'done' || t.state === 'current' ? ' ' + AMI.stageClass(t.status.fill) : ''),
+        'data-tip': t.status.step + '. ' + t.status.label + ' — ' + TRAIL_WORD[t.state]
+          + (t.detail ? ': ' + t.detail : ''),
+        'aria-label': t.status.step + '. ' + t.status.label + ', ' + TRAIL_WORD[t.state],
+      }))));
+    return el('span', { class: 'trail', role: 'img',
+      'aria-label': 'Workflow trail for PO ' + order.po }, groups);
+  }
+
+  /**
+   * The workflow itself, written out: each stage, its phase, and what records it
+   * — so nobody has to guess why an order sits where it does.
+   */
+  function workflowReference() {
+    const chasesByStage = {};
+    for (const r of AMI.FOLLOW_UP_RULES) (chasesByStage[r.stage] = chasesByStage[r.stage] || []).push(r.subject);
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: '#' }), el('th', { text: 'Stage' }), el('th', { text: 'Phase' }),
+      el('th', { text: 'Done when' }), el('th', { text: 'Chased on Follow-ups' }),
+    ])]));
+    const body = el('tbody');
+    for (const s of AMI.ORDER_STATUSES) {
+      const recordedBy = s.gate
+        ? 'A person marks it done. No tracker column records it, so it is never read from the sheet.'
+        : s.requires
+          ? 'The tracker shows ' + s.requires.map((id) => AMI.statusById(id).label).join(' and ')
+            + ' both done — or a person closes the order.'
+          : 'The tracker records ' + s.evidence.map((e) => '“' + e.name + '”').join(' and ') + '.';
+      body.appendChild(el('tr', {}, [
+        el('td', { class: 'num', text: String(s.step) }),
+        el('td', {}, [
+          el('span', { class: 'swatch ' + AMI.stageClass(s.fill), 'aria-hidden': 'true',
+            style: 'display:inline-block;vertical-align:middle;margin-right:8px' }),
+          el('b', { text: s.label }),
+          s.gate ? el('span', { class: 'bar-sub', text: 'person check' }) : null,
+        ]),
+        el('td', { text: s.phaseLabel }),
+        el('td', { text: recordedBy }),
+        el('td', { text: (chasesByStage[s.id] || []).join('; ') || '—' }),
+      ]));
+    }
+    table.appendChild(body);
+    return el('details', { class: 'fold' }, [
+      el('summary', { text: 'The twelve-stage workflow, and what records each stage' }),
+      el('div', { class: 'table-scroll' }, [table]),
+    ]);
+  }
 
   async function renderOrderStatus() {
     const host = $('#orderStatusBody');
@@ -10062,13 +10543,14 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     host.appendChild(el('div', { class: 'msg info' }, [
       el('span', { class: 'icon', text: 'i' }),
       el('div', {}, [
-        el('strong', { text: 'An invoiced order is a closed order.' }),
+        el('strong', { text: 'Orders follow the division’s twelve-stage workflow, from Purchase Order Received to Order Closure & Reporting.' }),
         el('span', {
           class: 'detail',
-          text: 'Invoicing is the end of the pipeline here, so the last stage reads '
-            + '“Invoiced and Closed”. A NAV invoice number on the tracker puts an order there '
-            + 'on its own. Use the “Hide invoiced and closed” switch on this page or on Account '
-            + 'Health to work with only what is still live.',
+          text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
+            + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
+            + 'a person can mark them done — the tracker moving past them does not mean they happened. '
+            + 'An order closes when it is invoiced and every supplier-settlement column is filled, or when '
+            + 'a person closes it. Use “Hide closed orders” to work with only what is still live.',
         }),
       ]),
     ]));
@@ -10093,7 +10575,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     /* Bulk action */
     const bulkSel = el('select', {}, [
       el('option', { value: '', text: 'Set selected to…' }),
-      ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, text: s.label })),
+      ...stageOptions(),
       el('option', { value: '__clear', text: 'Clear status (fall back to the tracker)' }),
     ]);
     const selected = new Set();
@@ -10101,7 +10583,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const table = el('table', { class: 'data' });
     table.appendChild(el('thead', {}, [el('tr', {}, [
       el('th', {}), el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
-      el('th', { text: 'Cases' }), el('th', { text: 'Status' }), el('th', { text: 'Where it comes from' }),
+      el('th', { text: 'Cases' }), el('th', { text: 'Stage reached' }), el('th', { text: 'Workflow' }),
+      el('th', { text: 'Next stage' }), el('th', { text: 'Where it comes from' }),
       el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
     ])]));
     const tbody = el('tbody');
@@ -10118,10 +10601,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         },
       }, [
         el('option', { value: '__none', text: '— not set —', selected: o.status.source !== 'set' }),
-        ...AMI.ORDER_STATUSES.map((s) => el('option', {
-          value: s.id, selected: o.status.source === 'set' && s.id === o.status.statusId, text: s.label,
-        })),
+        ...stageOptions((s) => o.status.source === 'set' && s.id === o.status.statusId),
       ]);
+      const next = AMI.nextForOrder(o);
 
       const box = el('input', {
         type: 'checkbox',
@@ -10138,6 +10620,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           el('div', { html: AMI.statusPill(st, { short: true, tip: o.status.reason }) }).firstChild,
           sel,
         ]),
+        el('td', {}, [stageTrailStrip(o)]),
+        el('td', { text: next ? next.step + '. ' + next.label : 'Complete' }),
         el('td', {}, [el('span', {
           class: 'chip ' + SOURCE_CHIP[o.status.source],
           text: SOURCE_LONG[o.status.source],
@@ -10174,8 +10658,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           }),
         ]),
         el('div', { class: 'table-scroll' }, [table]),
+        el('p', {
+          class: 'help', style: 'margin:10px 0 0',
+          text: 'Workflow marks, in stage order and grouped by phase: filled — the tracker shows it done; '
+            + 'ringed — the current stage, set by a person; dashed with a bar — passed but nothing records it; '
+            + 'outline — not reached. Diamonds are the two person checks. Hover a mark for the column behind it.',
+        }),
       ]),
     ]));
+
+    host.appendChild(el('div', { class: 'card' }, [el('div', { class: 'body' }, [workflowReference()])]));
 
     host.appendChild(el('div', { id: 'summaryHost' }));
     if (state.summaryHtml) renderSummaryCard();

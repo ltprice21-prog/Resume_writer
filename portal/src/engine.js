@@ -1358,10 +1358,16 @@
    * presence makes the chase pointless — the work moved on without the answer.
    * A superseded item is reported, not discarded: a gap in the tracker is worth
    * seeing even once it stops being urgent.
+   *
+   * `stage` is the workflow stage the missing answer belongs to. The winery
+   * invoice, proof of export and forwarder's invoice belong to Supplier
+   * Settlement, which comes after Customer Invoicing — so a NAV invoice number
+   * does not overtake them. They stay live until the column is filled.
    */
   const FOLLOW_UP_RULES = [
     {
       id: 'winery-confirm',
+      stage: 'supply-confirmed',
       supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Winery Confirmed Available Date/i,
@@ -1372,6 +1378,7 @@
     },
     {
       id: 'bottling-date',
+      stage: 'documents',
       supersededBy: [/^Actual Collection Date/i, /^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'winery',
       missing: /^Bottling Date Confirmed/i,
@@ -1382,6 +1389,7 @@
     },
     {
       id: 'lot-number',
+      stage: 'documents',
       supersededBy: [/^NAV INV/i],
       party: 'winery',
       missing: /^Lot Number/i,
@@ -1392,6 +1400,7 @@
     },
     {
       id: 'collection',
+      stage: 'shipped',
       supersededBy: [/^(Delivery date to CDG|Actual delivery date)/i, /^NAV INV/i],
       party: 'forwarder',
       missing: /^Actual Collection Date/i,
@@ -1402,6 +1411,7 @@
     },
     {
       id: 'delivery',
+      stage: 'delivered',
       supersededBy: [/^NAV INV/i],
       party: 'forwarder',
       missing: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -1412,7 +1422,8 @@
     },
     {
       id: 'winery-invoice',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      supersededBy: [],
       party: 'winery',
       missing: /^Winery invoice received/i,
       after: /^Actual Collection Date/i,
@@ -1422,7 +1433,8 @@
     },
     {
       id: 'proof-of-export',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      supersededBy: [],
       party: 'internal',
       missing: /^Proof of [Ee]xport/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -1433,7 +1445,9 @@
     },
     {
       id: 'forwarder-invoice',
-      supersededBy: [/^NAV INV/i],
+      stage: 'settled',
+      // Accounts logging the invoice as received is the settlement step itself.
+      supersededBy: [/^Forwarder.s invoice received date/i],
       party: 'forwarder',
       missing: /^Forwarder's invoice$/i,
       after: /^(Delivery date to CDG|Actual delivery date)/i,
@@ -1504,7 +1518,7 @@
 
         const overtaken = supersededBy(sheet, header, r, rule);
         out.push({
-          row: r, po, ruleId: rule.id, party: rule.party,
+          row: r, po, ruleId: rule.id, party: rule.party, stage: rule.stage || '',
           missingHeader: header.columns.find((c) => c.col === missingCol).header,
           anchorHeader: header.columns.find((c) => c.col === afterCol).header,
           anchorDate: anchor, ageDays: age,

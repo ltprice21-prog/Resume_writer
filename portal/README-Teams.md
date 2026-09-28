@@ -182,20 +182,51 @@ button on each account-health row does the same for a whole account.
 
 Escape, the backdrop or **Close** dismisses it.
 
-### The four stages
+### The twelve-stage workflow
 
-`Order placed – awaiting shipment` → `In transit` → `Delivered` → `Invoiced and Closed`
+The division's workflow, grouped into four phases:
 
-**Invoicing ends the order.** There is no separate closed stage and no rule that moves orders
-between the two, because the two were never different here — a NAV invoice number on the tracker
-puts an order at the last stage on its own, and everything short of that counts as open.
+| # | Stage | Phase | Done when |
+| --- | --- | --- | --- |
+| 1 | Purchase Order Received | Order intake | the tracker records *PO Received Date* |
+| 2 | Order Validation | Order intake | **a person marks it done** — no column records it |
+| 3 | Supplier PO Creation | Order intake | the tracker records *PO date sent to winery* |
+| 4 | Supply Confirmation | Supply & preparation | the tracker records *Winery Confirmed Available Date* |
+| 5 | Logistics Planning | Supply & preparation | the tracker records *Truck Type* |
+| 6 | Documentation Management | Supply & preparation | the tracker records *Bottling Date Confirmed* and *Lot Number* |
+| 7 | Pre-Shipment Review | Supply & preparation | **a person marks it done** — no column records it |
+| 8 | Shipment Execution | Shipment | the tracker records *Actual Collection Date from Cellars* |
+| 9 | Delivery Confirmation | Shipment | the tracker records the delivery date |
+| 10 | Customer Invoicing | Financial close | the tracker records *NAV INV #* |
+| 11 | Supplier Settlement | Financial close | the tracker records *Winery invoice received*, *Proof of Export Sent to Winery* and *Forwarder's invoice received date for ACCT* |
+| 12 | Order Closure & Reporting | Financial close | stages 10 and 11 are both done on the tracker, or a person closes it |
 
-A status recorded as *Closed* before the stages merged still reads correctly; it resolves onto
-the merged stage and says so, so old records keep meaning what they meant.
+An order sits at the **furthest stage it has completed**, and every view names the stage it is
+waiting on next. Where a stage needs several columns, every one the sheet carries must be filled
+(`to fill` counts as blank); a column an older cycle sheet does not have is skipped.
+
+**Order Validation and Pre-Shipment Review are never read from the tracker.** They are checks a
+person makes, and no column records that they happened. The tracker can carry an order past them —
+a collection date puts it at Shipment Execution — but that shows the order moved on, not that the
+check was made, and the per-order trail shows the check as *not recorded*.
+
+**Invoicing no longer closes an order.** Supplier Settlement comes after it, so an invoiced order
+stays open until the settlement columns are filled or a person closes it, and the winery-invoice,
+proof-of-export and forwarder-invoice chases stay live after the NAV invoice number goes in.
+Nothing on an order a person has closed is chased.
+
+Statuses stored under the old four-stage pipeline read as their new stage and say so: *Order
+placed* → Supplier PO Creation, *In transit* → Shipment Execution, *Delivered* → Delivery
+Confirmation, *Invoiced and Closed* → Order Closure & Reporting (the person meant closed, so it
+stays closed).
+
+On the **Order status** page each order shows its trail through all twelve stages, and the
+workflow itself — each stage, what records it, and which follow-ups belong to it — is written out
+at the foot of the page.
 
 ### Hiding what is finished
 
-**Hide invoiced and closed**, on both Account Health and Order status, leaves the finished
+**Hide closed orders**, on both Account Health and Order status, leaves the finished
 orders out of the view. Counts, bars and the board all follow the switch — it changes what you
 are looking at, not what is true. The choice is per person and is remembered.
 
@@ -210,10 +241,11 @@ Every order's stage is one of two things, and the interface always says which:
 | | |
 | --- | --- |
 | **Set by a person** | Chosen on the Order status page or by dragging a kanban card. Records who and when. |
-| **From the tracker** | Read from the dated columns already in the workbook — a NAV invoice number means *Invoiced*, a delivery date means *Delivered*, a collection date means *In transit*, a PO sent to the winery means *Awaiting shipment*. |
+| **From the tracker** | Read from the columns already in the workbook — see the table above for which column records which stage. |
 
-The tracker can carry an order as far as *Invoiced*. *Closed* has no column behind it, so it
-only ever comes from a person — which is the point: closing is a decision, not a side effect.
+The two person checks have no column behind them, so they only ever come from a person. A status
+set behind what the tracker already shows is kept — a person's choice stands — but the reason
+says the tracker is further along, and the next stage is counted from the tracker.
 
 Nothing is guessed. An order with neither reads **Not set** rather than being filed under a
 stage nobody chose.
@@ -458,7 +490,7 @@ portal/
     templates.js                  .msg/.oft/.eml/.docx ingestion, RTF de-encapsulation
     airports.js                   airport table and address lookup
     workspace.js                  divisions, accounts, items, people, templates, attachments
-    status.js                     the four stages, derivation, contracts, schedule, roll-ups
+    status.js                     the twelve-stage workflow, derivation, contracts, schedule, roll-ups
     charts.js                     stat tiles, bars, columns, stage fills
     persist.js                    remembering the folder and unposted work
     app.js / app-teams.js         the two interfaces
@@ -469,6 +501,7 @@ portal/
     ui.test.js            58 assertions   single-account app in Chromium
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
     status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
+    workflow.test.js      66 assertions   the twelve-stage workflow — needs no fixtures
     teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 
@@ -477,6 +510,7 @@ node portal/build.js
 node portal/tests/engine.test.js <fixturesDir>
 node portal/tests/teams.test.js <fixturesDir>
 node portal/tests/status.test.js <fixturesDir>
+node portal/tests/workflow.test.js                  # no fixtures needed
 node portal/tests/ui.test.js <fixturesDir>          # needs playwright
 node portal/tests/teams-ui.test.js <fixturesDir>    # needs playwright
 ```
@@ -491,19 +525,20 @@ their own surface; dark mode is its own set of steps, not an automatic inversion
 good/warning/critical colours are used only for health and never for a series, and always ship
 with an icon and a word so colour never carries meaning alone.
 
-**Every stage also carries a weave**, and that is the primary signal:
+**Every phase also carries a weave**, and that is the primary signal:
 
-| Stage | Fill |
-| --- | --- |
-| Order placed – awaiting shipment | solid |
-| In transit | diagonal stripes |
-| Delivered | horizontal stripes |
-| Invoiced and Closed | vertical stripes |
+| Phase | Stages | Fill |
+| --- | --- | --- |
+| Order intake | 1–3 | solid |
+| Supply & preparation | 4–7 | diagonal stripes |
+| Shipment | 8–9 | horizontal stripes |
+| Financial close | 10–12 | vertical stripes |
 
-Four stages on one hue is the hardest case for a reader with colour vision deficiency, so hue is
-never asked to work alone. The weave appears on bar segments, legend swatches, board headings,
-card rails and stage pills; the legend **names** each weave in words as well as showing it, so
-the key survives being read aloud, printed in grey or photocopied.
+Twelve fills cannot all stay distinct for a reader with colour vision deficiency, so fills belong
+to the four phases and **the stage itself is always named in words** — numbered, on pills, board
+columns, bars and the trail. The weave appears on bar segments, legend swatches, board headings,
+card rails and stage pills; the legend names each weave in words as well as showing it, so the key
+survives being read aloud, printed in grey or photocopied.
 
 A row that measures something other than pipeline position — an order's age, a count — takes the
 reserved status palette instead. A weave there would claim a stage the row does not have.

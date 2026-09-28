@@ -64,22 +64,37 @@ Field values: `pdf` · `computed` · `formula` · `carried` · `manual` · `edit
 Order stages: `set` (a person chose it) · `derived` (read from the tracker) ·
 `none` (nothing to go on — never guessed).
 
-### The four stages, in order
+### The twelve-stage workflow
 
-`placed` → `transit` → `delivered` → `invoiced` (terminal, labelled "Invoiced and
-Closed").
+`ORDER_STATUSES` is built from `STAGE_DEFS` in `status.js`: twelve stages in the
+division's order, each in one of four `PHASES` (intake, supply, shipment, close).
+A stage is *reached* when its work is done; `nextForOrder` names the one an order
+is waiting on, counted from whichever is further — the effective status or the
+tracker.
 
-Invoicing ends the order; there is no separate closed stage and no rule that
-moves orders between the two. `LEGACY_STATUS_IDS` maps a stored `closed` onto
-`invoiced` so records written before the merge keep meaning what they meant, and
-`canonicalStatusId` is the only place that mapping lives.
+Each tracker-recorded stage lists `evidence` headings; `stageEvidence` requires
+every heading the sheet carries to be filled (`to fill` is blank) and skips ones
+the sheet lacks. `closed` has `requires: ['customer-invoiced', 'settled']`. The two
+`gate` stages (`validated`, `pre-shipment`) have no evidence and are never derived
+— only a person sets them. Do not add a heuristic that infers them.
 
-Each stage also declares a `pattern` — solid, diagonal, horizontal, vertical —
-which is the **primary** signal, not decoration. The customer is colourblind and
-four stages sit on one hue, so hue never works alone: `stageClass(step)` paints
-both, `statusLegend` names the weave in words, and anything measuring something
-other than pipeline position (an age, a count) takes the reserved status palette
-via `tone` instead of a stage weave.
+`LEGACY_STATUS_IDS` maps the four-stage ids: `placed` → `supplier-po`, `transit` →
+`shipped`, `invoiced` → `closed` (a person who chose "Invoiced and Closed" meant
+closed). `delivered` kept its id. `canonicalStatusId` is the only place the mapping
+lives.
+
+Fills belong to phases, not stages: each status carries `fill` (1–4) and
+`pattern`, and `stageClass(fill)` paints them. Twelve weaves would not stay apart
+for a colourblind reader, so the stage is always named in words as well.
+
+Follow-up rules carry the `stage` they belong to. The three settlement chases
+(winery invoice, proof of export, forwarder's invoice) are **not** superseded by a
+NAV invoice number — settlement follows invoicing. The forwarder's-invoice chase
+is superseded by the received-for-ACCT date. In the Teams app, `withClosure` sets
+aside any chase on an order a person has closed.
+
+`tests/workflow.test.js` covers all of this against an in-memory tracker and needs
+no fixtures.
 
 ### Contract standing and the schedule
 

@@ -287,9 +287,9 @@
     });
     return el('label', {
       class: 'check-inline',
-      'data-tip': 'Leaves out orders at the Invoiced and Closed stage. Nothing is deleted — '
-        + 'the counts and totals on this page follow the switch.',
-    }, [box, document.createTextNode('Hide invoiced and closed')]);
+      'data-tip': 'Leaves out orders at Order Closure & Reporting, the last workflow stage. Nothing is '
+        + 'deleted — the counts and totals on this page follow the switch.',
+    }, [box, document.createTextNode('Hide closed orders')]);
   }
 
   function poColumn(header) {
@@ -2802,6 +2802,31 @@
   const PARTY_LABEL = { winery: 'Winery', forwarder: 'Forwarder', internal: 'Internal' };
   const PARTY_TO_ROLE = { winery: 'vendor', forwarder: 'trucker', internal: 'internal' };
 
+  /**
+   * A chase on an order a person has closed is overtaken, the same as one the
+   * tracker's own columns overtook. Order Closure is the end of the workflow, so
+   * nothing on a closed order is chased — but the blank is still listed.
+   */
+  function withClosure(followUp, accountId, itemId) {
+    if (followUp.superseded) return followUp;
+    const doc = state.statusDoc;
+    const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
+    if (!entry || AMI.isOpenStatus(entry.status)) return followUp;
+    return Object.assign({}, followUp, {
+      superseded: { header: 'Order status', value: 'closed', date: null },
+      supersededReason: 'still blank, but ' + (entry.updatedBy || 'someone') + ' closed the order'
+        + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '') + ' — nothing on a closed order is chased',
+    });
+  }
+
+  /** An item tracker's follow-ups, with person-closed orders set aside. */
+  const chasesFor = (p) => p.followUps.map((f) => withClosure(f, p.account.id, p.item.id));
+
+  const stageName = (id) => {
+    const st = AMI.statusById(id);
+    return st ? st.step + '. ' + st.label : '—';
+  };
+
   function renderFollowUps() {
     const host = $('#followBody');
     clear(host);
@@ -2814,7 +2839,7 @@
       const st = itemState(item.id);
       if (!st || !st.base) continue;
       for (const oi of AMI.findOpenItems(st.base.sheet, st.base.header, new Date())) {
-        state.openItems.push(Object.assign(oi, { itemId: item.id, itemName: item.name }));
+        state.openItems.push(Object.assign(withClosure(oi, account.id, item.id), { itemId: item.id, itemName: item.name }));
       }
     }
     state.openItems.sort((a, b) => b.ageDays - a.ageDays);
@@ -2852,8 +2877,8 @@
       const items = byParty[party];
       const tbl = el('table', { class: 'data' });
       tbl.appendChild(el('thead', {}, [el('tr', {}, [
-        el('th', {}), el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Outstanding' }),
-        el('th', { text: 'Measured from' }), el('th', { text: 'Age' }),
+        el('th', {}), el('th', { text: 'Item' }), el('th', { text: 'PO' }), el('th', { text: 'Workflow stage' }),
+        el('th', { text: 'Outstanding' }), el('th', { text: 'Measured from' }), el('th', { text: 'Age' }),
       ])]));
       const tbody = el('tbody');
       for (const entry of items) {
@@ -2865,6 +2890,7 @@
           })]),
           el('td', { text: entry.itemName }),
           el('td', { class: 'mono', text: entry.po }),
+          el('td', { text: stageName(entry.stage) }),
           el('td', { text: entry.missingHeader + (entry.placeholder ? ' ("' + entry.placeholder + '")' : '') }),
           el('td', { text: entry.anchorHeader + ': ' + AMI.formatShort(entry.anchorDate) }),
           el('td', { class: 'num', text: entry.ageDays + ' d' }),
@@ -2931,9 +2957,9 @@
       el('div', { class: 'body' }, [
         el('p', {
           class: 'help',
-          text: 'These columns are still blank, but the order has since been collected, delivered '
-            + 'or invoiced — so the answer would no longer change what happens next. Nothing was '
-            + 'deleted, and no email is drafted for them.',
+          text: 'These columns are still blank, but the order has since moved past the stage they '
+            + 'belong to, or a person has closed it — so the answer would no longer change what happens '
+            + 'next. Nothing was deleted, and no email is drafted for them.',
         }),
         details,
       ]),
@@ -3477,7 +3503,7 @@
           el('option', { value: '', text: 'Any status', selected: !f.statusId }),
           el('option', { value: '__open', text: 'Open only', selected: f.statusId === '__open' }),
           el('option', { value: '__unset', text: 'No status set', selected: f.statusId === '__unset' }),
-          ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, selected: s.id === f.statusId, text: s.label })),
+          ...stageOptions((s) => s.id === f.statusId),
         ]),
       ]));
     }
@@ -3539,8 +3565,8 @@
     const unset = orders.filter((o) => !o.status.statusId);
     // Only chases that still matter — the ones the workflow overtook are shown
     // on the Follow-ups page but never counted as outstanding work.
-    const followUps = scope.reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
-    const settledFollowUps = scope.reduce((n, p) => n + p.followUps.filter((f) => f.superseded).length, 0);
+    const followUps = scope.reduce((n, p) => n + chasesFor(p).filter((f) => !f.superseded).length, 0);
+    const settledFollowUps = scope.reduce((n, p) => n + chasesFor(p).filter((f) => f.superseded).length, 0);
     const stalest = open.reduce((w, o) => (o.ageDays != null && (!w || o.ageDays > w.ageDays) ? o : w), null);
 
     host.appendChild(pageHeader(
@@ -3664,7 +3690,7 @@
         el('span', { class: 'icon', text: 'i' }),
         el('div', {}, [
           el('strong', { text: unset.length + ' order(s) have no status set.' }),
-          el('span', { class: 'detail', text: 'Where the tracker has a dated collection, delivery or invoice, the stage shown is read from it. Set them explicitly on the Order status page.' }),
+          el('span', { class: 'detail', text: 'Nothing on the tracker records a stage for them yet. Where it does, the stage shown is read from it. Set them on the Order status page.' }),
         ]),
       ]));
     }
@@ -3685,31 +3711,60 @@
 
     /* ---------------- Pipeline ---------------- */
 
-    grid.appendChild(sectionHead('Pipeline',
-      'Where the orders themselves stand.'));
+    grid.appendChild(sectionHead('Workflow',
+      'Where the orders stand in the division’s twelve-stage workflow.'));
 
-    const stageSegments = (list, prefix, keyPrefix) => {
-      const c = AMI.countByStatus(list);
-      return AMI.ORDER_STATUSES.map((s) => {
-        const key = keyPrefix + s.id;
-        drill(key, (prefix ? prefix + ' — ' : '') + s.label,
-          s.hint, list.filter((o) => o.status.statusId === s.id));
+    // The bar is drawn by phase — four fills that stay distinct — and the
+    // twelve stages are listed beneath it by name, so no stage has to be told
+    // apart by shade alone.
+    const phaseSegments = (list, prefix, keyPrefix) => {
+      const c = AMI.countByPhase(list);
+      return AMI.PHASES.map((p) => {
+        const key = keyPrefix + p.id;
+        drill(key, (prefix ? prefix + ' — ' : '') + p.label,
+          p.hint, list.filter((o) => {
+            const st = AMI.statusById(o.status.statusId);
+            return st && st.phase === p.id;
+          }));
         return {
-          label: (prefix ? prefix + ' — ' : '') + s.label,
-          value: c[s.id], step: s.step, key,
-          patternWord: AMI.patternWord(s),
+          label: (prefix ? prefix + ' — ' : '') + p.label,
+          value: c[p.id], fill: p.fill, key,
+          patternWord: AMI.patternWord(p),
         };
       });
     };
+    const phaseCounts = AMI.countByPhase(orders);
 
     grid.appendChild(chartCard({
-      title: 'Order pipeline',
+      title: 'Workflow by phase',
       note: orders.length + ' order(s) in scope',
       span: 2,
       build: () => [
-        el('div', { html: AMI.stackedBar(stageSegments(orders, '', 'stage:'), { emptyText: 'No orders' }) }).firstChild,
-        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES, counts) }).firstChild,
-        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each stage has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in pipeline order. Click a band to list the orders in it.' }),
+        el('div', { html: AMI.stackedBar(phaseSegments(orders, '', 'phase:'), { emptyText: 'No orders' }) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.PHASES, phaseCounts) }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Each phase has its own weave as well as its own shade — solid, diagonal, horizontal, vertical, in workflow order. Click a band to list the orders in it.' }),
+      ],
+    }));
+
+    const stageRows = AMI.ORDER_STATUSES.map((s) => {
+      const key = 'stage:' + s.id;
+      const list = orders.filter((o) => o.status.statusId === s.id);
+      drill(key, s.step + '. ' + s.label, s.hint, list);
+      return {
+        label: s.step + '. ' + s.label,
+        sub: s.phaseLabel + (s.gate ? ' · person check, no tracker column' : ''),
+        value: counts[s.id], fill: s.fill, key,
+        tip: s.label + ': ' + counts[s.id] + ' order(s). ' + s.hint,
+      };
+    });
+
+    grid.appendChild(chartCard({
+      title: 'Orders at each stage',
+      note: 'the furthest stage each order has completed',
+      span: 2,
+      build: () => [
+        el('div', { html: AMI.barList(stageRows, { emptyText: 'No orders' }) }).firstChild,
+        el('p', { class: 'help', style: 'margin:10px 0 0', text: 'Order Validation and Pre-Shipment Review have no tracker column, so an order only sits there when a person has set it. The tracker can carry an order past them — that shows it moved on, not that the check was made. Click a bar to list the orders.' }),
       ],
     }));
 
@@ -3725,7 +3780,7 @@
       accountRows.push({
         label: account.name,
         sub: AMI.divisionName(state.workspace, account.divisionId),
-        segments: stageSegments(list, account.name, 'acct:' + accountId + ':'),
+        segments: phaseSegments(list, account.name, 'acct:' + accountId + ':'),
         meta: list.filter((x) => x.isOpen).length + ' open',
       });
     }
@@ -3735,7 +3790,7 @@
       title: 'Orders by account',
       build: () => [
         el('div', { html: AMI.barList(accountRows, { emptyText: 'No accounts in scope' }) }).firstChild,
-        el('div', { html: AMI.statusLegend(AMI.ORDER_STATUSES) }).firstChild,
+        el('div', { html: AMI.statusLegend(AMI.PHASES) }).firstChild,
       ],
     }));
 
@@ -3766,7 +3821,7 @@
     }));
 
     grid.appendChild(el('div', { class: 'card span-2' }, [
-      el('h2', {}, [document.createTextNode('Pipeline board'), el('span', { class: 'spacer' }),
+      el('h2', {}, [document.createTextNode('Workflow board'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: 'drag a card to change its status' })]),
       el('div', { class: 'body' }, [buildKanban(orders)]),
     ]));
@@ -3821,7 +3876,7 @@
       const account = state.workspace.accounts.find((a) => a.id === accountId);
       const list = orders.filter((o) => o.accountId === accountId);
       const fu = scope.filter((p) => p.account.id === accountId)
-        .reduce((n, p) => n + p.followUps.filter((f) => !f.superseded).length, 0);
+        .reduce((n, p) => n + chasesFor(p).filter((f) => !f.superseded).length, 0);
       const s = AMI.summariseAccount(account, AMI.divisionName(state.workspace, account.divisionId),
         list, fu, null, new Date());
       healthBody.appendChild(el('tr', {}, [
@@ -4270,17 +4325,21 @@
       if (!list.length) cards.appendChild(el('div', { class: 'kan-empty', text: 'Nothing here' }));
       for (const o of list) cards.appendChild(makeCard(o));
 
-      // The heading carries the stage's weave, so the columns stay apart at a
-      // glance without depending on their shade.
+      // The heading carries its phase's weave, so the phases stay apart at a
+      // glance without depending on their shade; the stage is named in words.
       const head = el('div', {
-        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.step) : ' kan-head-unset'),
-        'data-tip': hint + (stage ? ' Shown as ' + AMI.patternWord(stage) + '.' : ''),
+        class: 'kan-head' + (stage ? ' ' + AMI.stageClass(stage.fill) : ' kan-head-unset'),
+        'data-tip': hint + (stage ? ' ' + stage.phaseLabel + ' phase, shown as ' + AMI.patternWord(stage) + '.' : ''),
       }, [
         el('span', { class: 'kan-title', text: title }),
         el('span', { class: 'kan-count', text: String(list.length) }),
       ]);
 
-      const col = el('div', { class: 'kan-col' }, [head, cards]);
+      const col = el('div', { class: 'kan-col' + (stage && stage.gate ? ' kan-col-gate' : '') }, [
+        head,
+        stage && stage.gate ? el('div', { class: 'kan-gate-note', text: 'Person check — no tracker column' }) : null,
+        cards,
+      ].filter(Boolean));
 
       if (statusId) {
         col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-target'); });
@@ -4299,14 +4358,34 @@
       return col;
     };
 
-    for (const c of columns) {
-      board.appendChild(makeColumn(c.status.short, c.status, c.orders, c.status.id, c.status.hint));
+    for (const phase of AMI.PHASES) {
+      const cols = columns.filter((c) => c.status.phase === phase.id);
+      const n = cols.reduce((a, c) => a + c.orders.length, 0);
+      board.appendChild(el('div', { class: 'kan-phase' }, [
+        el('div', { class: 'kan-phase-head', 'data-tip': phase.hint }, [
+          el('span', { class: 'swatch ' + AMI.stageClass(phase.fill), 'aria-hidden': 'true' }),
+          el('span', { class: 'kan-phase-title', text: phase.label }),
+          el('span', { class: 'kan-count', text: String(n) }),
+        ]),
+        el('div', { class: 'kan-phase-cols' }, cols.map((c) =>
+          makeColumn(c.status.step + '. ' + c.status.short, c.status, c.orders, c.status.id, c.status.hint))),
+      ]));
     }
     if (unset.length) {
-      board.appendChild(makeColumn('No status', null, unset, '',
-        'Nothing in the tracker indicates a stage, and nobody has set one.'));
+      board.appendChild(el('div', { class: 'kan-phase' }, [
+        el('div', { class: 'kan-phase-head' }, [el('span', { class: 'kan-phase-title', text: 'Not started' })]),
+        el('div', { class: 'kan-phase-cols' }, [makeColumn('No status', null, unset, '',
+          'Nothing in the tracker indicates a stage, and nobody has set one.')]),
+      ]));
     }
     return board;
+  }
+
+  /** What an order is waiting on — the next stage, by name. */
+  function nextLine(order) {
+    const next = AMI.nextForOrder(order);
+    if (!next) return el('div', { class: 'kan-next', text: 'Workflow complete' });
+    return el('div', { class: 'kan-next', text: 'Next: ' + next.step + '. ' + next.label }, []);
   }
 
   function makeCard(order) {
@@ -4314,7 +4393,8 @@
     // Only the stage tokens, not the fill — a card is mostly text and needs a
     // plain ground. Its left rail carries the weave instead.
     const card = el('div', {
-      class: 'kan-card ' + (st ? 'stage-' + st.step : 'kan-card-unset'),
+      class: 'kan-card ' + (st ? 'stage-' + st.fill : 'kan-card-unset')
+        + (order.status.behindTracker ? ' kan-card-behind' : ''),
       draggable: 'true',
       'data-tip': order.status.reason,
       'data-po': order.po,
@@ -4322,6 +4402,7 @@
       el('div', { class: 'kan-po', text: order.po }),
       el('div', { class: 'kan-meta', text: order.accountName + ' · ' + order.itemName }),
       el('div', { class: 'kan-meta', text: (order.values.cases != null ? order.values.cases + ' cs' : '') }),
+      nextLine(order),
       el('div', { class: 'kan-foot' }, [
         el('span', {
           class: 'chip ' + SOURCE_CHIP[order.status.source],
@@ -4342,6 +4423,78 @@
   /* ------------------------------------------------------------------ *
    * Order status page
    * ------------------------------------------------------------------ */
+
+  /** The twelve stages as options, grouped by phase and numbered. */
+  function stageOptions(isSelected) {
+    return AMI.PHASES.map((p) => el('optgroup', { label: p.label },
+      AMI.ORDER_STATUSES.filter((s) => s.phase === p.id).map((s) => el('option', {
+        value: s.id, selected: !!(isSelected && isSelected(s)),
+        text: s.step + '. ' + s.label + (s.gate ? ' (person check)' : ''),
+      }))));
+  }
+
+  /**
+   * One order's path through the twelve stages, as a strip of marks. Each mark
+   * names its stage and what shows it done, or that nothing does.
+   */
+  const TRAIL_WORD = {
+    done: 'done — from the tracker', current: 'current stage — set by a person',
+    unrecorded: 'not recorded', pending: 'not yet',
+  };
+  function stageTrailStrip(order) {
+    const trail = AMI.stageTrail(order);
+    const groups = AMI.PHASES.map((p) => el('span', { class: 'trail-phase' },
+      trail.filter((t) => t.status.phase === p.id).map((t) => el('span', {
+        class: 'trail-mark trail-' + t.state + (t.status.gate ? ' trail-gate' : '')
+          + (t.state === 'done' || t.state === 'current' ? ' ' + AMI.stageClass(t.status.fill) : ''),
+        'data-tip': t.status.step + '. ' + t.status.label + ' — ' + TRAIL_WORD[t.state]
+          + (t.detail ? ': ' + t.detail : ''),
+        'aria-label': t.status.step + '. ' + t.status.label + ', ' + TRAIL_WORD[t.state],
+      }))));
+    return el('span', { class: 'trail', role: 'img',
+      'aria-label': 'Workflow trail for PO ' + order.po }, groups);
+  }
+
+  /**
+   * The workflow itself, written out: each stage, its phase, and what records it
+   * — so nobody has to guess why an order sits where it does.
+   */
+  function workflowReference() {
+    const chasesByStage = {};
+    for (const r of AMI.FOLLOW_UP_RULES) (chasesByStage[r.stage] = chasesByStage[r.stage] || []).push(r.subject);
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: '#' }), el('th', { text: 'Stage' }), el('th', { text: 'Phase' }),
+      el('th', { text: 'Done when' }), el('th', { text: 'Chased on Follow-ups' }),
+    ])]));
+    const body = el('tbody');
+    for (const s of AMI.ORDER_STATUSES) {
+      const recordedBy = s.gate
+        ? 'A person marks it done. No tracker column records it, so it is never read from the sheet.'
+        : s.requires
+          ? 'The tracker shows ' + s.requires.map((id) => AMI.statusById(id).label).join(' and ')
+            + ' both done — or a person closes the order.'
+          : 'The tracker records ' + s.evidence.map((e) => '“' + e.name + '”').join(' and ') + '.';
+      body.appendChild(el('tr', {}, [
+        el('td', { class: 'num', text: String(s.step) }),
+        el('td', {}, [
+          el('span', { class: 'swatch ' + AMI.stageClass(s.fill), 'aria-hidden': 'true',
+            style: 'display:inline-block;vertical-align:middle;margin-right:8px' }),
+          el('b', { text: s.label }),
+          s.gate ? el('span', { class: 'bar-sub', text: 'person check' }) : null,
+        ]),
+        el('td', { text: s.phaseLabel }),
+        el('td', { text: recordedBy }),
+        el('td', { text: (chasesByStage[s.id] || []).join('; ') || '—' }),
+      ]));
+    }
+    table.appendChild(body);
+    return el('details', { class: 'fold' }, [
+      el('summary', { text: 'The twelve-stage workflow, and what records each stage' }),
+      el('div', { class: 'table-scroll' }, [table]),
+    ]);
+  }
 
   async function renderOrderStatus() {
     const host = $('#orderStatusBody');
@@ -4373,13 +4526,14 @@
     host.appendChild(el('div', { class: 'msg info' }, [
       el('span', { class: 'icon', text: 'i' }),
       el('div', {}, [
-        el('strong', { text: 'An invoiced order is a closed order.' }),
+        el('strong', { text: 'Orders follow the division’s twelve-stage workflow, from Purchase Order Received to Order Closure & Reporting.' }),
         el('span', {
           class: 'detail',
-          text: 'Invoicing is the end of the pipeline here, so the last stage reads '
-            + '“Invoiced and Closed”. A NAV invoice number on the tracker puts an order there '
-            + 'on its own. Use the “Hide invoiced and closed” switch on this page or on Account '
-            + 'Health to work with only what is still live.',
+          text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
+            + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
+            + 'a person can mark them done — the tracker moving past them does not mean they happened. '
+            + 'An order closes when it is invoiced and every supplier-settlement column is filled, or when '
+            + 'a person closes it. Use “Hide closed orders” to work with only what is still live.',
         }),
       ]),
     ]));
@@ -4404,7 +4558,7 @@
     /* Bulk action */
     const bulkSel = el('select', {}, [
       el('option', { value: '', text: 'Set selected to…' }),
-      ...AMI.ORDER_STATUSES.map((s) => el('option', { value: s.id, text: s.label })),
+      ...stageOptions(),
       el('option', { value: '__clear', text: 'Clear status (fall back to the tracker)' }),
     ]);
     const selected = new Set();
@@ -4412,7 +4566,8 @@
     const table = el('table', { class: 'data' });
     table.appendChild(el('thead', {}, [el('tr', {}, [
       el('th', {}), el('th', { text: 'PO' }), el('th', { text: 'Account' }), el('th', { text: 'Item' }),
-      el('th', { text: 'Cases' }), el('th', { text: 'Status' }), el('th', { text: 'Where it comes from' }),
+      el('th', { text: 'Cases' }), el('th', { text: 'Stage reached' }), el('th', { text: 'Workflow' }),
+      el('th', { text: 'Next stage' }), el('th', { text: 'Where it comes from' }),
       el('th', { text: 'Last dated activity' }), el('th', { text: 'Days' }),
     ])]));
     const tbody = el('tbody');
@@ -4429,10 +4584,9 @@
         },
       }, [
         el('option', { value: '__none', text: '— not set —', selected: o.status.source !== 'set' }),
-        ...AMI.ORDER_STATUSES.map((s) => el('option', {
-          value: s.id, selected: o.status.source === 'set' && s.id === o.status.statusId, text: s.label,
-        })),
+        ...stageOptions((s) => o.status.source === 'set' && s.id === o.status.statusId),
       ]);
+      const next = AMI.nextForOrder(o);
 
       const box = el('input', {
         type: 'checkbox',
@@ -4449,6 +4603,8 @@
           el('div', { html: AMI.statusPill(st, { short: true, tip: o.status.reason }) }).firstChild,
           sel,
         ]),
+        el('td', {}, [stageTrailStrip(o)]),
+        el('td', { text: next ? next.step + '. ' + next.label : 'Complete' }),
         el('td', {}, [el('span', {
           class: 'chip ' + SOURCE_CHIP[o.status.source],
           text: SOURCE_LONG[o.status.source],
@@ -4485,8 +4641,16 @@
           }),
         ]),
         el('div', { class: 'table-scroll' }, [table]),
+        el('p', {
+          class: 'help', style: 'margin:10px 0 0',
+          text: 'Workflow marks, in stage order and grouped by phase: filled — the tracker shows it done; '
+            + 'ringed — the current stage, set by a person; dashed with a bar — passed but nothing records it; '
+            + 'outline — not reached. Diamonds are the two person checks. Hover a mark for the column behind it.',
+        }),
       ]),
     ]));
+
+    host.appendChild(el('div', { class: 'card' }, [el('div', { class: 'body' }, [workflowReference()])]));
 
     host.appendChild(el('div', { id: 'summaryHost' }));
     if (state.summaryHtml) renderSummaryCard();

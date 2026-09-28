@@ -22,9 +22,13 @@
    * ------------------------------------------------------------------ *
    *
    * A stage is drawn with a hue AND a weave, because hue alone excludes a
-   * reader with colour vision deficiency — and on this pipeline the four stages
-   * sit on one hue by design, which makes them the hardest case. The weave order
-   * is solid, diagonal, horizontal, vertical, matching pipeline order.
+   * reader with colour vision deficiency — and the fills sit on one hue by
+   * design, which makes them the hardest case. The weave order is solid,
+   * diagonal, horizontal, vertical, matching workflow order.
+   *
+   * Fills belong to the four workflow PHASES, not the twelve stages: four weaves
+   * stay distinct, twelve would not. Anything showing a stage names it in words
+   * as well. `fill` is the phase number (1–4); `step` the stage number (1–12).
    */
 
   const PATTERN_WORD = {
@@ -32,8 +36,11 @@
     horizontal: 'horizontal stripes', vertical: 'vertical stripes',
   };
 
-  /** The class that paints a stage. Everything showing a stage uses this. */
-  const stageClass = (step) => 'stage-fill stage-' + step;
+  /** The class that paints a phase fill (1–4). Everything showing a stage uses this. */
+  const stageClass = (fill) => 'stage-fill stage-' + fill;
+
+  /* A status, phase or segment's fill number. */
+  const fillOf = (s) => (s && (s.fill || s.step)) || 1;
 
   /** Spoken form of a stage's fill, for tooltips and screen readers. */
   const patternWord = (status) => PATTERN_WORD[(status && status.pattern) || 'solid'] || 'solid';
@@ -104,13 +111,13 @@
     }
     const parts = segments.filter((s) => s.value > 0).map((s) => {
       const pct = (s.value / total) * 100;
-      const patterned = s.step && s.step !== 1;
+      const patterned = fillOf(s) !== 1;
       const label = pct >= (o.labelThreshold || 11)
         ? '<span class="bar-inline' + (patterned ? ' on-pattern' : '') + '">' + esc(s.value) + '</span>'
         : '';
       const tip = s.label + ': ' + fmt(s.value) + ' of ' + fmt(total) + ' (' + Math.round(pct) + '%)'
         + (s.patternWord ? ' · ' + s.patternWord : '');
-      return '<span class="bar-seg ' + esc(stageClass(s.step || 1)) + '"'
+      return '<span class="bar-seg ' + esc(stageClass(fillOf(s))) + '"'
         + ' style="flex:' + s.value + ';"'
         + (s.key ? ' data-drill="' + esc(s.key) + '" tabindex="0" role="button"' : '')
         + ' data-tip="' + esc(tip) + '">' + label + '</span>';
@@ -127,7 +134,7 @@
       const n = counts ? counts[s.id] : null;
       const word = patternWord(s);
       return '<li data-tip="' + esc(s.hint + ' Shown as ' + word + '.') + '">'
-        + '<span class="swatch ' + esc(stageClass(s.step)) + '" aria-hidden="true"></span>'
+        + '<span class="swatch ' + esc(stageClass(fillOf(s))) + '" aria-hidden="true"></span>'
         + '<span class="legend-label">' + esc(s.short) + '</span>'
         + '<span class="legend-pattern">' + esc(word) + '</span>'
         + (n != null ? '<span class="legend-value">' + fmt(n) + '</span>' : '')
@@ -156,7 +163,7 @@
       // A row that measures something other than pipeline position (an age, a
       // count) takes the reserved status palette, never a stage weave — a weave
       // there would claim a stage the row does not have.
-      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.step || 3);
+      const paint = r.tone ? 'bar-tone-' + r.tone : stageClass(r.fill || r.step || 3);
       const inner = r.segments
         ? stackedBar(r.segments, { labelThreshold: 14 })
         : '<div class="bar-track"><span class="bar-seg ' + esc(paint) + '"'
@@ -251,8 +258,9 @@
       return '<span class="pill pill-unset"' + (o.tip ? ' data-tip="' + esc(o.tip) + '"' : '') + '>Not set</span>';
     }
     const tip = [o.tip, 'Shown as ' + patternWord(status) + '.'].filter(Boolean).join(' ');
-    return '<span class="pill pill-stage ' + esc(stageClass(status.step)) + '"'
-      + ' data-tip="' + esc(tip) + '">' + esc(o.short ? status.short : status.label) + '</span>';
+    return '<span class="pill pill-stage ' + esc(stageClass(fillOf(status))) + '"'
+      + ' data-tip="' + esc(tip) + '">' + (status.step ? status.step + '. ' : '')
+      + esc(o.short ? status.short : status.label) + '</span>';
   }
 
   /* ------------------------------------------------------------------ *
@@ -285,7 +293,7 @@
   Object.assign(AMI, {
     statTiles, stackedBar, statusLegend, barList, columnChart,
     healthPill, statusPill, monthlySeries, MONTH_SHORT,
-    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD,
+    stageClass, stagePatternDefs, stagePaint, patternWord, PATTERN_WORD, fillOf,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

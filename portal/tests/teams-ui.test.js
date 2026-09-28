@@ -539,15 +539,15 @@ async function buildBundle() {
   ok('the page is titled Account Health', /Account Health/i.test(dashText), dashText.slice(0, 120));
   ok('headline figures are shown',
     /OPEN ORDERS/i.test(dashText) && /IN TRANSIT/i.test(dashText), dashText.slice(0, 400));
-  ok('the pipeline card is present', /Order pipeline/i.test(dashText));
+  ok('the pipeline card is present', /Workflow by phase/i.test(dashText) && /Orders at each stage/i.test(dashText));
   ok('the page is broken into sections', /CONTRACTS/i.test(dashText) && /WHAT IS COMING/i.test(dashText)
-    && /PIPELINE/i.test(dashText) && /NEEDS ATTENTION/i.test(dashText),
+    && /WORKFLOW/i.test(dashText) && /NEEDS ATTENTION/i.test(dashText),
     dashText.replace(/\n/g, ' | ').slice(0, 600));
   ok('orders are broken down by account', /Orders by account/i.test(dashText));
   ok('throughput over time is charted', /Cases collected per month/i.test(dashText));
   ok('an attention list is present', /Longest without movement/i.test(dashText));
   ok('an account health table is present', /Account health/i.test(dashText));
-  ok('a kanban board is present', /Pipeline board/i.test(dashText));
+  ok('a kanban board is present', /Workflow board/i.test(dashText));
 
   ok('the mistyped tracker date is surfaced',
     /date the tracker cannot mean/i.test(dashText), dashText.slice(0, 600));
@@ -581,17 +581,17 @@ async function buildBundle() {
     headClasses.filter((c) => /stage-fill/.test(c)).length >= 4, headClasses.join(' | '));
 
   console.log('\nZooming and drilling into a chart');
-  await page.locator('#dashboardBody .card', { hasText: 'Order pipeline' })
+  await page.locator('#dashboardBody .card', { hasText: 'Workflow by phase' })
     .locator('button', { hasText: 'Expand' }).click();
   await page.waitForSelector('.overlay-panel');
   ok('a chart opens larger in an overlay',
-    /Order pipeline/.test(await page.locator('.overlay-panel').innerText()));
+    /Workflow by phase/.test(await page.locator('.overlay-panel').innerText()));
   await page.keyboard.press('Escape');
   await page.waitForSelector('.overlay-panel', { state: 'detached' });
   ok('and Escape closes it', true);
 
   // Clicking a band lists the orders behind it.
-  const band = page.locator('#dashboardBody .card', { hasText: 'Order pipeline' })
+  const band = page.locator('#dashboardBody .card', { hasText: 'Workflow by phase' })
     .locator('.bar-seg[data-drill]').first();
   const bandTip = await band.getAttribute('data-tip');
   await band.click();
@@ -725,10 +725,15 @@ async function buildBundle() {
     healthText.replace(/\n/g, ' | ').slice(0, 600));
 
   const kanCols = await page.locator('#dashboardBody .kan-col').count();
-  ok('the board has a column per stage', kanCols >= 4, kanCols + ' columns');
+  ok('the board has a column per workflow stage', kanCols >= 12, kanCols + ' columns');
   const kanTitles = await page.locator('#dashboardBody .kan-title').allInnerTexts();
-  check('the board ends at the merged terminal stage',
-    kanTitles.filter((t) => /Invoiced|Closed/i.test(t)), ['Invoiced and Closed']);
+  check('the board ends at order closure', kanTitles.filter((t) => /Closed/i.test(t)), ['12. Closed']);
+  const phaseTitles = await page.locator('#dashboardBody .kan-phase-title').allInnerTexts();
+  ok('grouped into the four phases',
+    ['Order intake', 'Supply & preparation', 'Shipment', 'Financial close']
+      .every((p) => phaseTitles.some((t) => t.toLowerCase() === p.toLowerCase())), phaseTitles.join(' | '));
+  const gateCols = await page.locator('#dashboardBody .kan-col-gate').count();
+  check('the two person checks are marked as such', gateCols, 2);
   const kanCards = await page.locator('#dashboardBody .kan-card').count();
   ok('orders appear as cards', kanCards > 0, kanCards + ' cards');
   ok('cards say where their status came from',
@@ -754,7 +759,7 @@ async function buildBundle() {
   await page.locator('#dashboardBody .filter-bar button', { hasText: 'Reset filters' }).click();
   await page.waitForSelector('#dashboardBody .stat-row');
   ok('resetting restores the full picture',
-    /Order pipeline/i.test(await page.locator('#dashboardBody').innerText()));
+    /Workflow by phase/i.test(await page.locator('#dashboardBody').innerText()));
 
   const dashItemFilter = page.locator('#dashboardBody .filter-bar select').nth(2);
   const dashItemOptions = await dashItemFilter.locator('option').allInnerTexts();
@@ -766,18 +771,22 @@ async function buildBundle() {
   await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
   const beforeText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('an invoiced order sits at the terminal stage',
-    /Invoiced and Closed/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
+  ok('an invoiced order sits in the financial-close phase',
+    /Customer invoiced|Suppliers settled|Closed/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
   ok('read from the tracker, and it says so',
     /from tracker/i.test(beforeText), beforeText.replace(/\n/g, ' | '));
-  ok('and the reason names the invoice that closed it',
-    /NAV invoice number is recorded, which closes the order/i.test(beforeText),
+  ok('and the reason names the columns behind it',
+    /NAV invoice number is recorded|supplier-settlement column/i.test(beforeText),
     beforeText.replace(/\n/g, ' | '));
+  ok('each row shows its path through the twelve stages',
+    (await page.locator('#orderStatusBody table.data tbody tr').first().locator('.trail-mark').count()) === 12);
+  ok('and names the next stage', /Next stage/i.test(await page.locator('#orderStatusBody table.data thead').innerText()));
 
   console.log('\nHiding finished orders');
   const pageText = await page.locator('#orderStatusBody').innerText();
-  ok('the page states that invoicing closes an order',
-    /An invoiced order is a closed order/i.test(pageText), pageText.replace(/\n/g, ' | ').slice(0, 300));
+  ok('the page states the workflow it follows',
+    /twelve-stage workflow/i.test(pageText) && /only\s+a person can mark them done/i.test(pageText),
+    pageText.replace(/\n/g, ' | ').slice(0, 400));
 
   const rowsBefore = await page.locator('#orderStatusBody table.data tbody tr').count();
   const hideToggle = page.locator('#orderStatusBody .check-inline input').first();
@@ -793,7 +802,7 @@ async function buildBundle() {
   const remainingStages = await page.locator('#orderStatusBody table.data tbody tr select')
     .evaluateAll((sels) => sels.map((el) => el.options[el.selectedIndex].textContent.trim()));
   ok('and none of the remaining rows is finished',
-    remainingStages.every((t) => !/Invoiced and Closed/.test(t)), remainingStages.join(' | '));
+    remainingStages.every((t) => !/Order Closure/.test(t)), remainingStages.join(' | '));
 
   await page.locator('#orderStatusBody .check-inline input').first().uncheck();
   await page.waitForTimeout(1200);
@@ -806,11 +815,11 @@ async function buildBundle() {
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
 
   const firstRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
-  await firstRowSelect.selectOption('invoiced');
+  await firstRowSelect.selectOption('closed');
   await page.waitForTimeout(1200);
   const setInvoiced = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
   ok('choosing the terminal stage by hand is attributed to the person',
-    /set by a person/i.test(setInvoiced) && /Invoiced and Closed/i.test(setInvoiced),
+    /set by a person/i.test(setInvoiced) && /12\. Closed/i.test(setInvoiced),
     setInvoiced.replace(/\n/g, ' | '));
 
   await firstRowSelect.selectOption('delivered');

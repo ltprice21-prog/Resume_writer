@@ -291,8 +291,21 @@ function findFixture(pattern) {
   ok('but not the lot-number chase',
     !lotRule.supersededBy.some((re) => re.test('Delivery date to CDG')));
   ok('which only an invoice closes out', lotRule.supersededBy.some((re) => re.test('NAV INV #')));
-  ok('every rule declares what would overtake it',
-    AMI.FOLLOW_UP_RULES.every((r) => Array.isArray(r.supersededBy) && r.supersededBy.length));
+  ok('every rule declares what would overtake it, even if nothing does',
+    AMI.FOLLOW_UP_RULES.every((r) => Array.isArray(r.supersededBy)));
+
+  // Supplier Settlement comes after Customer Invoicing, so an invoice number
+  // must not silence the chases that settlement depends on.
+  const settlement = AMI.FOLLOW_UP_RULES.filter((r) => r.stage === 'settled');
+  check('the settlement chases', settlement.map((r) => r.id).sort(),
+    ['forwarder-invoice', 'proof-of-export', 'winery-invoice']);
+  ok('are not overtaken by a customer invoice',
+    settlement.every((r) => !r.supersededBy.some((re) => re.test('NAV INV #'))));
+  ok('so none of them is ever reported as overtaken',
+    !overtaken.some((i) => i.stage === 'settled'));
+  ok('every rule names the workflow stage it belongs to',
+    AMI.FOLLOW_UP_RULES.every((r) => !!r.stage));
+  ok('and every open item carries it', openItems.every((i) => !!i.stage));
 
   /* ---------------- Email ---------------- */
   console.log('\nEmail generation');

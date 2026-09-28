@@ -1,4 +1,4 @@
-/* Order status model: the five pipeline stages, where a status is stored,
+/* Order status model: the division's twelve-stage workflow, where a status is stored,
  * what the tracker itself already implies, and the roll-ups the dashboard needs.
  *
  * A status is either SET by a person or DERIVED from dated columns already in the
@@ -16,39 +16,166 @@
   const STATUS_PATH = 'order-status.json';
 
   /**
-   * The pipeline, in order. `step` drives the ordinal ramp and the kanban column
-   * order; `open` marks the stages that still need work; `pattern` is the fill
-   * that carries the stage without relying on hue.
+   * The division's workflow, in order — twelve stages, grouped into four phases.
    *
-   * Invoicing ends the order. This workspace draws no line between billed and
-   * reconciled, so the two are one terminal stage rather than a rule that moves
-   * orders from one to the other.
+   * A stage is REACHED when its work is done: an order sits at the furthest
+   * stage it has completed, and `nextStatus` names the one it is waiting on.
+   *
+   * Nine stages are recorded by a tracker column, so the tracker can show them
+   * on its own. Three are not: Order Validation and Pre-Shipment Review are
+   * checks a person makes (`gate: true`), and nothing on the sheet records that
+   * they happened. The portal never infers a gate from the columns around it —
+   * only a person can mark one done.
+   *
+   * Order Closure & Reporting is the one terminal stage. The tracker reaches it
+   * only when the customer invoice and every supplier-settlement column are
+   * filled; a person can also close an order directly.
+   *
+   * Twelve stages cannot each have a fill that stays distinct for a reader with
+   * colour vision deficiency, so fills belong to the four PHASES — one hue and
+   * one weave each — and the stage itself is always named in words.
    */
-  const ORDER_STATUSES = [
+  const PHASES = [
     {
-      id: 'placed', step: 1, open: true, pattern: 'solid',
-      label: 'Order placed – awaiting shipment', short: 'Awaiting shipment',
-      hint: 'Sent to the winery; nothing has been collected yet.',
+      id: 'intake', fill: 1, pattern: 'solid', label: 'Order intake', short: 'Order intake',
+      hint: 'The customer PO is in, checked, and passed to the supplier.',
     },
     {
-      id: 'transit', step: 2, open: true, pattern: 'diagonal',
-      label: 'In transit', short: 'In transit',
-      hint: 'Collected from the cellars, not yet delivered.',
+      id: 'supply', fill: 2, pattern: 'diagonal', label: 'Supply & preparation', short: 'Supply & preparation',
+      hint: 'The winery confirms, the collection is planned, the documents are gathered and the shipment is reviewed.',
     },
     {
-      id: 'delivered', step: 3, open: true, pattern: 'horizontal',
-      label: 'Delivered', short: 'Delivered',
-      hint: 'Arrived at the delivery point, not yet invoiced.',
+      id: 'shipment', fill: 3, pattern: 'horizontal', label: 'Shipment', short: 'Shipment',
+      hint: 'Collected from the cellars and delivered.',
     },
     {
-      id: 'invoiced', step: 4, open: false, pattern: 'vertical', terminal: true,
-      label: 'Invoiced and Closed', short: 'Invoiced and Closed',
-      hint: 'Billed out, and closed by that fact — an invoiced order is finished here.',
+      id: 'close', fill: 4, pattern: 'vertical', label: 'Financial close', short: 'Financial close',
+      hint: 'The customer is invoiced, the suppliers are settled and the order is closed.',
     },
   ];
 
-  /* Statuses stored before the two terminal stages became one. */
-  const LEGACY_STATUS_IDS = { closed: 'invoiced' };
+  /*
+   * `evidence` lists the tracker headings that record a stage. Every heading the
+   * sheet carries must be filled; a heading the sheet does not carry is skipped,
+   * so an older cycle sheet with fewer columns is judged on what it has. A stage
+   * with no evidence heading on the sheet at all cannot be read from it.
+   */
+  const STAGE_DEFS = [
+    {
+      id: 'received', phase: 'intake', label: 'Purchase Order Received', short: 'PO received',
+      hint: 'Done when the tracker records the date the customer PO came in.',
+      evidence: [{ re: /^PO Received Date/i, name: 'PO Received Date' }],
+      reason: 'a PO received date is recorded',
+    },
+    {
+      id: 'validated', phase: 'intake', label: 'Order Validation', short: 'Validated', gate: true,
+      hint: 'A person confirms the PO is sound — the right item, not already on the tracker, within the contract. '
+        + 'The tracker has no column for this, so only a person can mark it done.',
+    },
+    {
+      id: 'supplier-po', phase: 'intake', label: 'Supplier PO Creation', short: 'Supplier PO sent',
+      hint: 'Done when the tracker records the date the PO was sent to the winery.',
+      evidence: [{ re: /^PO date sent to winery/i, name: 'PO date sent to winery' }],
+      reason: 'the PO has been sent to the winery',
+    },
+    {
+      id: 'supply-confirmed', phase: 'supply', label: 'Supply Confirmation', short: 'Supply confirmed',
+      hint: 'Done when the tracker records the date the winery confirmed the goods available.',
+      evidence: [{ re: /^Winery Confirmed Available Date/i, name: 'Winery Confirmed Available Date' }],
+      reason: 'the winery has confirmed an available date',
+    },
+    {
+      id: 'logistics', phase: 'supply', label: 'Logistics Planning', short: 'Logistics planned',
+      hint: 'Done when the tracker records the truck type booked. The requested collection date is a formula '
+        + 'and the forwarder comes off the PO, so neither of those shows planning has happened.',
+      evidence: [{ re: /^Truck Type/i, name: 'Truck Type' }],
+      reason: 'a truck type is recorded',
+    },
+    {
+      id: 'documents', phase: 'supply', label: 'Documentation Management', short: 'Documents in',
+      hint: 'Done when the tracker records both the confirmed bottling date and the lot number.',
+      evidence: [
+        { re: /^Bottling Date Confirmed/i, name: 'Bottling Date Confirmed' },
+        { re: /^Lot Number/i, name: 'Lot Number' },
+      ],
+      reason: 'the bottling date and lot number are recorded',
+    },
+    {
+      id: 'pre-shipment', phase: 'supply', label: 'Pre-Shipment Review', short: 'Pre-shipment reviewed', gate: true,
+      hint: 'A person confirms the shipment is ready to go — supply confirmed, collection booked, documents in hand. '
+        + 'The tracker has no column for this, so only a person can mark it done.',
+    },
+    {
+      id: 'shipped', phase: 'shipment', label: 'Shipment Execution', short: 'Shipped',
+      hint: 'Done when the tracker records the actual collection date from the cellars.',
+      evidence: [{ re: /^Actual Collection Date/i, name: 'Actual Collection Date' }],
+      reason: 'a collection date is recorded',
+    },
+    {
+      id: 'delivered', phase: 'shipment', label: 'Delivery Confirmation', short: 'Delivered',
+      hint: 'Done when the tracker records the delivery date.',
+      evidence: [{ re: /^(Delivery date to CDG|Actual delivery date)/i, name: 'Delivery date' }],
+      reason: 'a delivery date is recorded',
+    },
+    {
+      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced',
+      hint: 'Done when the tracker records a NAV invoice number.',
+      evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
+      reason: 'a NAV invoice number is recorded',
+    },
+    {
+      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled',
+      hint: 'Done when the tracker records the winery invoice received, proof of export sent to the winery, '
+        + 'and the forwarder’s invoice received for accounts.',
+      evidence: [
+        { re: /^Winery invoice received/i, name: 'Winery invoice received' },
+        { re: /^Proof of [Ee]xport/i, name: 'Proof of Export Sent to Winery' },
+        { re: /^Forwarder.s invoice received/i, name: 'Forwarder’s invoice received date for ACCT' },
+      ],
+      reason: 'the winery invoice, proof of export and forwarder’s invoice are all recorded',
+    },
+    {
+      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true,
+      hint: 'The order is finished. The tracker puts an order here when it is invoiced to the customer and every '
+        + 'supplier-settlement column is filled; a person can also close it directly.',
+      requires: ['customer-invoiced', 'settled'],
+      reason: 'it is invoiced to the customer and every supplier-settlement column is filled',
+    },
+  ];
+
+  const phaseById = (id) => PHASES.find((p) => p.id === id) || null;
+
+  const ORDER_STATUSES = STAGE_DEFS.map((d, i) => {
+    const phase = phaseById(d.phase);
+    return Object.assign({}, d, {
+      step: i + 1,
+      open: !d.terminal,
+      terminal: !!d.terminal,
+      gate: !!d.gate,
+      fill: phase.fill,
+      pattern: phase.pattern,
+      phaseLabel: phase.label,
+    });
+  });
+
+  for (const p of PHASES) p.stages = ORDER_STATUSES.filter((s) => s.phase === p.id).map((s) => s.id);
+
+  /*
+   * Statuses stored under the four-stage pipeline, and what each one asserted.
+   * "Invoiced and Closed" was the only way to close an order then, and a person
+   * who chose it meant closed — so it keeps meaning closed rather than quietly
+   * reopening at Customer Invoicing.
+   */
+  const LEGACY_STATUS_IDS = {
+    placed: 'supplier-po',
+    transit: 'shipped',
+    invoiced: 'closed',
+  };
+  const LEGACY_LABELS = {
+    placed: 'Order placed – awaiting shipment',
+    transit: 'In transit',
+    invoiced: 'Invoiced and Closed',
+  };
 
   const canonicalStatusId = (id) => {
     const s = String(id == null ? '' : id);
@@ -58,6 +185,27 @@
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
+  const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);
+
+  /**
+   * The stage an order is waiting on: the one after whichever is further along,
+   * its effective status or what the tracker shows — so a status set behind the
+   * tracker never names a stage the tracker already shows done.
+   */
+  function nextForOrder(order) {
+    const st = order.status || {};
+    const a = statusById(st.statusId);
+    const b = statusById(st.trackerStatusId || (order.derived && order.derived.statusId));
+    const at = a && b ? (b.step > a.step ? b : a) : (a || b);
+    return at ? nextStatus(at.id) : ORDER_STATUSES[0];
+  }
+
+  /** The stage an order at `id` is waiting on, or null once it is closed. */
+  function nextStatus(id) {
+    const s = statusById(id);
+    if (!s) return ORDER_STATUSES[0];
+    return ORDER_STATUSES.find((x) => x.step === s.step + 1) || null;
+  }
 
   /* ------------------------------------------------------------------ *
    * Store
@@ -134,14 +282,6 @@
    * Reading orders out of a tracker
    * ------------------------------------------------------------------ */
 
-  /* Tracker columns the status model reads, most advanced stage first. */
-  const STAGE_COLUMNS = [
-    { statusId: 'invoiced', re: /^NAV INV/i, reason: 'a NAV invoice number is recorded, which closes the order' },
-    { statusId: 'delivered', re: /^(Delivery date to CDG|Actual delivery date)/i, reason: 'a delivery date is recorded' },
-    { statusId: 'transit', re: /^Actual Collection Date/i, reason: 'a collection date is recorded' },
-    { statusId: 'placed', re: /^PO date sent to winery/i, reason: 'the PO has been sent to the winery' },
-  ];
-
   const DATE_COLUMNS = [
     { key: 'poReceived', re: /^PO Received Date/i, label: 'PO received' },
     { key: 'poSent', re: /^PO date sent to winery/i, label: 'PO sent to winery' },
@@ -175,18 +315,54 @@
     return c ? c.col : null;
   };
 
-  /** What the tracker's own dated columns already say about an order. */
-  function deriveStatus(sheet, header, row) {
-    for (const stage of STAGE_COLUMNS) {
-      const col = colFor(header, stage.re);
-      if (!col) continue;
-      const cell = sheet.cell(row, col);
-      if (!cell) continue;
-      const text = String(cell.text || '').trim();
-      if (!text || /^to fill$/i.test(text)) continue;
-      return { statusId: stage.statusId, reason: stage.reason };
+  const isBlankText = (text) => !text || /^to fill$/i.test(text);
+
+  /**
+   * Every stage the tracker's own columns show as done for one row, keyed by
+   * stage id, each with the cells that show it. Gates never appear here.
+   */
+  function stageEvidence(sheet, header, row) {
+    const out = {};
+    for (const stage of ORDER_STATUSES) {
+      if (!stage.evidence) continue;
+      const cells = [];
+      let complete = true;
+      for (const ev of stage.evidence) {
+        const column = header.columns.find((x) => ev.re.test(x.header));
+        if (!column) continue;
+        const cell = sheet.cell(row, column.col);
+        const text = cell ? String(cell.text || '').trim() : '';
+        if (isBlankText(text)) { complete = false; break; }
+        // A number is only a date when its heading says so, or an invoice number
+        // becomes a day in 1926.
+        const date = /date/i.test(column.header) && cell.num != null && Number.isFinite(cell.num) && cell.num >= 1
+          ? AMI.serialToDate(cell.num) : null;
+        cells.push({ col: column.col, header: column.header, text, date });
+      }
+      if (complete && cells.length) out[stage.id] = { cells, reason: stage.reason };
+    }
+    for (const stage of ORDER_STATUSES) {
+      if (!stage.requires || !stage.requires.every((id) => out[id])) continue;
+      out[stage.id] = {
+        cells: stage.requires.reduce((all, id) => all.concat(out[id].cells), []),
+        reason: stage.reason,
+      };
+    }
+    return out;
+  }
+
+  /** The furthest stage the tracker itself shows as done, from its evidence. */
+  function furthestEvidenced(evidence) {
+    for (let i = ORDER_STATUSES.length - 1; i >= 0; i--) {
+      const s = ORDER_STATUSES[i];
+      if (evidence[s.id]) return { statusId: s.id, reason: evidence[s.id].reason };
     }
     return null;
+  }
+
+  /** What the tracker's own columns already say about an order. */
+  function deriveStatus(sheet, header, row) {
+    return furthestEvidenced(stageEvidence(sheet, header, row));
   }
 
   /** Every order on one item's tracker, with the values the dashboard needs. */
@@ -230,6 +406,7 @@
         values[v.key] = cell.num != null && Number.isFinite(cell.num) ? cell.num : String(cell.text || '').trim();
       }
 
+      const evidence = stageEvidence(sheet, header, row);
       out.push({
         key: statusKey(ctx.accountId || '', ctx.itemId || '', po),
         po, row,
@@ -238,7 +415,8 @@
         itemId: ctx.itemId || '', itemName: ctx.itemName || '',
         dates, values, dateIssues,
         lastEvent, lastEventLabel,
-        derived: deriveStatus(sheet, header, row),
+        evidence,
+        derived: furthestEvidenced(evidence),
       });
     }
     return out;
@@ -255,27 +433,79 @@
    */
   function effectiveStatus(order, statusDoc) {
     const entry = statusDoc && statusDoc.entries ? statusDoc.entries[order.key] : null;
+    const tracker = order.derived && statusById(order.derived.statusId) ? order.derived : null;
     if (entry && statusById(entry.status)) {
-      // A status recorded as "closed" before the terminal stages merged reads as
-      // the merged stage now, so old records keep meaning what they meant.
+      // A status stored under the four-stage pipeline reads as the stage it now
+      // corresponds to, and says so, so old records keep meaning what they meant.
       const canonical = canonicalStatusId(entry.status);
-      const renamed = canonical !== entry.status;
+      const legacy = canonical !== entry.status ? LEGACY_LABELS[entry.status] || entry.status : '';
+      // A person's choice stands, but if the tracker has since moved further
+      // along, that is worth knowing rather than hiding.
+      const behind = tracker && statusById(tracker.statusId).step > statusById(canonical).step
+        ? statusById(tracker.statusId) : null;
       return {
         statusId: canonical, source: 'set',
         updated: entry.updated || '', updatedBy: entry.updatedBy || '', note: entry.note || '',
+        trackerStatusId: tracker ? tracker.statusId : '',
+        behindTracker: !!behind,
         reason: 'set by ' + (entry.updatedBy || 'someone')
           + (entry.updated ? ' on ' + entry.updated.slice(0, 10) : '')
-          + (renamed ? ' (recorded as “closed”, before invoiced and closed became one stage)' : ''),
+          + (legacy ? ' (recorded as “' + legacy + '” under the four-stage pipeline)' : '')
+          + (behind ? '; the tracker already shows ' + behind.label : ''),
       };
     }
-    if (order.derived) {
+    if (tracker) {
       return {
-        statusId: order.derived.statusId, source: 'derived',
+        statusId: tracker.statusId, source: 'derived',
         updated: '', updatedBy: '', note: '',
-        reason: 'From the tracker: ' + order.derived.reason + '.',
+        trackerStatusId: tracker.statusId, behindTracker: false,
+        reason: 'From the tracker: ' + tracker.reason + '.',
       };
     }
-    return { statusId: '', source: 'none', updated: '', updatedBy: '', note: '', reason: 'nothing in the tracker indicates a stage' };
+    return {
+      statusId: '', source: 'none', updated: '', updatedBy: '', note: '',
+      trackerStatusId: '', behindTracker: false,
+      reason: 'nothing in the tracker indicates a stage',
+    };
+  }
+
+  /**
+   * One order's path through all twelve stages, for the per-order trail.
+   *
+   *   done        the tracker's columns show it — `cells` says which
+   *   current     the stage the order is at, set by a person (when the tracker
+   *               shows it too, it reads `done`)
+   *   unrecorded  behind the current stage, but nothing records it — for a
+   *               gate, because no column can; otherwise the column is blank
+   *   pending     not reached yet
+   *
+   * Nothing is filled in to make the path look continuous. A gap is a gap.
+   */
+  function stageTrail(order, status) {
+    const st = status || order.status || { statusId: '' };
+    const current = statusById(st.statusId);
+    const evidence = order.evidence || {};
+    return ORDER_STATUSES.map((s) => {
+      const ev = evidence[s.id];
+      let state;
+      let detail;
+      if (ev) {
+        state = 'done';
+        detail = ev.cells.map((c) => c.header + ': ' + (c.date ? AMI.formatShort(c.date) : c.text)).join(' · ');
+      } else if (current && s.id === current.id) {
+        state = 'current';
+        detail = st.reason || '';
+      } else if (current && s.step < current.step) {
+        state = 'unrecorded';
+        detail = s.gate
+          ? 'a person check with no tracker column — not marked done'
+          : (s.requires ? 'not every column it needs is filled' : 'passed, but the tracker column is blank');
+      } else {
+        state = 'pending';
+        detail = s.gate ? 'a person check — set it when done' : 'not reached';
+      }
+      return { status: s, state, detail, cells: ev ? ev.cells : [] };
+    });
   }
 
   function daysSince(date, today) {
@@ -530,6 +760,17 @@
     });
   }
 
+  function countByPhase(orders) {
+    const counts = { unset: 0 };
+    for (const p of PHASES) counts[p.id] = 0;
+    for (const o of orders) {
+      const st = statusById(o.status.statusId);
+      if (!st) counts.unset++;
+      else counts[st.phase]++;
+    }
+    return counts;
+  }
+
   function countByStatus(orders) {
     const counts = emptyCounts();
     for (const o of orders) {
@@ -657,19 +898,22 @@
       (a, b) => (a.itemName || '').localeCompare(b.itemName || '') || a.po.localeCompare(b.po));
 
     const countRows = ORDER_STATUSES.map((s) =>
-      '<tr><td style="' + TD + '">' + esc(s.label) + '</td>'
+      '<tr><td style="' + TD + 'color:#5c5c5c;">' + esc(s.phaseLabel) + '</td>'
+      + '<td style="' + TD + '">' + s.step + '. ' + esc(s.label) + (s.gate ? ' (person check)' : '') + '</td>'
       + '<td style="' + TD + 'text-align:right;">' + counts[s.id] + '</td></tr>').join('')
-      + (counts.unset ? '<tr><td style="' + TD + '">No status set</td><td style="' + TD
+      + (counts.unset ? '<tr><td style="' + TD + '"></td><td style="' + TD + '">No status set</td><td style="' + TD
         + 'text-align:right;">' + counts.unset + '</td></tr>' : '');
 
-    const headers = ['PO #', 'Item', 'Cases', 'Status', 'Status source', 'Last dated activity', 'Days'];
+    const headers = ['PO #', 'Item', 'Cases', 'Stage reached', 'Next stage', 'Status source', 'Last dated activity', 'Days'];
     const rows = shown.map((x) => {
       const st = statusById(x.status.statusId);
+      const next = nextForOrder(x);
       return '<tr>'
         + '<td style="' + TD + '">' + esc(x.po) + '</td>'
         + '<td style="' + TD + '">' + esc(x.itemName) + '</td>'
         + '<td style="' + TD + 'text-align:right;">' + esc(x.values.cases != null ? x.values.cases : '') + '</td>'
-        + '<td style="' + TD + '">' + esc(st ? st.label : 'Not set') + '</td>'
+        + '<td style="' + TD + '">' + esc(st ? st.step + '. ' + st.label : 'Not set') + '</td>'
+        + '<td style="' + TD + '">' + esc(next ? next.step + '. ' + next.label : 'Complete') + '</td>'
         + '<td style="' + TD + '">' + esc(x.status.reason) + '</td>'
         + '<td style="' + TD + '">' + esc(x.lastEvent ? AMI.formatShort(x.lastEvent) + ' (' + x.lastEventLabel + ')' : '—') + '</td>'
         + '<td style="' + TD + 'text-align:right;">' + esc(x.ageDays == null ? '—' : x.ageDays) + '</td>'
@@ -686,7 +930,7 @@
       '<p style="margin:0 0 10px;"><strong>' + open.length + '</strong> open order(s) of <strong>'
       + orders.length + '</strong> on the tracker'
       + (o.itemNames && o.itemNames.length ? ', across ' + esc(o.itemNames.join(', ')) : '') + '.</p>',
-      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">Orders by status</h3>',
+      '<h3 style="font-size:11.5pt;margin:16px 0 6px;">Orders by workflow stage</h3>',
       '<table style="border-collapse:collapse;"><tbody>' + countRows + '</tbody></table>',
       '<h3 style="font-size:11.5pt;margin:16px 0 6px;">'
       + (o.openOnly === false ? 'All orders' : 'Open orders') + '</h3>',
@@ -696,7 +940,9 @@
           + '</tr></thead><tbody>' + rows + '</tbody></table>'
         : '<p style="margin:0;">Nothing open.</p>',
       '<p style="margin:16px 0 0;color:#5c5c5c;font-size:9.5pt;">'
-      + 'Status source shows whether a person set the stage or it was read from the tracker’s dated columns. '
+      + 'Stage reached is the furthest workflow stage completed. Status source shows whether a person set it '
+      + 'or it was read from the tracker’s columns; Order Validation and Pre-Shipment Review have no tracker '
+      + 'column and are only ever set by a person. '
       + 'Days counts from the last dated activity on the row.</p>',
       '</div>',
     ].join('\n');
@@ -705,10 +951,11 @@
   }
 
   Object.assign(AMI, {
-    STATUS_PATH, ORDER_STATUSES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS,
-    statusById, isOpenStatus, statusKey, canonicalStatusId,
+    STATUS_PATH, ORDER_STATUSES, PHASES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS, GATE_STATUSES,
+    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
-    deriveStatus, readOrders, effectiveStatus, decorate, countByStatus, emptyCounts, plausibleWindow,
+    stageEvidence, deriveStatus, readOrders, effectiveStatus, stageTrail,
+    decorate, countByStatus, countByPhase, emptyCounts, plausibleWindow,
     partitionClosed, summariseAccount, buildAccountSummary, daysSince,
     CONTRACT_STATES, contractStanding,
     scheduleFlags, withSchedule, scheduleEntries, groupSchedule, startOfWeek, MONTH_NAMES,
