@@ -27,9 +27,14 @@
    * they happened. The portal never infers a gate from the columns around it —
    * only a person can mark one done.
    *
-   * Order Closure & Reporting is the one terminal stage. The tracker reaches it
-   * only when the customer invoice and every supplier-settlement column are
-   * filled; a person can also close an order directly.
+   * An order is closed once it is invoiced. Customer Invoicing, Supplier
+   * Settlement and Order Closure & Reporting are all "closing" stages (`closes`):
+   * an order at any of them leaves the open lists and appears on the Invoiced
+   * list, where its settlement columns stay visible so nothing still owed to or
+   * by a supplier is lost. Order Closure & Reporting is the one terminal stage;
+   * the tracker reaches it only when the customer invoice and every
+   * supplier-settlement column are filled, and a person can also close an order
+   * directly.
    *
    * Twelve stages cannot each have a fill that stays distinct for a reader with
    * colour vision deficiency, so fills belong to the four PHASES — one hue and
@@ -118,13 +123,13 @@
       reason: 'a delivery date is recorded',
     },
     {
-      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced',
-      hint: 'Done when the tracker records a NAV invoice number.',
+      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced', closes: true,
+      hint: 'Done when the tracker records a NAV invoice number. An invoiced order counts as closed and moves to the Invoiced list.',
       evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
       reason: 'a NAV invoice number is recorded',
     },
     {
-      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled',
+      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled', closes: true,
       hint: 'Done when the tracker records the winery invoice received, proof of export sent to the winery, '
         + 'and the forwarder’s invoice received for accounts.',
       evidence: [
@@ -135,7 +140,7 @@
       reason: 'the winery invoice, proof of export and forwarder’s invoice are all recorded',
     },
     {
-      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true,
+      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true, closes: true,
       hint: 'The order is finished. The tracker puts an order here when it is invoiced to the customer and every '
         + 'supplier-settlement column is filled; a person can also close it directly.',
       requires: ['customer-invoiced', 'settled'],
@@ -149,8 +154,9 @@
     const phase = phaseById(d.phase);
     return Object.assign({}, d, {
       step: i + 1,
-      open: !d.terminal,
+      open: !d.closes,
       terminal: !!d.terminal,
+      closes: !!d.closes,
       gate: !!d.gate,
       fill: phase.fill,
       pattern: phase.pattern,
@@ -184,6 +190,17 @@
 
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
+  /**
+   * Whether an order is still open. A stage a person set decides it by the stage;
+   * a stage read from the tracker decides it by whether the tracker records an
+   * invoice — settlement columns filled without an invoice do not close an order.
+   */
+  function orderIsOpen(order, status) {
+    const st = statusById(status && status.statusId);
+    if (!st) return true;
+    if (status.source === 'set') return st.open;
+    return !(order.evidence && order.evidence['customer-invoiced']);
+  }
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
   const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);
 
@@ -298,6 +315,9 @@
     { key: 'pallets', re: /^Quantity \(pallets\)/i },
     { key: 'lot', re: /^Lot Number/i },
     { key: 'navInvoice', re: /^NAV INV/i },
+    { key: 'wineryInvoice', re: /^Winery invoice received/i },
+    { key: 'proofOfExport', re: /^Proof of [Ee]xport/i },
+    { key: 'forwarderInvoiceDate', re: /^Forwarder.s invoice received/i },
     { key: 'balanceBt', re: /^Balance on Contract\s*\(bt\)/i },
     { key: 'balanceCs', re: /^Balance on Contract\s*\(cs\)/i },
     { key: 'notes', re: /^Notes/i },
@@ -754,7 +774,7 @@
       const status = effectiveStatus(o, statusDoc);
       return Object.assign({}, o, {
         status,
-        isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
+        isOpen: orderIsOpen(o, status),
         ageDays: daysSince(o.lastEvent, now),
       });
     });
@@ -952,7 +972,7 @@
 
   Object.assign(AMI, {
     STATUS_PATH, ORDER_STATUSES, PHASES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS, GATE_STATUSES,
-    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, statusKey, canonicalStatusId,
+    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, orderIsOpen, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
     stageEvidence, deriveStatus, readOrders, effectiveStatus, stageTrail,
     decorate, countByStatus, countByPhase, emptyCounts, plausibleWindow,

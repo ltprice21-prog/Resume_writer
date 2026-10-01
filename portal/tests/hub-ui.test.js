@@ -43,6 +43,8 @@ const ROWS = [
     'AMI Requested Collection Date': rel(-6), 'Customer Required Delivery Date': rel(-4), 'Truck Type': 'Reefer' },
   { 'PO#': 'T-300', 'Quantity (cs)': 288, 'PO date sent to winery': rel(-40), 'Actual Collection Date from Cellars': rel(-20),
     'AMI Requested Collection Date': rel(-22), 'Delivery date to CDG': rel(-15) },
+  { 'PO#': 'T-350', 'Quantity (cs)': 144, 'PO date sent to winery': rel(-60), 'Actual Collection Date from Cellars': rel(-45),
+    'Delivery date to CDG': rel(-40), 'NAV INV #': 416001, 'Winery invoice received': 'yes' },
   { 'PO#': 'T-400', 'Quantity (cs)': 288, 'PO Received Date': rel(-5), 'PO date sent to winery': rel(-4),
     'AMI Requested Collection Date': rel(20), 'Customer Required Delivery Date': rel(22) },
 ];
@@ -132,6 +134,21 @@ async function buildBundle() {
   await page.locator('#tasksBody .tsk-box').first().click();
   await wait(700);
   ok('ticking a step takes it off the open list', (await page.locator('#tasksBody .tsk').count()) === before - 1);
+
+  console.log('\nInvoiced orders');
+  await go('orderstatus');
+  const openList = await page.locator('#orderStatusBody table.data').first().innerText();
+  ok('an invoiced order is not on the open Orders list', !/T-350/.test(openList) && /T-200/.test(openList));
+  ok('which says how many have moved', /Invoiced orders \(1\)/.test(await page.locator('#orderStatusBody').innerText()));
+  await page.locator('#orderStatusBody button', { hasText: 'Invoiced orders' }).click();
+  await wait(900);
+  const inv = await page.locator('#invoicedBody').innerText();
+  ok('it is on the Invoiced list', /T-350/.test(inv) && !/T-200/.test(inv));
+  ok('with its NAV invoice number and what is still blank', /416001/.test(inv) && /Waiting on 2/.test(inv));
+  await go('tasks');
+  await page.locator('#tasksBody .chip-filter', { hasText: 'All open' }).click();
+  await wait(400);
+  ok('and none of its steps are on the open task list', !/T-350/.test(await page.locator('#tasksBody').innerText()));
 
   console.log('\nShipments');
   await go('shipments');

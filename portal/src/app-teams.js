@@ -304,9 +304,9 @@
     });
     return el('label', {
       class: 'check-inline',
-      'data-tip': 'Leaves out orders at Order Closure & Reporting, the last workflow stage. Nothing is '
+      'data-tip': 'Leaves out orders that are invoiced — an invoiced order counts as closed. Nothing is '
         + 'deleted — the counts and totals on this page follow the switch.',
-    }, [box, document.createTextNode('Hide closed orders')]);
+    }, [box, document.createTextNode('Hide invoiced orders')]);
   }
 
   function poColumn(header) {
@@ -360,7 +360,7 @@
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
-      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments'].includes(t)) b.disabled = !hasUser;
+      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(t)) b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -2913,7 +2913,11 @@
     if (followUp.superseded) return followUp;
     const doc = state.statusDoc;
     const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
-    if (!entry || AMI.isOpenStatus(entry.status)) return followUp;
+    // Only Order Closure & Reporting ends the chasing. An invoiced order is off
+    // the open lists, but its supplier-settlement chases stay live until the
+    // columns are filled or a person closes it.
+    const st = entry ? AMI.statusById(entry.status) : null;
+    if (!st || !st.terminal) return followUp;
     return Object.assign({}, followUp, {
       superseded: { header: 'Order status', value: 'closed', date: null },
       supersededReason: 'still blank, but ' + (entry.updatedBy || 'someone') + ' closed the order'
@@ -3514,12 +3518,12 @@
    * hide-finished switch. Counts and totals downstream follow the switch, which
    * is the point of it — it changes what you are looking at, not what is true.
    */
-  function filteredOrders() {
+  function filteredOrders(includeClosed) {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
     const decorated = AMI.withSchedule(
       AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()), new Date());
-    return applyClosedFilter(decorated);
+    return includeClosed ? decorated : applyClosedFilter(decorated);
   }
 
   /**
@@ -4676,12 +4680,16 @@
       return;
     }
 
+    const everyOrder = filteredOrders(true);
+    const invoicedCount = everyOrder.filter((o) => !o.isOpen).length;
+
     host.appendChild(pageHeader(
       'Orders',
       'Order status',
-      'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
+      'Set where each open order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such. '
+      + 'An order that is invoiced counts as closed and moves to the Invoiced list.',
       [
-        closedToggle(() => renderOrderStatus()),
+        el('button', { class: 'btn', text: 'Invoiced orders (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -4698,14 +4706,16 @@
           text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
             + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
             + 'a person can mark them done — the tracker moving past them does not mean they happened. '
-            + 'An order closes when it is invoiced and every supplier-settlement column is filled, or when '
-            + 'a person closes it. Use “Hide closed orders” to work with only what is still live.',
+            + 'An order closes as soon as it is invoiced — a NAV invoice number in the tracker, or Customer '
+            + 'Invoicing set by a person — and moves to the Invoiced list. To reopen one, set an earlier stage '
+            + 'from its page there.',
         }),
       ]),
     ]));
 
     const f = state.filters;
-    let orders = filteredOrders();
+    // Invoiced orders are closed and live on their own list.
+    let orders = everyOrder.filter((o) => o.isOpen);
     if (f.statusId === '__open') orders = orders.filter((o) => o.isOpen);
     else if (f.statusId === '__unset') orders = orders.filter((o) => !o.status.statusId);
     else if (f.statusId) orders = orders.filter((o) => o.status.statusId === f.statusId);

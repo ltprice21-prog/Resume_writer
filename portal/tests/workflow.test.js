@@ -209,9 +209,18 @@ check('a closed order is done throughout where the tracker shows it',
   states(plainBy['Z-1']), 'uuuuuuuudddd');
 
 console.log('\nOpen and closed');
-ok('only closed orders are finished', plain.filter((o) => !o.isOpen).map((o) => o.po).join() === 'Z-1',
-  plain.filter((o) => !o.isOpen).map((o) => o.po).join());
-ok('an invoiced order still awaiting settlement is open', plainBy['I-1'].isOpen && plainBy['P-1'].isOpen);
+const finished = plain.filter((o) => !o.isOpen).map((o) => o.po).sort().join();
+ok('an order is closed once it is invoiced, settled or not', finished === 'I-1,P-1,Z-1', finished);
+ok('settlement columns without an invoice do not close an order', plainBy['U-1'].isOpen && plainBy['U-1'].evidence.settled);
+ok('an order that has not been invoiced is open', ['R-1', 'S-1', 'X-1', 'V-1'].every((po) => plainBy[po].isOpen));
+const invoicedByHand = AMI.decorate(orders, { entries: { [plainBy['X-1'].key]: { status: 'customer-invoiced', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' } } }, TODAY)
+  .find((o) => o.po === 'X-1');
+ok('one a person marks invoiced is closed too', invoicedByHand.isOpen === false);
+const reopened = AMI.decorate(orders, { entries: { [plainBy['I-1'].key]: { status: 'delivered', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' } } }, TODAY)
+  .find((o) => o.po === 'I-1');
+ok('and setting an earlier stage reopens it', reopened.isOpen === true);
+check('the closing stages are invoicing, settlement and closure',
+  AMI.ORDER_STATUSES.filter((s) => !s.open).map((s) => s.id), ['customer-invoiced', 'settled', 'closed']);
 const counts = AMI.countByStatus(plain);
 check('counts cover every stage plus unset', Object.keys(counts).length, 13);
 check('and add up', Object.values(counts).reduce((a, b) => a + b, 0), orders.length);

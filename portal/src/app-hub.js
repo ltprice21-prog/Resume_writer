@@ -344,7 +344,7 @@
     }, [document.createTextNode(label), count != null ? el('span', { class: 'n', text: String(count) }) : null])));
   }
 
-  const view = { tasks: 'soon', exceptions: 'open', severity: '', shipments: 'live', mine: 'all' };
+  const view = { tasks: 'soon', exceptions: 'open', severity: '', shipments: 'live', mine: 'all', invoiced: 'all' };
 
   /* ------------------------------------------------------------------ *
    * My Work
@@ -610,6 +610,85 @@
       el('h2', {}, [document.createTextNode('Shipments'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: shown.length + ' shown' })]),
       shown.length ? el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [table])]) : emptyState('No shipments match.'),
+    ]));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Invoiced
+   * ------------------------------------------------------------------ */
+
+  const isBlank = (v) => v == null || v === '' || /^to fill$/i.test(String(v).trim());
+
+  /** A tracker cell as it should read: a date serial as a date, anything else as typed. */
+  function cellShow(v) {
+    if (isBlank(v)) return '—';
+    if (typeof v === 'number' && v > 30000 && v < 80000) return AMI.formatShort(AMI.serialToDate(v));
+    return String(v);
+  }
+
+  function settlementOf(order) {
+    const v = order.values;
+    const parts = [
+      ['Winery invoice', v.wineryInvoice], ['Proof of export', v.proofOfExport], ['Forwarder’s invoice', v.forwarderInvoiceDate],
+    ];
+    const missing = parts.filter(([, val]) => isBlank(val)).map(([name]) => name);
+    return { parts, missing, done: !missing.length };
+  }
+
+  function renderInvoiced() {
+    const host = $('#invoicedBody');
+    if (!ready(host, renderInvoiced)) return;
+
+    host.appendChild(ui.pageHeader('Work', 'Invoiced orders',
+      'An order is closed once it is invoiced — a NAV invoice number in the tracker, or Customer Invoicing set by a person. It leaves the open lists and comes here. '
+      + 'The supplier-settlement columns are shown beside it, so anything still owed by or to a supplier stays in view. To reopen an order, open it and set an earlier stage.',
+      []));
+    host.appendChild(ui.filterBar(renderInvoiced, { withItem: true, withSearch: true }));
+
+    const orders = scopedOrders({ useQuery: true, keepClosed: true }).filter((o) => !o.isOpen)
+      .map((o) => ({ order: o, settle: settlementOf(o) }));
+    const owed = orders.filter((x) => !x.settle.done);
+    const sels = { all: () => true, owed: (x) => !x.settle.done, settled: (x) => x.settle.done };
+
+    host.appendChild(el('div', { class: 'tiles' }, [
+      tile('Invoiced orders', orders.length, 'closed, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
+      tile('Settlement outstanding', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
+      tile('Fully settled', orders.length - owed.length, 'all three settlement columns filled', 'ok', () => { view.invoiced = 'settled'; renderInvoiced(); }, view.invoiced === 'settled'),
+    ]));
+    host.appendChild(chipRow([
+      ['all', 'All invoiced', orders.length], ['owed', 'Settlement outstanding', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
+    ], view.invoiced, (id) => { view.invoiced = id; renderInvoiced(); }));
+
+    const shown = orders.filter(sels[view.invoiced] || sels.all).sort((a, b) => (
+      (b.order.dates.delivered ? b.order.dates.delivered.getTime() : 0) - (a.order.dates.delivered ? a.order.dates.delivered.getTime() : 0))
+      || a.order.po.localeCompare(b.order.po));
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, ['PO', 'Account · item', 'Cases', 'Delivered', 'NAV invoice', 'Winery invoice', 'Proof of export', 'Forwarder’s invoice', 'Settlement']
+      .map((h) => el('th', { text: h })))]));
+    const tb = el('tbody');
+    for (const { order, settle } of shown.slice(0, 300)) {
+      const v = order.values;
+      tb.appendChild(el('tr', {}, [
+        el('td', {}, [el('button', { class: 'wk-link mono', text: order.po, onclick: () => ui.openOrder(order.key) })]),
+        el('td', { text: orderWhere(order) }),
+        el('td', { class: 'num', text: v.cases != null ? String(v.cases) : '—' }),
+        el('td', { text: fmt(order.dates.delivered) }),
+        el('td', { class: 'mono', text: cellShow(v.navInvoice) }),
+        ...settle.parts.map(([, val]) => el('td', { text: cellShow(val) })),
+        el('td', {}, [settle.done
+          ? el('span', { class: 'tag ok', text: 'Settled' })
+          : el('span', { class: 'tag warn', 'data-tip': 'Still blank in the tracker: ' + settle.missing.join(', '), text: 'Waiting on ' + settle.missing.length })]),
+      ]));
+    }
+    table.appendChild(tb);
+
+    host.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Invoiced'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: shown.length + ' shown' })]),
+      shown.length
+        ? el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [table])])
+        : emptyState('No invoiced orders match.', 'Orders appear here as soon as the tracker records a NAV invoice number.'),
     ]));
   }
 
@@ -880,7 +959,7 @@
   /** Redraw whatever is on screen after something changed. */
   function refresh(stageChanged) {
     const fn = RENDERERS[state.tab];
-    const pages = ['mywork', 'tasks', 'exceptions', 'shipments'];
+    const pages = ['mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'];
     if (stageChanged) pages.push('orderstatus', 'dashboard');
     if (fn && pages.includes(state.tab)) fn();
     renderDrawer();
@@ -891,12 +970,13 @@
   hooks.closeDrawer = closeDrawer;
   hooks.workChanged = () => refresh();
   hooks.statusChanged = () => { renderDrawer(); updateBadges(); };
-  hooks.portfolioReady = () => { updateBadges(); if (['mywork', 'tasks', 'exceptions', 'shipments'].includes(state.tab)) refresh(); };
+  hooks.portfolioReady = () => { updateBadges(); if (['mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(state.tab)) refresh(); };
 
   RENDERERS.mywork = renderMyWork;
   RENDERERS.tasks = renderTasks;
   RENDERERS.exceptions = renderExceptions;
   RENDERERS.shipments = renderShipments;
+  RENDERERS.invoiced = renderInvoiced;
 
   /* ------------------------------------------------------------------ *
    * Search

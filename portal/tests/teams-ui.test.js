@@ -789,25 +789,12 @@ async function buildBundle() {
     pageText.replace(/\n/g, ' | ').slice(0, 400));
 
   const rowsBefore = await page.locator('#orderStatusBody table.data tbody tr').count();
-  const hideToggle = page.locator('#orderStatusBody .check-inline input').first();
-  ok('finished orders are shown unless someone hides them', !(await hideToggle.isChecked()));
-  ok('and every user can make that choice for themselves', !(await hideToggle.isDisabled()));
-
-  await hideToggle.check();
-  await page.waitForTimeout(1200);
-  const rowsHidden = await page.locator('#orderStatusBody table.data tbody tr').count();
-  ok('hiding them leaves fewer rows', rowsHidden < rowsBefore, rowsBefore + ' -> ' + rowsHidden);
-  // Read the chosen option, not the whole cell — the cell holds a picker whose
-  // options list every stage, finished ones included.
   const remainingStages = await page.locator('#orderStatusBody table.data tbody tr select')
     .evaluateAll((sels) => sels.map((el) => el.options[el.selectedIndex].textContent.trim()));
-  ok('and none of the remaining rows is finished',
-    remainingStages.every((t) => !/Order Closure/.test(t)), remainingStages.join(' | '));
-
-  await page.locator('#orderStatusBody .check-inline input').first().uncheck();
-  await page.waitForTimeout(1200);
-  ok('showing them again restores every row',
-    (await page.locator('#orderStatusBody table.data tbody tr').count()) === rowsBefore);
+  ok('the Orders page lists only open orders — none is invoiced or closed',
+    remainingStages.every((t) => !/Customer Invoicing|Supplier Settlement|Order Closure/.test(t)), remainingStages.join(' | '));
+  ok('and says how many have moved to the Invoiced list',
+    /Invoiced orders \(\d+\)/.test(await page.locator('#orderStatusBody').innerText()), String(rowsBefore));
 
   await accountSelect.selectOption('aeromexico');
   await waitForItems();
@@ -815,14 +802,14 @@ async function buildBundle() {
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
 
   const firstRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
+  const openBeforeClose = await page.locator('#orderStatusBody table.data tbody tr').count();
   await firstRowSelect.selectOption('closed');
   await page.waitForTimeout(1200);
-  const setInvoiced = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
-  ok('choosing the terminal stage by hand is attributed to the person',
-    /set by a person/i.test(setInvoiced) && /12\. Closed/i.test(setInvoiced),
-    setInvoiced.replace(/\n/g, ' | '));
+  ok('closing an order by hand takes it off the open list',
+    (await page.locator('#orderStatusBody table.data tbody tr').count()) === openBeforeClose - 1);
 
-  await firstRowSelect.selectOption('delivered');
+  const nextRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
+  await nextRowSelect.selectOption('delivered');
   await page.waitForTimeout(1200);
   const afterText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
   ok('the chosen status is recorded as set by a person',

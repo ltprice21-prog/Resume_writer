@@ -43,7 +43,7 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # fixture-free: workflow (66), orderwork (50), hub-ui (35); the rest need fixtures
+node portal/tests/*.test.js # fixture-free: workflow (70), orderwork (50), hub-ui (40); the rest need fixtures
 ```
 
 | Source | Responsibility |
@@ -93,7 +93,14 @@ Follow-up rules carry the `stage` they belong to. The three settlement chases
 (winery invoice, proof of export, forwarder's invoice) are **not** superseded by a
 NAV invoice number — settlement follows invoicing. The forwarder's-invoice chase
 is superseded by the received-for-ACCT date. In the Teams app, `withClosure` sets
-aside any chase on an order a person has closed.
+aside chases only on an order a person has taken to the *terminal* stage.
+
+**Invoiced means closed.** Stages 10–12 carry `closes: true`, so `open` is false for them.
+`AMI.orderIsOpen(order, status)` decides `isOpen`: a person-set stage decides by the stage; a
+tracker-derived stage decides by whether `evidence['customer-invoiced']` exists, so settlement
+columns without an invoice do not close an order. The Orders page lists open orders only and
+`app-hub.js` `renderInvoiced` lists the rest, reading the settlement columns
+(`wineryInvoice`, `proofOfExport`, `forwarderInvoiceDate` in `VALUE_COLUMNS`).
 
 `tests/workflow.test.js` covers all of this against an in-memory tracker and needs
 no fixtures.

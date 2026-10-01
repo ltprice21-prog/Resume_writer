@@ -65,7 +65,8 @@ the list behind them keeps its place. Light and dark both follow the computer's 
 | --- | --- |
 | **My Work** | What needs you today: tasks that have fallen due, open exceptions, tracker dates in the next 14 days, person checks waiting, chases to send |
 | **Account Health** | The dashboard — contracts, what is coming, the pipeline, what needs attention |
-| **Orders** | Every order and where it stands; click a PO to open it |
+| **Orders** | Every open order and where it stands; click a PO to open it |
+| **Invoiced** | Orders that are invoiced, and therefore closed, with their settlement columns |
 | **Tasks** | The standard steps for each order's current stage, across all orders |
 | **Exceptions** | Things that need attention, with severity and an answer for each |
 | **Shipments** | Every collection and delivery, from the tracker's dated columns |
@@ -301,7 +302,7 @@ The division's workflow, grouped into four phases:
 | 9 | Delivery Confirmation | Shipment | the tracker records the delivery date |
 | 10 | Customer Invoicing | Financial close | the tracker records *NAV INV #* |
 | 11 | Supplier Settlement | Financial close | the tracker records *Winery invoice received*, *Proof of Export Sent to Winery* and *Forwarder's invoice received date for ACCT* |
-| 12 | Order Closure & Reporting | Financial close | stages 10 and 11 are both done on the tracker, or a person closes it |
+| 12 | Order Closure & Reporting | Financial close | stages 10 and 11 are both done on the tracker, or a person closes it. Stages 10, 11 and 12 all count as closed |
 
 An order sits at the **furthest stage it has completed**, and every view names the stage it is
 waiting on next. Where a stage needs several columns, every one the sheet carries must be filled
@@ -312,10 +313,18 @@ person makes, and no column records that they happened. The tracker can carry an
 a collection date puts it at Shipment Execution — but that shows the order moved on, not that the
 check was made, and the per-order trail shows the check as *not recorded*.
 
-**Invoicing no longer closes an order.** Supplier Settlement comes after it, so an invoiced order
-stays open until the settlement columns are filled or a person closes it, and the winery-invoice,
-proof-of-export and forwarder-invoice chases stay live after the NAV invoice number goes in.
-Nothing on an order a person has closed is chased.
+**An invoiced order is closed.** The moment the tracker records a NAV invoice number — or a person
+sets Customer Invoicing — the order counts as closed. It leaves the open lists (Orders, My Work,
+Tasks, Exceptions) and appears on the **Invoiced** page instead. Supplier Settlement and Order
+Closure remain stages 11 and 12, so nothing is lost: the Invoiced page shows the winery invoice,
+proof of export and forwarder's invoice columns beside each order, and says *Waiting on 2* where
+any are still blank.
+
+The three settlement chases (winery invoice, proof of export, forwarder's invoice) therefore **stay
+live after invoicing** until their columns are filled or a person sets Order Closure & Reporting —
+only that last stage stops them. To reopen an invoiced order, open it and set an earlier stage.
+
+Settlement columns filled *without* an invoice number do not close an order.
 
 Statuses stored under the old four-stage pipeline read as their new stage and say so: *Order
 placed* → Supplier PO Creation, *In transit* → Shipment Execution, *Delivered* → Delivery
@@ -328,9 +337,10 @@ at the foot of the page.
 
 ### Hiding what is finished
 
-**Hide closed orders**, on both Account Health and Order status, leaves the finished
-orders out of the view. Counts, bars and the board all follow the switch — it changes what you
-are looking at, not what is true. The choice is per person and is remembered.
+The **Orders** page lists open orders only; invoiced ones are on **Invoiced**, and a button on
+Orders says how many have moved. **Hide invoiced orders**, on Account Health and the other pages
+that carry it, leaves them out of the counts, bars and board too — it changes what you are looking
+at, not what is true. The choice is per person and is remembered.
 
 Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
 to…", and filters including *Open only* and *No status set*. Anything you set there is what the
@@ -611,9 +621,9 @@ portal/
     ui.test.js            58 assertions   single-account app in Chromium
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
     status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
-    workflow.test.js      66 assertions   the twelve-stage workflow — needs no fixtures
+    workflow.test.js      70 assertions   the twelve-stage workflow — needs no fixtures
     orderwork.test.js     50 assertions   checklists, exceptions, shipments, merging, permissions — no fixtures
-    hub-ui.test.js        35 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
+    hub-ui.test.js        40 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
     teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 

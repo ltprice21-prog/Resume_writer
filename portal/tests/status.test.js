@@ -55,8 +55,8 @@ function memoryStore(seed) {
     'Logistics Planning', 'Documentation Management', 'Pre-Shipment Review', 'Shipment Execution',
     'Delivery Confirmation', 'Customer Invoicing', 'Supplier Settlement', 'Order Closure & Reporting']);
   check('steps run 1..12', AMI.ORDER_STATUSES.map((s) => s.step), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-  check('only closure ends the order', AMI.ORDER_STATUSES.filter((s) => !s.open).map((s) => s.id), ['closed']);
-  ok('customer invoicing no longer ends it', AMI.isOpenStatus('customer-invoiced'));
+  check('an order is closed from invoicing onward', AMI.ORDER_STATUSES.filter((s) => !s.open).map((s) => s.id), ['customer-invoiced', 'settled', 'closed']);
+  ok('customer invoicing ends it', !AMI.isOpenStatus('customer-invoiced'));
   ok('an unknown status is treated as open rather than dropped', AMI.isOpenStatus('nonsense'));
   ok('every stage explains itself', AMI.ORDER_STATUSES.every((s) => s.hint && s.label && s.short));
 
@@ -153,7 +153,7 @@ function memoryStore(seed) {
   ok('an invoiced order is closed only when every settlement column is filled too',
     ruledOrders.filter((o) => o.evidence['customer-invoiced']).every((o) =>
       (o.status.statusId === 'closed') === !!o.evidence.settled));
-  ok('and a closed one is not open', ruledOrders.filter((o) => o.status.statusId === 'closed')
+  ok('and every invoiced order, settled or not, is closed', ruledOrders.filter((o) => o.evidence['customer-invoiced'])
     .every((o) => o.isOpen === false));
 
   const earlier = AMI.effectiveStatus(orders[orders.length - 1], ruleDoc);
@@ -198,7 +198,7 @@ function memoryStore(seed) {
   AMI.setStatus(invoicedDoc, orders[0].key, 'customer-invoiced', 'Bo');
   AMI.setStatus(invoicedDoc, orders[1].key, 'closed', 'Bo');
   const openness = AMI.decorate([orders[0], orders[1]], invoicedDoc, today);
-  ok('an order set at customer invoicing is still open', openness[0].isOpen === true);
+  ok('an order set at customer invoicing is closed', openness[0].isOpen === false);
   ok('one a person closed is finished',
     openness[1].isOpen === false && openness[1].status.statusId === 'closed');
 

@@ -1613,6 +1613,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     <button class="nav" data-tab="tasks" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg><span>Tasks</span></button>
     <button class="nav" data-tab="exceptions" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/><path d="M12 18h.01"/></svg><span>Exceptions</span><span class="nav-badge" data-badge="exceptions" hidden></span></button>
     <button class="nav" data-tab="shipments" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Shipments</span></button>
+    <button class="nav" data-tab="invoiced" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg><span>Invoiced</span></button>
     <button class="nav" data-tab="followups" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4V4z"/></svg><span>Follow-ups</span></button>
     <div class="sep"></div>
     <div class="rail-label">Order desk</div>
@@ -1652,6 +1653,10 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   <section class="panel" data-panel="exceptions" hidden>
     <div id="exceptionsBody"></div>
+  </section>
+
+  <section class="panel" data-panel="invoiced" hidden>
+    <div id="invoicedBody"></div>
   </section>
 
   <section class="panel" data-panel="shipments" hidden>
@@ -5243,9 +5248,14 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * they happened. The portal never infers a gate from the columns around it —
    * only a person can mark one done.
    *
-   * Order Closure & Reporting is the one terminal stage. The tracker reaches it
-   * only when the customer invoice and every supplier-settlement column are
-   * filled; a person can also close an order directly.
+   * An order is closed once it is invoiced. Customer Invoicing, Supplier
+   * Settlement and Order Closure & Reporting are all "closing" stages (`closes`):
+   * an order at any of them leaves the open lists and appears on the Invoiced
+   * list, where its settlement columns stay visible so nothing still owed to or
+   * by a supplier is lost. Order Closure & Reporting is the one terminal stage;
+   * the tracker reaches it only when the customer invoice and every
+   * supplier-settlement column are filled, and a person can also close an order
+   * directly.
    *
    * Twelve stages cannot each have a fill that stays distinct for a reader with
    * colour vision deficiency, so fills belong to the four PHASES — one hue and
@@ -5334,13 +5344,13 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       reason: 'a delivery date is recorded',
     },
     {
-      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced',
-      hint: 'Done when the tracker records a NAV invoice number.',
+      id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced', closes: true,
+      hint: 'Done when the tracker records a NAV invoice number. An invoiced order counts as closed and moves to the Invoiced list.',
       evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
       reason: 'a NAV invoice number is recorded',
     },
     {
-      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled',
+      id: 'settled', phase: 'close', label: 'Supplier Settlement', short: 'Suppliers settled', closes: true,
       hint: 'Done when the tracker records the winery invoice received, proof of export sent to the winery, '
         + 'and the forwarder’s invoice received for accounts.',
       evidence: [
@@ -5351,7 +5361,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       reason: 'the winery invoice, proof of export and forwarder’s invoice are all recorded',
     },
     {
-      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true,
+      id: 'closed', phase: 'close', label: 'Order Closure & Reporting', short: 'Closed', terminal: true, closes: true,
       hint: 'The order is finished. The tracker puts an order here when it is invoiced to the customer and every '
         + 'supplier-settlement column is filled; a person can also close it directly.',
       requires: ['customer-invoiced', 'settled'],
@@ -5365,8 +5375,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const phase = phaseById(d.phase);
     return Object.assign({}, d, {
       step: i + 1,
-      open: !d.terminal,
+      open: !d.closes,
       terminal: !!d.terminal,
+      closes: !!d.closes,
       gate: !!d.gate,
       fill: phase.fill,
       pattern: phase.pattern,
@@ -5400,6 +5411,17 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
+  /**
+   * Whether an order is still open. A stage a person set decides it by the stage;
+   * a stage read from the tracker decides it by whether the tracker records an
+   * invoice — settlement columns filled without an invoice do not close an order.
+   */
+  function orderIsOpen(order, status) {
+    const st = statusById(status && status.statusId);
+    if (!st) return true;
+    if (status.source === 'set') return st.open;
+    return !(order.evidence && order.evidence['customer-invoiced']);
+  }
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
   const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);
 
@@ -5514,6 +5536,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     { key: 'pallets', re: /^Quantity \(pallets\)/i },
     { key: 'lot', re: /^Lot Number/i },
     { key: 'navInvoice', re: /^NAV INV/i },
+    { key: 'wineryInvoice', re: /^Winery invoice received/i },
+    { key: 'proofOfExport', re: /^Proof of [Ee]xport/i },
+    { key: 'forwarderInvoiceDate', re: /^Forwarder.s invoice received/i },
     { key: 'balanceBt', re: /^Balance on Contract\s*\(bt\)/i },
     { key: 'balanceCs', re: /^Balance on Contract\s*\(cs\)/i },
     { key: 'notes', re: /^Notes/i },
@@ -5970,7 +5995,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const status = effectiveStatus(o, statusDoc);
       return Object.assign({}, o, {
         status,
-        isOpen: status.statusId ? isOpenStatus(status.statusId) : true,
+        isOpen: orderIsOpen(o, status),
         ageDays: daysSince(o.lastEvent, now),
       });
     });
@@ -6168,7 +6193,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   Object.assign(AMI, {
     STATUS_PATH, ORDER_STATUSES, PHASES, HEALTH_THRESHOLDS, LEGACY_STATUS_IDS, TERMINAL_STATUS, GATE_STATUSES,
-    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, statusKey, canonicalStatusId,
+    statusById, phaseById, nextStatus, nextForOrder, isOpenStatus, orderIsOpen, statusKey, canonicalStatusId,
     emptyStatusDoc, loadStatuses, saveStatuses, mergeStatusDocs, setStatus, clearStatus,
     stageEvidence, deriveStatus, readOrders, effectiveStatus, stageTrail,
     decorate, countByStatus, countByPhase, emptyCounts, plausibleWindow,
@@ -7400,9 +7425,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     });
     return el('label', {
       class: 'check-inline',
-      'data-tip': 'Leaves out orders at Order Closure & Reporting, the last workflow stage. Nothing is '
+      'data-tip': 'Leaves out orders that are invoiced — an invoiced order counts as closed. Nothing is '
         + 'deleted — the counts and totals on this page follow the switch.',
-    }, [box, document.createTextNode('Hide closed orders')]);
+    }, [box, document.createTextNode('Hide invoiced orders')]);
   }
 
   function poColumn(header) {
@@ -7456,7 +7481,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
-      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments'].includes(t)) b.disabled = !hasUser;
+      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(t)) b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -10009,7 +10034,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     if (followUp.superseded) return followUp;
     const doc = state.statusDoc;
     const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
-    if (!entry || AMI.isOpenStatus(entry.status)) return followUp;
+    // Only Order Closure & Reporting ends the chasing. An invoiced order is off
+    // the open lists, but its supplier-settlement chases stay live until the
+    // columns are filled or a person closes it.
+    const st = entry ? AMI.statusById(entry.status) : null;
+    if (!st || !st.terminal) return followUp;
     return Object.assign({}, followUp, {
       superseded: { header: 'Order status', value: 'closed', date: null },
       supersededReason: 'still blank, but ' + (entry.updatedBy || 'someone') + ' closed the order'
@@ -10610,12 +10639,12 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * hide-finished switch. Counts and totals downstream follow the switch, which
    * is the point of it — it changes what you are looking at, not what is true.
    */
-  function filteredOrders() {
+  function filteredOrders(includeClosed) {
     const all = [];
     for (const p of filteredPortfolio()) all.push(...p.orders);
     const decorated = AMI.withSchedule(
       AMI.decorate(all, state.statusDoc || AMI.emptyStatusDoc(), new Date()), new Date());
-    return applyClosedFilter(decorated);
+    return includeClosed ? decorated : applyClosedFilter(decorated);
   }
 
   /**
@@ -11772,12 +11801,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       return;
     }
 
+    const everyOrder = filteredOrders(true);
+    const invoicedCount = everyOrder.filter((o) => !o.isOpen).length;
+
     host.appendChild(pageHeader(
       'Orders',
       'Order status',
-      'Set where each order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such.',
+      'Set where each open order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such. '
+      + 'An order that is invoiced counts as closed and moves to the Invoiced list.',
       [
-        closedToggle(() => renderOrderStatus()),
+        el('button', { class: 'btn', text: 'Invoiced orders (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -11794,14 +11827,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
             + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
             + 'a person can mark them done — the tracker moving past them does not mean they happened. '
-            + 'An order closes when it is invoiced and every supplier-settlement column is filled, or when '
-            + 'a person closes it. Use “Hide closed orders” to work with only what is still live.',
+            + 'An order closes as soon as it is invoiced — a NAV invoice number in the tracker, or Customer '
+            + 'Invoicing set by a person — and moves to the Invoiced list. To reopen one, set an earlier stage '
+            + 'from its page there.',
         }),
       ]),
     ]));
 
     const f = state.filters;
-    let orders = filteredOrders();
+    // Invoiced orders are closed and live on their own list.
+    let orders = everyOrder.filter((o) => o.isOpen);
     if (f.statusId === '__open') orders = orders.filter((o) => o.isOpen);
     else if (f.statusId === '__unset') orders = orders.filter((o) => !o.status.statusId);
     else if (f.statusId) orders = orders.filter((o) => o.status.statusId === f.statusId);
@@ -12415,7 +12450,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     }, [document.createTextNode(label), count != null ? el('span', { class: 'n', text: String(count) }) : null])));
   }
 
-  const view = { tasks: 'soon', exceptions: 'open', severity: '', shipments: 'live', mine: 'all' };
+  const view = { tasks: 'soon', exceptions: 'open', severity: '', shipments: 'live', mine: 'all', invoiced: 'all' };
 
   /* ------------------------------------------------------------------ *
    * My Work
@@ -12681,6 +12716,85 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       el('h2', {}, [document.createTextNode('Shipments'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: shown.length + ' shown' })]),
       shown.length ? el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [table])]) : emptyState('No shipments match.'),
+    ]));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Invoiced
+   * ------------------------------------------------------------------ */
+
+  const isBlank = (v) => v == null || v === '' || /^to fill$/i.test(String(v).trim());
+
+  /** A tracker cell as it should read: a date serial as a date, anything else as typed. */
+  function cellShow(v) {
+    if (isBlank(v)) return '—';
+    if (typeof v === 'number' && v > 30000 && v < 80000) return AMI.formatShort(AMI.serialToDate(v));
+    return String(v);
+  }
+
+  function settlementOf(order) {
+    const v = order.values;
+    const parts = [
+      ['Winery invoice', v.wineryInvoice], ['Proof of export', v.proofOfExport], ['Forwarder’s invoice', v.forwarderInvoiceDate],
+    ];
+    const missing = parts.filter(([, val]) => isBlank(val)).map(([name]) => name);
+    return { parts, missing, done: !missing.length };
+  }
+
+  function renderInvoiced() {
+    const host = $('#invoicedBody');
+    if (!ready(host, renderInvoiced)) return;
+
+    host.appendChild(ui.pageHeader('Work', 'Invoiced orders',
+      'An order is closed once it is invoiced — a NAV invoice number in the tracker, or Customer Invoicing set by a person. It leaves the open lists and comes here. '
+      + 'The supplier-settlement columns are shown beside it, so anything still owed by or to a supplier stays in view. To reopen an order, open it and set an earlier stage.',
+      []));
+    host.appendChild(ui.filterBar(renderInvoiced, { withItem: true, withSearch: true }));
+
+    const orders = scopedOrders({ useQuery: true, keepClosed: true }).filter((o) => !o.isOpen)
+      .map((o) => ({ order: o, settle: settlementOf(o) }));
+    const owed = orders.filter((x) => !x.settle.done);
+    const sels = { all: () => true, owed: (x) => !x.settle.done, settled: (x) => x.settle.done };
+
+    host.appendChild(el('div', { class: 'tiles' }, [
+      tile('Invoiced orders', orders.length, 'closed, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
+      tile('Settlement outstanding', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
+      tile('Fully settled', orders.length - owed.length, 'all three settlement columns filled', 'ok', () => { view.invoiced = 'settled'; renderInvoiced(); }, view.invoiced === 'settled'),
+    ]));
+    host.appendChild(chipRow([
+      ['all', 'All invoiced', orders.length], ['owed', 'Settlement outstanding', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
+    ], view.invoiced, (id) => { view.invoiced = id; renderInvoiced(); }));
+
+    const shown = orders.filter(sels[view.invoiced] || sels.all).sort((a, b) => (
+      (b.order.dates.delivered ? b.order.dates.delivered.getTime() : 0) - (a.order.dates.delivered ? a.order.dates.delivered.getTime() : 0))
+      || a.order.po.localeCompare(b.order.po));
+
+    const table = el('table', { class: 'data' });
+    table.appendChild(el('thead', {}, [el('tr', {}, ['PO', 'Account · item', 'Cases', 'Delivered', 'NAV invoice', 'Winery invoice', 'Proof of export', 'Forwarder’s invoice', 'Settlement']
+      .map((h) => el('th', { text: h })))]));
+    const tb = el('tbody');
+    for (const { order, settle } of shown.slice(0, 300)) {
+      const v = order.values;
+      tb.appendChild(el('tr', {}, [
+        el('td', {}, [el('button', { class: 'wk-link mono', text: order.po, onclick: () => ui.openOrder(order.key) })]),
+        el('td', { text: orderWhere(order) }),
+        el('td', { class: 'num', text: v.cases != null ? String(v.cases) : '—' }),
+        el('td', { text: fmt(order.dates.delivered) }),
+        el('td', { class: 'mono', text: cellShow(v.navInvoice) }),
+        ...settle.parts.map(([, val]) => el('td', { text: cellShow(val) })),
+        el('td', {}, [settle.done
+          ? el('span', { class: 'tag ok', text: 'Settled' })
+          : el('span', { class: 'tag warn', 'data-tip': 'Still blank in the tracker: ' + settle.missing.join(', '), text: 'Waiting on ' + settle.missing.length })]),
+      ]));
+    }
+    table.appendChild(tb);
+
+    host.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Invoiced'), el('span', { class: 'spacer' }),
+        el('span', { class: 'context-note', text: shown.length + ' shown' })]),
+      shown.length
+        ? el('div', { class: 'body' }, [el('div', { class: 'table-scroll' }, [table])])
+        : emptyState('No invoiced orders match.', 'Orders appear here as soon as the tracker records a NAV invoice number.'),
     ]));
   }
 
@@ -12951,7 +13065,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   /** Redraw whatever is on screen after something changed. */
   function refresh(stageChanged) {
     const fn = RENDERERS[state.tab];
-    const pages = ['mywork', 'tasks', 'exceptions', 'shipments'];
+    const pages = ['mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'];
     if (stageChanged) pages.push('orderstatus', 'dashboard');
     if (fn && pages.includes(state.tab)) fn();
     renderDrawer();
@@ -12962,12 +13076,13 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   hooks.closeDrawer = closeDrawer;
   hooks.workChanged = () => refresh();
   hooks.statusChanged = () => { renderDrawer(); updateBadges(); };
-  hooks.portfolioReady = () => { updateBadges(); if (['mywork', 'tasks', 'exceptions', 'shipments'].includes(state.tab)) refresh(); };
+  hooks.portfolioReady = () => { updateBadges(); if (['mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(state.tab)) refresh(); };
 
   RENDERERS.mywork = renderMyWork;
   RENDERERS.tasks = renderTasks;
   RENDERERS.exceptions = renderExceptions;
   RENDERERS.shipments = renderShipments;
+  RENDERERS.invoiced = renderInvoiced;
 
   /* ------------------------------------------------------------------ *
    * Search
