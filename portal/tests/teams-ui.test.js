@@ -793,8 +793,8 @@ async function buildBundle() {
     .evaluateAll((sels) => sels.map((el) => el.options[el.selectedIndex].textContent.trim()));
   ok('the Orders page lists only open orders — none is invoiced or closed',
     remainingStages.every((t) => !/Customer Invoicing|Supplier Settlement|Order Closure/.test(t)), remainingStages.join(' | '));
-  ok('and says how many have moved to the Invoiced list',
-    /Invoiced orders \(\d+\)/.test(await page.locator('#orderStatusBody').innerText()), String(rowsBefore));
+  ok('and says how many have moved to the Invoiced archive',
+    /Invoiced archive \(\d+\)/.test(await page.locator('#orderStatusBody').innerText()), String(rowsBefore));
 
   await accountSelect.selectOption('aeromexico');
   await waitForItems();

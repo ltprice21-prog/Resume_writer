@@ -43,7 +43,7 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # fixture-free: workflow (70), orderwork (50), hub-ui (40); the rest need fixtures
+node portal/tests/*.test.js # fixture-free: workflow (71), orderwork (50), hub-ui (42); the rest need fixtures
 ```
 
 | Source | Responsibility |
@@ -92,15 +92,20 @@ for a colourblind reader, so the stage is always named in words as well.
 Follow-up rules carry the `stage` they belong to. The three settlement chases
 (winery invoice, proof of export, forwarder's invoice) are **not** superseded by a
 NAV invoice number — settlement follows invoicing. The forwarder's-invoice chase
-is superseded by the received-for-ACCT date. In the Teams app, `withClosure` sets
-aside chases only on an order a person has taken to the *terminal* stage.
+is superseded by the received-for-ACCT date. These engine rules are unchanged (the
+single-account app still uses them), but the Teams app drops every chase on an
+invoiced order before it reaches the page (`closedRows`), and `withClosure` sets aside
+chases on an order a person has taken to the *terminal* stage.
 
-**Invoiced means closed.** Stages 10–12 carry `closes: true`, so `open` is false for them.
-`AMI.orderIsOpen(order, status)` decides `isOpen`: a person-set stage decides by the stage; a
-tracker-derived stage decides by whether `evidence['customer-invoiced']` exists, so settlement
-columns without an invoice do not close an order. The Orders page lists open orders only and
-`app-hub.js` `renderInvoiced` lists the rest, reading the settlement columns
-(`wineryInvoice`, `proofOfExport`, `forwarderInvoiceDate` in `VALUE_COLUMNS`).
+**Invoiced means closed, and the pipeline is bypassed.** Stages 10–12 carry `closes: true`.
+`AMI.orderIsOpen(order, status)` decides `isOpen`: a NAV invoice number in the tracker
+(`evidence['customer-invoiced']`) closes the order whatever stage was set; otherwise a person-set
+stage at or past invoicing closes it. Settlement columns without an invoice do not.
+`excludingClosed()` is always true in the Teams app, so every dashboard and open list is
+open-only and there is no toggle; `chasesFor` and `renderFollowUps` drop invoiced rows. Contract
+standing deliberately still reads every order. `app-hub.js` `renderInvoiced` is the archive,
+reading the settlement columns (`wineryInvoice`, `proofOfExport`, `forwarderInvoiceDate` in
+`VALUE_COLUMNS`).
 
 `tests/workflow.test.js` covers all of this against an in-memory tracker and needs
 no fixtures.

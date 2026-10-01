@@ -124,7 +124,7 @@
     },
     {
       id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced', closes: true,
-      hint: 'Done when the tracker records a NAV invoice number. An invoiced order counts as closed and moves to the Invoiced list.',
+      hint: 'Done when the tracker records a NAV invoice number. An invoiced order is closed and moves to the Invoiced archive.',
       evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
       reason: 'a NAV invoice number is recorded',
     },
@@ -191,15 +191,19 @@
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
   /**
-   * Whether an order is still open. A stage a person set decides it by the stage;
-   * a stage read from the tracker decides it by whether the tracker records an
-   * invoice — settlement columns filled without an invoice do not close an order.
+   * Whether an order is still open.
+   *
+   * An invoice number in the tracker closes it outright, whatever stage anyone
+   * set and however much of the pipeline it skipped — the customer has been
+   * billed, so the rest of the workflow no longer applies. A stage a person set
+   * at or beyond Customer Invoicing closes it too. Settlement columns filled
+   * without an invoice number do not.
    */
   function orderIsOpen(order, status) {
+    if (order.evidence && order.evidence['customer-invoiced']) return false;
     const st = statusById(status && status.statusId);
     if (!st) return true;
-    if (status.source === 'set') return st.open;
-    return !(order.evidence && order.evidence['customer-invoiced']);
+    return status.source === 'set' ? st.open : true;
   }
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
   const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);

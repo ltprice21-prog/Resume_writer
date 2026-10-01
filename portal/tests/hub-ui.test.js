@@ -135,16 +135,22 @@ async function buildBundle() {
   await wait(700);
   ok('ticking a step takes it off the open list', (await page.locator('#tasksBody .tsk').count()) === before - 1);
 
-  console.log('\nInvoiced orders');
+  console.log('\nInvoiced archive');
   await go('orderstatus');
   const openList = await page.locator('#orderStatusBody table.data').first().innerText();
   ok('an invoiced order is not on the open Orders list', !/T-350/.test(openList) && /T-200/.test(openList));
-  ok('which says how many have moved', /Invoiced orders \(1\)/.test(await page.locator('#orderStatusBody').innerText()));
-  await page.locator('#orderStatusBody button', { hasText: 'Invoiced orders' }).click();
+  ok('which says how many have moved', /Invoiced archive \(1\)/.test(await page.locator('#orderStatusBody').innerText()));
+  await page.locator('#orderStatusBody button', { hasText: 'Invoiced archive' }).click();
   await wait(900);
   const inv = await page.locator('#invoicedBody').innerText();
-  ok('it is on the Invoiced list', /T-350/.test(inv) && !/T-200/.test(inv));
+  ok('it is in the archive', /T-350/.test(inv) && !/T-200/.test(inv));
   ok('with its NAV invoice number and what is still blank', /416001/.test(inv) && /Waiting on 2/.test(inv));
+  await go('dashboard');
+  await wait(1200);
+  const dash = await page.locator('#dashboardBody').innerText();
+  ok('an invoiced order is not on the dashboard', !/T-350/.test(dash) && /T-200/.test(dash) && (await page.locator('#dashboardBody .kan-card').allInnerTexts()).every((t) => !/T-350/.test(t)));
+  await go('followups');
+  ok('nor in the follow-ups', !/T-350/.test(await page.locator('#followBody').innerText()));
   await go('tasks');
   await page.locator('#tasksBody .chip-filter', { hasText: 'All open' }).click();
   await wait(400);

@@ -216,9 +216,18 @@ ok('an order that has not been invoiced is open', ['R-1', 'S-1', 'X-1', 'V-1'].e
 const invoicedByHand = AMI.decorate(orders, { entries: { [plainBy['X-1'].key]: { status: 'customer-invoiced', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' } } }, TODAY)
   .find((o) => o.po === 'X-1');
 ok('one a person marks invoiced is closed too', invoicedByHand.isOpen === false);
-const reopened = AMI.decorate(orders, { entries: { [plainBy['I-1'].key]: { status: 'delivered', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' } } }, TODAY)
-  .find((o) => o.po === 'I-1');
-ok('and setting an earlier stage reopens it', reopened.isOpen === true);
+const earlierSet = AMI.decorate(orders, { entries: {
+  [plainBy['I-1'].key]: { status: 'delivered', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' },
+  [plainBy['X-1'].key]: { status: 'customer-invoiced', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' },
+} }, TODAY);
+ok('an invoice number in the tracker closes it whatever stage was set', earlierSet.find((o) => o.po === 'I-1').isOpen === false);
+const manual = AMI.decorate(orders, { entries: {
+  [plainBy['X-1'].key]: { status: 'customer-invoiced', updated: '2026-08-01T00:00:00.000Z', updatedBy: 'Bo' },
+} }, TODAY).find((o) => o.po === 'X-1');
+const manualBack = AMI.decorate(orders, { entries: {
+  [plainBy['X-1'].key]: { status: 'delivered', updated: '2026-08-02T00:00:00.000Z', updatedBy: 'Bo' },
+} }, TODAY).find((o) => o.po === 'X-1');
+ok('one closed by hand, with no invoice number, reopens when an earlier stage is set', manual.isOpen === false && manualBack.isOpen === true);
 check('the closing stages are invoicing, settlement and closure',
   AMI.ORDER_STATUSES.filter((s) => !s.open).map((s) => s.id), ['customer-invoiced', 'settled', 'closed']);
 const counts = AMI.countByStatus(plain);

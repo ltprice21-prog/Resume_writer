@@ -66,7 +66,7 @@ the list behind them keeps its place. Light and dark both follow the computer's 
 | **My Work** | What needs you today: tasks that have fallen due, open exceptions, tracker dates in the next 14 days, person checks waiting, chases to send |
 | **Account Health** | The dashboard — contracts, what is coming, the pipeline, what needs attention |
 | **Orders** | Every open order and where it stands; click a PO to open it |
-| **Invoiced** | Orders that are invoiced, and therefore closed, with their settlement columns |
+| **Invoiced archive** | Orders with an invoice number in the tracker — closed, off the dashboards and follow-ups — with their settlement columns |
 | **Tasks** | The standard steps for each order's current stage, across all orders |
 | **Exceptions** | Things that need attention, with severity and an answer for each |
 | **Shipments** | Every collection and delivery, from the tracker's dated columns |
@@ -313,18 +313,21 @@ person makes, and no column records that they happened. The tracker can carry an
 a collection date puts it at Shipment Execution — but that shows the order moved on, not that the
 check was made, and the per-order trail shows the check as *not recorded*.
 
-**An invoiced order is closed.** The moment the tracker records a NAV invoice number — or a person
-sets Customer Invoicing — the order counts as closed. It leaves the open lists (Orders, My Work,
-Tasks, Exceptions) and appears on the **Invoiced** page instead. Supplier Settlement and Order
-Closure remain stages 11 and 12, so nothing is lost: the Invoiced page shows the winery invoice,
-proof of export and forwarder's invoice columns beside each order, and says *Waiting on 2* where
-any are still blank.
+**An invoiced order is closed, and the pipeline is bypassed.** The moment the tracker records a NAV
+invoice number the order is closed — whatever stage it was at or had skipped, and whatever stage
+anyone set by hand. It is removed from **every dashboard and open list** (Account Health, Orders,
+My Work, Tasks, Exceptions, Shipments) and from **Follow-ups**, and is kept in the **Invoiced
+archive**. A person can also close an order by setting Customer Invoicing or later.
 
-The three settlement chases (winery invoice, proof of export, forwarder's invoice) therefore **stay
-live after invoicing** until their columns are filled or a person sets Order Closure & Reporting —
-only that last stage stops them. To reopen an invoiced order, open it and set an earlier stage.
+The archive shows the winery invoice, proof of export and forwarder's invoice columns beside each
+order, and says *Waiting on 2* where any are blank — for reference. Those blanks are **not
+chased**: an invoiced order is out of the follow-ups altogether. An order stays archived until its
+NAV invoice number is removed from the tracker (one closed by hand can be reopened by setting an
+earlier stage).
 
-Settlement columns filled *without* an invoice number do not close an order.
+Settlement columns filled *without* an invoice number do not close an order. Contract standing
+(balance, most recent delivery) is a fact about the contract, not a list of orders, so it still
+reads every order on the tracker.
 
 Statuses stored under the old four-stage pipeline read as their new stage and say so: *Order
 placed* → Supplier PO Creation, *In transit* → Shipment Execution, *Delivered* → Delivery
@@ -337,10 +340,8 @@ at the foot of the page.
 
 ### Hiding what is finished
 
-The **Orders** page lists open orders only; invoiced ones are on **Invoiced**, and a button on
-Orders says how many have moved. **Hide invoiced orders**, on Account Health and the other pages
-that carry it, leaves them out of the counts, bars and board too — it changes what you are looking
-at, not what is true. The choice is per person and is remembered.
+Dashboards and open lists never include invoiced orders. The **Orders** page has a button saying
+how many are in the **Invoiced archive**.
 
 Set them on the **Order status** page — a table with a dropdown per order, a bulk "set selected
 to…", and filters including *Open only* and *No status set*. Anything you set there is what the
@@ -621,9 +622,9 @@ portal/
     ui.test.js            58 assertions   single-account app in Chromium
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
     status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
-    workflow.test.js      70 assertions   the twelve-stage workflow — needs no fixtures
+    workflow.test.js      71 assertions   the twelve-stage workflow — needs no fixtures
     orderwork.test.js     50 assertions   checklists, exceptions, shipments, merging, permissions — no fixtures
-    hub-ui.test.js        40 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
+    hub-ui.test.js        42 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
     teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 

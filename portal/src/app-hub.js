@@ -639,9 +639,10 @@
     const host = $('#invoicedBody');
     if (!ready(host, renderInvoiced)) return;
 
-    host.appendChild(ui.pageHeader('Work', 'Invoiced orders',
-      'An order is closed once it is invoiced — a NAV invoice number in the tracker, or Customer Invoicing set by a person. It leaves the open lists and comes here. '
-      + 'The supplier-settlement columns are shown beside it, so anything still owed by or to a supplier stays in view. To reopen an order, open it and set an earlier stage.',
+    host.appendChild(ui.pageHeader('Work', 'Invoiced archive',
+      'An order is closed as soon as the tracker records a NAV invoice number, whatever stage it was at — the rest of the pipeline is bypassed. '
+      + 'It leaves the dashboards, the open lists and the follow-ups and is kept here. The supplier-settlement columns are shown beside it for reference; they are not chased. '
+      + 'An order stays here until its NAV invoice number is removed from the tracker.',
       []));
     host.appendChild(ui.filterBar(renderInvoiced, { withItem: true, withSearch: true }));
 
@@ -651,12 +652,12 @@
     const sels = { all: () => true, owed: (x) => !x.settle.done, settled: (x) => x.settle.done };
 
     host.appendChild(el('div', { class: 'tiles' }, [
-      tile('Invoiced orders', orders.length, 'closed, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
-      tile('Settlement outstanding', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
+      tile('Invoiced', orders.length, 'archived, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
+      tile('Settlement columns blank', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
       tile('Fully settled', orders.length - owed.length, 'all three settlement columns filled', 'ok', () => { view.invoiced = 'settled'; renderInvoiced(); }, view.invoiced === 'settled'),
     ]));
     host.appendChild(chipRow([
-      ['all', 'All invoiced', orders.length], ['owed', 'Settlement outstanding', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
+      ['all', 'All invoiced', orders.length], ['owed', 'Settlement columns blank', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
     ], view.invoiced, (id) => { view.invoiced = id; renderInvoiced(); }));
 
     const shown = orders.filter(sels[view.invoiced] || sels.all).sort((a, b) => (

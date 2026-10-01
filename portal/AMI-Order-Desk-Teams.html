@@ -1613,7 +1613,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     <button class="nav" data-tab="tasks" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg><span>Tasks</span></button>
     <button class="nav" data-tab="exceptions" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/><path d="M12 18h.01"/></svg><span>Exceptions</span><span class="nav-badge" data-badge="exceptions" hidden></span></button>
     <button class="nav" data-tab="shipments" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Shipments</span></button>
-    <button class="nav" data-tab="invoiced" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg><span>Invoiced</span></button>
+    <button class="nav" data-tab="invoiced" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg><span>Invoiced archive</span></button>
     <button class="nav" data-tab="followups" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4V4z"/></svg><span>Follow-ups</span></button>
     <div class="sep"></div>
     <div class="rail-label">Order desk</div>
@@ -5345,7 +5345,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     },
     {
       id: 'customer-invoiced', phase: 'close', label: 'Customer Invoicing', short: 'Customer invoiced', closes: true,
-      hint: 'Done when the tracker records a NAV invoice number. An invoiced order counts as closed and moves to the Invoiced list.',
+      hint: 'Done when the tracker records a NAV invoice number. An invoiced order is closed and moves to the Invoiced archive.',
       evidence: [{ re: /^NAV INV/i, name: 'NAV INV #' }],
       reason: 'a NAV invoice number is recorded',
     },
@@ -5412,15 +5412,19 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   const statusById = (id) => ORDER_STATUSES.find((s) => s.id === canonicalStatusId(id)) || null;
   const isOpenStatus = (id) => { const s = statusById(id); return !s || s.open; };
   /**
-   * Whether an order is still open. A stage a person set decides it by the stage;
-   * a stage read from the tracker decides it by whether the tracker records an
-   * invoice — settlement columns filled without an invoice do not close an order.
+   * Whether an order is still open.
+   *
+   * An invoice number in the tracker closes it outright, whatever stage anyone
+   * set and however much of the pipeline it skipped — the customer has been
+   * billed, so the rest of the workflow no longer applies. A stage a person set
+   * at or beyond Customer Invoicing closes it too. Settlement columns filled
+   * without an invoice number do not.
    */
   function orderIsOpen(order, status) {
+    if (order.evidence && order.evidence['customer-invoiced']) return false;
     const st = statusById(status && status.statusId);
     if (!st) return true;
-    if (status.source === 'set') return st.open;
-    return !(order.evidence && order.evidence['customer-invoiced']);
+    return status.source === 'set' ? st.open : true;
   }
   const TERMINAL_STATUS = ORDER_STATUSES.find((s) => s.terminal);
   const GATE_STATUSES = ORDER_STATUSES.filter((s) => s.gate);
@@ -7407,7 +7411,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
    * Whether finished orders are being left out of the view. A per-person choice,
    * not a workspace rule — hiding them changes what you look at, not what is true.
    */
-  const excludingClosed = () => !!state.excludeClosed;
+  const excludingClosed = () => true;
 
   /** Drop the terminal stage when the view is set to hide it. */
   const applyClosedFilter = (orders) => (excludingClosed() ? orders.filter((o) => o.isOpen) : orders);
@@ -7419,6 +7423,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   /** The switch that hides finished orders, wired to re-render its own page. */
   function closedToggle(rerender) {
+    // Invoiced orders are closed and live in the Invoiced archive; they are
+    // never part of a dashboard or an open list, so there is nothing to switch.
+    if (rerender) return null;
     const box = el('input', {
       type: 'checkbox', checked: excludingClosed(),
       onchange: (e) => { setExcludeClosed(e.target.checked); rerender(); },
@@ -10034,9 +10041,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     if (followUp.superseded) return followUp;
     const doc = state.statusDoc;
     const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
-    // Only Order Closure & Reporting ends the chasing. An invoiced order is off
-    // the open lists, but its supplier-settlement chases stay live until the
-    // columns are filled or a person closes it.
+    // A person taking an order to Order Closure & Reporting ends its chasing.
+    // (An order with an invoice number is dropped from the follow-ups before
+    // this is reached — see closedRows.)
     const st = entry ? AMI.statusById(entry.status) : null;
     if (!st || !st.terminal) return followUp;
     return Object.assign({}, followUp, {
@@ -10047,7 +10054,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   }
 
   /** An item tracker's follow-ups, with person-closed orders set aside. */
-  const chasesFor = (p) => p.followUps.map((f) => withClosure(f, p.account.id, p.item.id));
+  const chasesFor = (p) => {
+    const closed = closedRows(p.orders);
+    return p.followUps.filter((f) => !closed.has(f.row)).map((f) => withClosure(f, p.account.id, p.item.id));
+  };
+
+  /** Rows of orders that are invoiced, and so closed: they are not chased. */
+  function closedRows(orders) {
+    return new Set(AMI.decorate(orders, state.statusDoc || AMI.emptyStatusDoc(), new Date())
+      .filter((o) => !o.isOpen).map((o) => o.row));
+  }
 
   const stageName = (id) => {
     const st = AMI.statusById(id);
@@ -10065,7 +10081,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     for (const item of AMI.accountItems(account)) {
       const st = itemState(item.id);
       if (!st || !st.base) continue;
+      const closed = closedRows(AMI.readOrders(st.base.sheet, st.base.header, { accountId: account.id, itemId: item.id }));
       for (const oi of AMI.findOpenItems(st.base.sheet, st.base.header, new Date())) {
+        if (closed.has(oi.row)) continue;
         state.openItems.push(Object.assign(withClosure(oi, account.id, item.id), { itemId: item.id, itemName: item.name }));
       }
     }
@@ -10719,7 +10737,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     for (const p of state.portfolio || []) {
       const decorated = AMI.withSchedule(AMI.decorate(p.orders, doc, now), now);
       for (const o of decorated) {
-        o.followUps = (p.followUps || []).filter((f) => f.row === o.row);
+        o.followUps = o.isOpen ? (p.followUps || []).filter((f) => f.row === o.row) : [];
         o.divisionName = AMI.divisionName(state.workspace, o.divisionId);
         out.push(o);
       }
@@ -11808,9 +11826,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       'Orders',
       'Order status',
       'Set where each open order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such. '
-      + 'An order that is invoiced counts as closed and moves to the Invoiced list.',
+      + 'An order with an invoice number in the tracker is closed and moves to the Invoiced archive.',
       [
-        el('button', { class: 'btn', text: 'Invoiced orders (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
+        el('button', { class: 'btn', text: 'Invoiced archive (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -11827,9 +11845,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
             + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
             + 'a person can mark them done — the tracker moving past them does not mean they happened. '
-            + 'An order closes as soon as it is invoiced — a NAV invoice number in the tracker, or Customer '
-            + 'Invoicing set by a person — and moves to the Invoiced list. To reopen one, set an earlier stage '
-            + 'from its page there.',
+            + 'An order closes as soon as the tracker records a NAV invoice number — whatever stage it was at, '
+            + 'the rest of the pipeline is bypassed — and moves to the Invoiced archive, off the dashboards and '
+            + 'the follow-ups. A person can also close one by setting Customer Invoicing or later.',
         }),
       ]),
     ]));
@@ -12745,9 +12763,10 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const host = $('#invoicedBody');
     if (!ready(host, renderInvoiced)) return;
 
-    host.appendChild(ui.pageHeader('Work', 'Invoiced orders',
-      'An order is closed once it is invoiced — a NAV invoice number in the tracker, or Customer Invoicing set by a person. It leaves the open lists and comes here. '
-      + 'The supplier-settlement columns are shown beside it, so anything still owed by or to a supplier stays in view. To reopen an order, open it and set an earlier stage.',
+    host.appendChild(ui.pageHeader('Work', 'Invoiced archive',
+      'An order is closed as soon as the tracker records a NAV invoice number, whatever stage it was at — the rest of the pipeline is bypassed. '
+      + 'It leaves the dashboards, the open lists and the follow-ups and is kept here. The supplier-settlement columns are shown beside it for reference; they are not chased. '
+      + 'An order stays here until its NAV invoice number is removed from the tracker.',
       []));
     host.appendChild(ui.filterBar(renderInvoiced, { withItem: true, withSearch: true }));
 
@@ -12757,12 +12776,12 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const sels = { all: () => true, owed: (x) => !x.settle.done, settled: (x) => x.settle.done };
 
     host.appendChild(el('div', { class: 'tiles' }, [
-      tile('Invoiced orders', orders.length, 'closed, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
-      tile('Settlement outstanding', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
+      tile('Invoiced', orders.length, 'archived, in the orders you can see', 'info', () => { view.invoiced = 'all'; renderInvoiced(); }, view.invoiced === 'all'),
+      tile('Settlement columns blank', owed.length, 'a winery, export or forwarder column is blank', owed.length ? 'warn' : 'ok', () => { view.invoiced = 'owed'; renderInvoiced(); }, view.invoiced === 'owed'),
       tile('Fully settled', orders.length - owed.length, 'all three settlement columns filled', 'ok', () => { view.invoiced = 'settled'; renderInvoiced(); }, view.invoiced === 'settled'),
     ]));
     host.appendChild(chipRow([
-      ['all', 'All invoiced', orders.length], ['owed', 'Settlement outstanding', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
+      ['all', 'All invoiced', orders.length], ['owed', 'Settlement columns blank', owed.length], ['settled', 'Fully settled', orders.length - owed.length],
     ], view.invoiced, (id) => { view.invoiced = id; renderInvoiced(); }));
 
     const shown = orders.filter(sels[view.invoiced] || sels.all).sort((a, b) => (

@@ -286,7 +286,7 @@
    * Whether finished orders are being left out of the view. A per-person choice,
    * not a workspace rule — hiding them changes what you look at, not what is true.
    */
-  const excludingClosed = () => !!state.excludeClosed;
+  const excludingClosed = () => true;
 
   /** Drop the terminal stage when the view is set to hide it. */
   const applyClosedFilter = (orders) => (excludingClosed() ? orders.filter((o) => o.isOpen) : orders);
@@ -298,6 +298,9 @@
 
   /** The switch that hides finished orders, wired to re-render its own page. */
   function closedToggle(rerender) {
+    // Invoiced orders are closed and live in the Invoiced archive; they are
+    // never part of a dashboard or an open list, so there is nothing to switch.
+    if (rerender) return null;
     const box = el('input', {
       type: 'checkbox', checked: excludingClosed(),
       onchange: (e) => { setExcludeClosed(e.target.checked); rerender(); },
@@ -2913,9 +2916,9 @@
     if (followUp.superseded) return followUp;
     const doc = state.statusDoc;
     const entry = doc && doc.entries ? doc.entries[AMI.statusKey(accountId, itemId, followUp.po)] : null;
-    // Only Order Closure & Reporting ends the chasing. An invoiced order is off
-    // the open lists, but its supplier-settlement chases stay live until the
-    // columns are filled or a person closes it.
+    // A person taking an order to Order Closure & Reporting ends its chasing.
+    // (An order with an invoice number is dropped from the follow-ups before
+    // this is reached — see closedRows.)
     const st = entry ? AMI.statusById(entry.status) : null;
     if (!st || !st.terminal) return followUp;
     return Object.assign({}, followUp, {
@@ -2926,7 +2929,16 @@
   }
 
   /** An item tracker's follow-ups, with person-closed orders set aside. */
-  const chasesFor = (p) => p.followUps.map((f) => withClosure(f, p.account.id, p.item.id));
+  const chasesFor = (p) => {
+    const closed = closedRows(p.orders);
+    return p.followUps.filter((f) => !closed.has(f.row)).map((f) => withClosure(f, p.account.id, p.item.id));
+  };
+
+  /** Rows of orders that are invoiced, and so closed: they are not chased. */
+  function closedRows(orders) {
+    return new Set(AMI.decorate(orders, state.statusDoc || AMI.emptyStatusDoc(), new Date())
+      .filter((o) => !o.isOpen).map((o) => o.row));
+  }
 
   const stageName = (id) => {
     const st = AMI.statusById(id);
@@ -2944,7 +2956,9 @@
     for (const item of AMI.accountItems(account)) {
       const st = itemState(item.id);
       if (!st || !st.base) continue;
+      const closed = closedRows(AMI.readOrders(st.base.sheet, st.base.header, { accountId: account.id, itemId: item.id }));
       for (const oi of AMI.findOpenItems(st.base.sheet, st.base.header, new Date())) {
+        if (closed.has(oi.row)) continue;
         state.openItems.push(Object.assign(withClosure(oi, account.id, item.id), { itemId: item.id, itemName: item.name }));
       }
     }
@@ -3598,7 +3612,7 @@
     for (const p of state.portfolio || []) {
       const decorated = AMI.withSchedule(AMI.decorate(p.orders, doc, now), now);
       for (const o of decorated) {
-        o.followUps = (p.followUps || []).filter((f) => f.row === o.row);
+        o.followUps = o.isOpen ? (p.followUps || []).filter((f) => f.row === o.row) : [];
         o.divisionName = AMI.divisionName(state.workspace, o.divisionId);
         out.push(o);
       }
@@ -4687,9 +4701,9 @@
       'Orders',
       'Order status',
       'Set where each open order stands. A status you set here is what the dashboard shows; where none is set, the stage is read from the tracker’s dated columns and labelled as such. '
-      + 'An order that is invoiced counts as closed and moves to the Invoiced list.',
+      + 'An order with an invoice number in the tracker is closed and moves to the Invoiced archive.',
       [
-        el('button', { class: 'btn', text: 'Invoiced orders (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
+        el('button', { class: 'btn', text: 'Invoiced archive (' + invoicedCount + ')', onclick: () => showTab('invoiced') }),
         el('button', { class: 'btn', text: 'Open Account Health', onclick: () => showTab('dashboard') }),
         el('button', { class: 'btn primary', text: 'Generate account summary', onclick: () => generateSummary() }),
       ],
@@ -4706,9 +4720,9 @@
           text: 'The stage shown is the furthest one completed. Nine stages are read from tracker columns '
             + 'on their own. Order Validation and Pre-Shipment Review are checks with no column, so only '
             + 'a person can mark them done — the tracker moving past them does not mean they happened. '
-            + 'An order closes as soon as it is invoiced — a NAV invoice number in the tracker, or Customer '
-            + 'Invoicing set by a person — and moves to the Invoiced list. To reopen one, set an earlier stage '
-            + 'from its page there.',
+            + 'An order closes as soon as the tracker records a NAV invoice number — whatever stage it was at, '
+            + 'the rest of the pipeline is bypassed — and moves to the Invoiced archive, off the dashboards and '
+            + 'the follow-ups. A person can also close one by setting Customer Invoicing or later.',
         }),
       ]),
     ]));
