@@ -18,7 +18,7 @@ AMI Order Desk/                       <- a SharePoint library, synced through On
   AMI-Order-Desk-Teams.html           the app
   workspace.json                      divisions, accounts, items, people, contacts, rules
   order-status.json                   the stage each order is at
-  order-work.json                     ticked checklist steps, tasks, exceptions, activity
+  order-work.json                     ticked checklist steps, tasks, flags, activity
   order-desk-sessions/                unposted work, one file per person
   templates/
     aeromexico/
@@ -61,18 +61,20 @@ and **+ New order**, which takes you to the purchase-order page. Below it, a thi
 which account and item you are entering orders for. Orders open in a **drawer** on the right, so
 the list behind them keeps its place. Light and dark both follow the computer's setting.
 
-| Rail | What it is |
+| Rail (Work section, in this order) | What it is |
 | --- | --- |
-| **My Work** | What needs you today: tasks that have fallen due, open exceptions, tracker dates in the next 14 days, person checks waiting, chases to send |
+| **My Work** | What needs you today: tasks that have fallen due, open flags, tracker dates in the next 14 days, person checks waiting, chases to send |
 | **Account Health** | The dashboard — contracts, what is coming, the pipeline, what needs attention |
-| **Orders** | Every open order and where it stands; click a PO to open it |
-| **Invoiced archive** | Orders with an invoice number in the tracker — closed, off the dashboards and follow-ups — with their settlement columns |
-| **Tasks** | The standard steps for each order's current stage, across all orders |
-| **Exceptions** | Things that need attention, with severity and an answer for each |
-| **Shipments** | Every collection and delivery, from the tracker's dated columns |
+| **Tasks** | The standard steps for each open order's current stage, across all orders |
+| **Flagged** | Things that need attention, with severity and an answer for each |
 | **Follow-ups** | Blank tracker cells being chased, and the draft emails |
-| **Purchase orders → Review & post → Emails** | The order desk itself: read PDFs, check the rows, post, send |
-| **Templates**, **Accounts & people**, **Workspace** | Setup |
+| **Orders** | Every open order and where it stands; click a PO to open it |
+| **Shipments** | Every collection and delivery, from the tracker's dated columns |
+| **Invoiced archive** | Orders with an invoice number in the tracker — closed, off the dashboards and follow-ups — with their settlement columns |
+| **Order trackers** | Edit the tracker workbooks themselves (see below) |
+
+The order desk follows: **Purchase orders → Review & post → Emails**, then **Templates**,
+**Accounts & people** and **Workspace** for setup.
 
 **Search** (press `/`) finds an order by PO, account, item, lot number, NAV invoice or a word in
 the tracker's notes, and opens its drawer.
@@ -100,9 +102,9 @@ order, give a step an owner, or set a date.
 The steps shown are for the stage an order is **working on** — the one after the furthest it has
 reached.
 
-### Exceptions
+### Flagged
 
-Flagged automatically, from the tracker and nothing else, and each says which dates produced it:
+The **Flagged** page lists these. Items are flagged automatically, from the tracker and nothing else, and each says which dates produced it:
 
 | Flag | When | Severity |
 | --- | --- | --- |
@@ -127,6 +129,33 @@ and lot. All of it is tracker columns. Where the tracker is blank the page says 
 
 ---
 
+## Order trackers
+
+**Order trackers** is the last page in the Work section. It opens an item's tracker workbook as an
+editable table — every column, newest order first, with a PO search — and writes what you change
+back into the workbook in the shared folder.
+
+- **Pick the tracker** from the list of every item on your accounts. Type into any cell: dates use
+  a date picker, numbers and text are typed. Changed cells turn amber and a bar counts them.
+- **Save to the tracker** writes the workbook. Before it does, a **backup** is written beside it
+  (`… (backup 2026-10-01 1830).xlsx`), the same as when posting purchase orders.
+- **Formulas are never touched.** A cell the sheet calculates is shown greyed and cannot be
+  edited. If any edit would land on one, the whole batch is refused by name and nothing is
+  written. After a save, the cached results of the formulas beneath an edit (running contract
+  balances, for example) are brought up to date, and Excel is told to recalculate on open.
+- **Collisions are refused.** If a colleague saved the workbook since you opened it, you are told
+  and saving is blocked until you reload — their change is never overwritten.
+- **It syncs across the platform.** Every page reads the same workbook, so on saving, the stage of
+  an order, the dashboards, Follow-ups, Flagged, Shipments and the Invoiced archive all update at
+  once — enter a collection date and the order moves to Shipment Execution; enter a NAV invoice
+  number and it leaves for the archive. Colleagues get it when the shared folder syncs and they
+  next open or return to the app (it re-reads the trackers when the tab regains focus).
+- **Who changed what** is written to each order's activity log, shown in its drawer.
+
+Needs the *Edit order trackers* permission. Close the workbook in Excel first — Excel locks open files.
+
+---
+
 ## Roles and permissions
 
 **Accounts & people** lists everyone. An administrator edits a person: a **role** sets a starting
@@ -137,14 +166,17 @@ point, then each permission can be ticked or unticked for that person.
 | Add purchase orders and post to trackers | ✓ | ✓ | | |
 | Change an order's stage | ✓ | ✓ | ✓ | |
 | Tick off and add stage tasks | ✓ | ✓ | ✓ | |
-| Raise, acknowledge and resolve exceptions | ✓ | ✓ | ✓ | |
+| Flag, acknowledge and resolve flagged items | ✓ | ✓ | ✓ | |
+| Edit order trackers | ✓ | ✓ | ✓ | |
 | Draft emails and chases | ✓ | ✓ | ✓ | |
 | Edit email templates | ✓ | ✓ | | |
 | **Add and edit accounts and items** | ✓ | | | |
 | **Add people and change roles and permissions** | ✓ | | | |
 
-People saved before roles existed keep exactly what they had: an administrator stays one, a
-member becomes *Order desk*. A workspace always keeps at least one administrator, and the first
+**Testing setup: everyone starts as an administrator.** A new person, and anyone saved without a
+role, gets the workspace's default role — *Administrator* for now. On **Accounts & people**, *New
+people start as* changes it (`settings.defaultRole` in `workspace.json`); set it to *Order desk*
+before real use. Someone already saved as an administrator stays one. A workspace always keeps at least one administrator, and the first
 person added to an empty workspace is made one.
 
 A control the role does not allow is switched off with the reason in its tooltip.
@@ -316,7 +348,7 @@ check was made, and the per-order trail shows the check as *not recorded*.
 **An invoiced order is closed, and the pipeline is bypassed.** The moment the tracker records a NAV
 invoice number the order is closed — whatever stage it was at or had skipped, and whatever stage
 anyone set by hand. It is removed from **every dashboard and open list** (Account Health, Orders,
-My Work, Tasks, Exceptions, Shipments) and from **Follow-ups**, and is kept in the **Invoiced
+My Work, Tasks, Flagged, Shipments) and from **Follow-ups**, and is kept in the **Invoiced
 archive**. A person can also close an order by setting Customer Invoicing or later.
 
 The archive shows the winery invoice, proof of export and forwarder's invoice columns beside each
@@ -491,9 +523,28 @@ ones first, then account-wide.
 
 ### Placeholders
 
-Anything in double braces is filled from the PO, the tracker and the account record:
+A template is filled by scanning the purchase order PDFs. Anything in double braces is a
+placeholder, and it can be written as free text — `{{poList}}`, `{{Lot Number}}`, `{{Truck Type}}`.
+Names are compared ignoring case, spaces and punctuation.
 
-| | |
+**Where a value comes from, in this order:**
+
+1. **The PO scan** — the names below, read off the PDF or worked out from it.
+2. **The item tracker**, for anything the scan did not give. A placeholder whose name matches a
+   **tracker column heading** takes that column's value for the PO(s) in the draft:
+   `{{Lot Number}}`, `{{Truck Type}}`, `{{NAV INV #}}`, `{{Winery Confirmed Available Date}}`. It
+   also matches the facts at the top of the sheet: `{{Supplier}}`, `{{HS/HTS Code}}`,
+   `{{Country of Origin}}`, `{{Case weight}}`, `{{Collection Location}}`, and so on. Where the PO
+   names a field but the scan found nothing for it (`{{forwarder}}`), the tracker's column of the
+   same name fills the gap.
+3. **Nothing** — left empty, never guessed, and reported on the *Fields in this template* panel.
+
+A name that fits more than one tracker column (`{{Quantity}}` is three) is reported as ambiguous
+with the candidates; use the exact heading. The fields panel shows a *from tracker* chip beside
+every value that came from the sheet, with the column it came from, and says exactly why a field
+is empty — a blank tracker cell, a PO that is not on the tracker yet, or no such name anywhere.
+
+| | PO-scan names |
 | --- | --- |
 | **Order** | `{{poCount}}` `{{poGroups}}` `{{poList}}` `{{table}}` |
 | **Product** | `{{product}}` `{{size}}` `{{customer}}` `{{account}}` `{{item}}` `{{division}}` |
@@ -503,8 +554,9 @@ Anything in double braces is filled from the PO, the tracker and the account rec
 | **Airport** | `{{airport}}` `{{airportCode}}` `{{airportName}}` |
 | **Other** | `{{today}}` |
 
-Every one traces back to a PO field, arithmetic over a PO and a tracker constant, or something
-typed into the account record. There is no generated prose anywhere.
+Every one traces back to a PO field, a tracker cell, arithmetic over those, or something typed into
+the account record. There is no generated prose anywhere. Follow-up (chase) emails resolve
+placeholders the same way, against the tracker rows being chased.
 
 When you import a template containing literal values — a customer name, a contact — the editor
 offers to swap them for placeholders and shows exactly which. Nothing is changed until you
@@ -614,7 +666,8 @@ portal/
     charts.js                     stat tiles, bars, columns, stage fills
     persist.js                    remembering the folder and unposted work
     app.js / app-teams.js         the two interfaces (app-teams.js: workspace, desk, dashboard)
-    app-hub.js                    My Work, Tasks, Exceptions, Shipments, the order drawer, search
+    app-hub.js                    My Work, Tasks, Flagged, Shipments, Invoiced archive, the order drawer, search
+    app-trackers.js               the Order trackers page: edit tracker rows in place
     styles.css                    shared
     shell.html / shell-teams.html
   tests/
@@ -623,8 +676,9 @@ portal/
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
     status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
     workflow.test.js      71 assertions   the twelve-stage workflow — needs no fixtures
-    orderwork.test.js     50 assertions   checklists, exceptions, shipments, merging, permissions — no fixtures
-    hub-ui.test.js        42 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
+    orderwork.test.js     51 assertions   checklists, exceptions, shipments, merging, permissions — no fixtures
+    hub-ui.test.js        58 assertions   the new pages, drawer, search, trackers and permissions in Chromium — no fixtures
+    trackeredit.test.js   25 assertions   editing tracker rows in place, formulas preserved — no fixtures
     teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 
@@ -635,6 +689,7 @@ node portal/tests/teams.test.js <fixturesDir>
 node portal/tests/status.test.js <fixturesDir>
 node portal/tests/workflow.test.js                  # no fixtures needed
 node portal/tests/orderwork.test.js                 # no fixtures needed
+node portal/tests/trackeredit.test.js               # no fixtures needed
 node portal/tests/hub-ui.test.js                    # needs playwright; no fixtures
 node portal/tests/ui.test.js <fixturesDir>          # needs playwright
 node portal/tests/teams-ui.test.js <fixturesDir>    # needs playwright

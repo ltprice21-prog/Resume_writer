@@ -40,6 +40,7 @@ const TARGETS = [
       CHARTS: 'charts.js',
       APP: 'app-teams.js',
       HUB: 'app-hub.js',
+      TRACKERS: 'app-trackers.js',
     },
   },
 ];

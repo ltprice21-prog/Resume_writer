@@ -1563,6 +1563,29 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
 .ship-late { color: var(--critical-ink); font-weight: 600; }
 
+/* ---------- order trackers: editing the workbook in place ---------- */
+
+.tr-scroll { max-height: 68vh; overflow: auto; }
+.tr-table th, .tr-table td { white-space: nowrap; }
+.tr-table td { padding: 3px 6px; }
+.tr-sticky { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); }
+.tr-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); }
+.tr-table thead th.tr-sticky { z-index: 3; }
+.tr-table input.tr-in { width: 100%; min-width: 96px; height: 28px; padding: 2px 6px; font-size: 12px; }
+.tr-table input.tr-in[type="date"] { min-width: 132px; }
+.tr-formula { background: var(--surface-3); color: var(--muted); font-style: italic; min-width: 72px; }
+td.tr-dirty { background: var(--warning-soft); }
+td.tr-dirty .tr-in { border-color: var(--warning); }
+.tr-savebar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3);
+}
+.tr-savebar[hidden] { display: none; }
+.tr-savebar .spacer { flex: 1; }
+
 @media (max-width: 900px) {
   .cols { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1607,14 +1630,15 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       <div><b>AMI Order Desk</b><span>Wine logistics</span></div>
     </div>
     <div class="rail-label">Work</div>
-    <button class="nav" data-tab="mywork" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>My Work</span><span class="nav-badge" data-badge="mywork" hidden></span></button>
+    <button class="nav" data-tab="mywork" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>My Work</span><span class="nav-badge" data-badge="mywork" hidden></span></button>
     <button class="nav" data-tab="dashboard" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Account Health</span></button>
-    <button class="nav" data-tab="orderstatus" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span>Orders</span></button>
     <button class="nav" data-tab="tasks" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg><span>Tasks</span></button>
-    <button class="nav" data-tab="exceptions" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/><path d="M12 18h.01"/></svg><span>Exceptions</span><span class="nav-badge" data-badge="exceptions" hidden></span></button>
+    <button class="nav" data-tab="exceptions" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/></svg><span>Flagged</span><span class="nav-badge" data-badge="exceptions" hidden></span></button>
+    <button class="nav" data-tab="followups" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4V4z"/></svg><span>Follow-ups</span></button>
+    <button class="nav" data-tab="orderstatus" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span>Orders</span></button>
     <button class="nav" data-tab="shipments" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><span>Shipments</span></button>
     <button class="nav" data-tab="invoiced" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg><span>Invoiced archive</span></button>
-    <button class="nav" data-tab="followups" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4V4z"/></svg><span>Follow-ups</span></button>
+    <button class="nav" data-tab="trackers" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M9 4v16"/></svg><span>Order trackers</span></button>
     <div class="sep"></div>
     <div class="rail-label">Order desk</div>
     <button class="nav" data-tab="orders" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span>Purchase orders</span><span class="step-no">1</span></button>
@@ -1653,6 +1677,10 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   <section class="panel" data-panel="exceptions" hidden>
     <div id="exceptionsBody"></div>
+  </section>
+
+  <section class="panel" data-panel="trackers" hidden>
+    <div id="trackersBody"></div>
   </section>
 
   <section class="panel" data-panel="invoiced" hidden>
@@ -3039,6 +3067,166 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     return xml;
   }
 
+  /* ------------------------------------------------------------------ *
+   * Editing rows already on the sheet
+   * ------------------------------------------------------------------ *
+   *
+   * The tracker's formulas are shared formulas; overwriting one with a value
+   * would silently break every row beneath it. So a cell that holds a formula is
+   * never written — the edit is refused by name — and everything else in the row,
+   * including styles, is left exactly as it was.
+   */
+
+  const rowPattern = (n) => new RegExp('<row\\b[^>]*\\sr="' + n + '"[^>]*?(?:/>|>[\\s\\S]*?</row>)');
+
+  /** Take one row apart into its opening tag and its cells, in column order. */
+  function readRowXml(sheet, rowNum) {
+    const m = rowPattern(rowNum).exec(sheet.xml);
+    if (!m) throw new Error('Row ' + rowNum + ' is not on the sheet.');
+    const whole = m[0];
+    const selfClosing = /\/>$/.test(whole) && !/<\/row>$/.test(whole);
+    const open = selfClosing ? whole.replace(/\s*\/>$/, '>') : whole.slice(0, whole.indexOf('>') + 1);
+    const body = selfClosing ? '' : whole.slice(open.length, whole.length - '</row>'.length);
+    const cells = [];
+    const re = new RegExp(CELL_RE.source, 'g');
+    let c;
+    while ((c = re.exec(body)) !== null) {
+      const ref = getAttr(c[1] || c[2] || '', 'r');
+      if (ref) cells.push({ col: ref.replace(/\d+/g, ''), xml: c[0] });
+    }
+    return { whole, open, cells };
+  }
+
+  function writeRowXml(sheet, rowNum, parts) {
+    const cells = parts.cells.slice().sort((a, b) => colToIndex(a.col) - colToIndex(b.col));
+    // The spans hint would be wrong if a cell has been added outside it.
+    const open = parts.open.replace(/\sspans="[^"]*"/, '');
+    sheet.xml = sheet.xml.replace(parts.whole, () => open + cells.map((c) => c.xml).join('') + '</row>');
+  }
+
+  /** The style a column's cells carry, taken from the nearest row that has one. */
+  function columnStyle(sheet, header, col) {
+    for (const r of dataRows(sheet, header).reverse()) {
+      const c = sheet.cell(r, col);
+      if (c && c.style != null) return c.style;
+    }
+    return null;
+  }
+
+  /** What kind of value a column holds: a date, a number, or text. */
+  function columnKind(sheet, header, col) {
+    const heading = (header.columns.find((c) => c.col === col) || {}).header || '';
+    if (/date|prior to/i.test(heading)) return 'date';
+    let numeric = 0;
+    let textual = 0;
+    for (const r of dataRows(sheet, header)) {
+      const c = sheet.cell(r, col);
+      if (!c || c.text === '' || c.formula) continue;
+      if (c.num != null && c.type !== 's' && c.type !== 'inlineStr' && c.type !== 'str') numeric++;
+      else textual++;
+    }
+    return numeric > 0 && numeric >= textual ? 'number' : 'text';
+  }
+
+  /** Turn what a person typed into what the cell should hold, or say why not. */
+  function parseCellInput(kind, raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (text === '') return { value: '' };
+    if (kind === 'date') {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+      const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : parseDate(text);
+      if (!d || Number.isNaN(d.getTime())) return { error: '“' + text + '” is not a date' };
+      return { value: dateToSerial(d) };
+    }
+    if (kind === 'number') {
+      const n = Number(text.replace(/,/g, ''));
+      if (!Number.isFinite(n)) return { error: '“' + text + '” is not a number' };
+      return { value: n };
+    }
+    return { value: text };
+  }
+
+  /**
+   * Write a batch of edits into existing rows. All or nothing: every edit is
+   * checked first, and a single formula cell or unreadable value refuses the lot.
+   * Each edit is { row, col, value } with `value` as typed.
+   */
+  function applyCellEdits(wb, sheet, header, edits) {
+    const problems = [];
+    const planned = [];
+    for (const e of edits) {
+      const heading = (header.columns.find((c) => c.col === e.col) || {}).header || e.col;
+      const cell = sheet.cell(e.row, e.col);
+      if (cell && cell.formula) {
+        problems.push('“' + heading + '” on row ' + e.row + ' is a formula — the sheet calculates it');
+        continue;
+      }
+      const kind = columnKind(sheet, header, e.col);
+      const parsed = parseCellInput(kind, e.value);
+      if (parsed.error) { problems.push('“' + heading + '” on row ' + e.row + ': ' + parsed.error); continue; }
+      planned.push({ row: e.row, col: e.col, kind, value: parsed.value, style: cell && cell.style != null ? cell.style : columnStyle(sheet, header, e.col) });
+    }
+    if (problems.length) throw new Error(problems.join('; ') + '. Nothing was changed.');
+    if (!planned.length) return { changed: 0 };
+
+    for (const p of planned) {
+      const parts = readRowXml(sheet, p.row);
+      const fresh = cellXml(p.col + p.row, p.style, p.kind, p.value, null);
+      const at = parts.cells.findIndex((c) => c.col === p.col);
+      if (at >= 0) parts.cells[at] = { col: p.col, xml: fresh };
+      else parts.cells.push({ col: p.col, xml: fresh });
+      writeRowXml(sheet, p.row, parts);
+    }
+    wb.commitSheet(sheet);
+
+    refreshFormulaCaches(wb, sheet, header, Math.min(...planned.map((p) => p.row)));
+    markFullCalcOnLoad(wb);
+    return { changed: planned.length };
+  }
+
+  /**
+   * After an input changes, bring the cached results of the formulas beneath it
+   * up to date, so anything reading the file without recalculating — this app, a
+   * preview pane — sees current numbers. Only the small subset of formulas
+   * evaluateFormula understands is refreshed; the rest are left for Excel, which
+   * is told to recalculate on open.
+   */
+  function refreshFormulaCaches(wb, sheet, header, fromRow) {
+    const pending = new Map();
+    const rows = dataRows(sheet, header).filter((r) => r >= fromRow);
+    for (const r of rows) {
+      const parts = readRowXml(sheet, r);
+      let touched = false;
+      const cells = [...sheet.rows.get(r).cells.values()].sort((a, b) => colToIndex(a.col) - colToIndex(b.col));
+      for (const c of cells) {
+        if (!c.formula) continue;
+        const f = sheet.formulaTextFor(c);
+        if (!f) continue;
+        const val = evaluateFormula(sheet, shiftFormula(f.text, r - f.baseRow), r, pending);
+        if (val == null) continue;
+        pending.set(c.col + r, val);
+        if (c.type && c.type !== 'n') continue;
+        const at = parts.cells.findIndex((x) => x.col === c.col);
+        if (at < 0) continue;
+        const xml = parts.cells[at].xml;
+        const next = /<v>[\s\S]*?<\/v>/.test(xml) ? xml.replace(/<v>[\s\S]*?<\/v>/, '<v>' + val + '</v>')
+          : xml.replace(/<\/c>$/, '<v>' + val + '</v></c>');
+        if (next !== xml) { parts.cells[at] = { col: c.col, xml: next }; touched = true; }
+      }
+      if (touched) writeRowXml(sheet, r, parts);
+    }
+    wb.commitSheet(sheet);
+  }
+
+  /** Ask Excel to recalculate every formula the next time the workbook is opened. */
+  function markFullCalcOnLoad(wb) {
+    const entry = wb.map.get('xl/workbook.xml');
+    if (!entry) return;
+    const xml = DEC.decode(entry.bytes);
+    if (!/<calcPr\b/.test(xml) || /fullCalcOnLoad=/.test(xml)) return;
+    entry.bytes = ENC.encode(xml.replace(/<calcPr\b/, '<calcPr fullCalcOnLoad="1"'));
+  }
+
   /**
    * Evaluate the small subset of formulas the tracker uses, so the written row
    * carries a correct cached value and the UI can show what Excel will display.
@@ -3397,8 +3585,42 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       + '</tr></thead><tbody>' + trs + '</tbody></table>';
   }
 
+  /*
+   * A placeholder is any text between double braces — {{poList}}, {{Lot Number}},
+   * {{Truck Type}}. Names are compared ignoring case, spaces and punctuation, so
+   * {{PO list}} finds `poList` and {{lot number}} finds the tracker's "Lot Number".
+   */
+  const PLACEHOLDER_RE = /\{\{\s*([^{}<>]+?)\s*\}\}/g;
+  const normName = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const hasValue = (v) => v != null && String(v).trim() !== '';
+
+  /** The value a placeholder names among `vars`, matching on the exact or the normalised name. */
+  function lookupVar(vars, name) {
+    if (vars[name] != null) return vars[name];
+    const n = normName(name);
+    if (!n) return undefined;
+    for (const key of Object.keys(vars)) {
+      if (key.startsWith('__')) continue;
+      if (normName(key) === n && vars[key] != null) return vars[key];
+    }
+    return undefined;
+  }
+
+  /**
+   * Fill a template. A value read from the PO comes first; where the PO has none
+   * the optional `vars.__resolve(name)` — the item tracker — is asked. A
+   * placeholder neither can fill becomes empty, never a guess.
+   */
   function fillTemplate(template, vars) {
-    return String(template).replace(/\{\{(\w+)\}\}/g, (m, k) => (vars[k] == null ? '' : String(vars[k])));
+    return String(template).replace(PLACEHOLDER_RE, (m, name) => {
+      const direct = lookupVar(vars, name);
+      if (hasValue(direct)) return String(direct);
+      if (typeof vars.__resolve === 'function') {
+        const r = vars.__resolve(name);
+        if (r && hasValue(r.value)) return String(r.value);
+      }
+      return direct == null ? '' : String(direct);
+    });
   }
 
   /** Distinct PO stems, e.g. 350632-1..4 and 350633-1..2 become "350632 - 350633". */
@@ -3420,6 +3642,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     unzip, zip, crc32, concatBytes,
     // xlsx
     Workbook, Sheet, findHeaderRow, dataRows, readSheetConfig,
+    applyCellEdits, columnKind, parseCellInput,
     colToIndex, indexToCol, escapeXml, unescapeXml,
     // dates
     dateToSerial, serialToDate, parseDate, formatEmailDate, formatISO, formatShort, daysBetween,
@@ -3432,7 +3655,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     // follow-ups
     FOLLOW_UP_RULES, findOpenItems, supersededBy,
     // email
-    buildEml, orderTableHtml, fillTemplate, poGroups, TABLE_COLUMNS, b64,
+    buildEml, orderTableHtml, fillTemplate, lookupVar, normName, hasValue, poGroups, TABLE_COLUMNS, b64,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;
@@ -4119,7 +4342,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   /** List the {{placeholders}} a template uses, in order of first appearance. */
   function templatePlaceholders(html) {
     const out = [];
-    const re = /\{\{(\w+)\}\}/g;
+    const re = /\{\{\s*([^{}<>]+?)\s*\}\}/g;
     let m;
     while ((m = re.exec(String(html || ''))) !== null) if (!out.includes(m[1])) out.push(m[1]);
     return out;
@@ -4460,7 +4683,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     { id: 'postOrders', label: 'Add purchase orders and post them to trackers' },
     { id: 'setStatus', label: 'Change an order’s stage' },
     { id: 'manageTasks', label: 'Tick off and add stage tasks' },
-    { id: 'manageExceptions', label: 'Raise, acknowledge and resolve exceptions' },
+    { id: 'manageExceptions', label: 'Flag, acknowledge and resolve flagged items' },
+    { id: 'editTrackers', label: 'Edit order trackers' },
     { id: 'sendEmails', label: 'Draft emails and chases' },
     { id: 'editTemplates', label: 'Edit email templates' },
     { id: 'editAccounts', label: 'Add and edit accounts and items' },
@@ -4471,11 +4695,22 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     { id: 'admin', name: 'Administrator', hint: 'Everything, including accounts, items and people.',
       can: PERMISSIONS.map((p) => p.id) },
     { id: 'coordinator', name: 'Order desk', hint: 'Runs orders end to end; does not change the shared setup.',
-      can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'sendEmails', 'editTemplates'] },
+      can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'] },
     { id: 'finance', name: 'Finance', hint: 'Moves orders through invoicing and settlement.',
-      can: ['setStatus', 'manageTasks', 'manageExceptions', 'sendEmails'] },
+      can: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'] },
     { id: 'viewer', name: 'Viewer', hint: 'Reads everything; changes nothing.', can: [] },
   ];
+
+  /**
+   * The role a person has when none was chosen for them — new people, and anyone
+   * saved before roles existed.
+   *
+   * TESTING: everyone starts as an administrator so nothing is in the way while
+   * the desk is being tried out. Before real use, set `settings.defaultRole` to
+   * 'coordinator' (or change it on the Accounts page) so new people start with
+   * the working permissions and not the setup ones.
+   */
+  const DEFAULT_ROLE = 'admin';
 
   function rolePermissions(roleId) {
     const role = USER_ROLES.find((r) => r.id === roleId) || USER_ROLES[1];
@@ -4527,11 +4762,12 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const settings = Object.assign({}, ws.settings || {});
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
+    if (!USER_ROLES.some((r) => r.id === ws.settings.defaultRole)) ws.settings.defaultRole = DEFAULT_ROLE;
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => {
-      // A person saved before roles existed is an administrator or an ordinary
-      // member, exactly as they were — so nobody gains or loses anything.
-      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : 'coordinator');
+      // A person with no role of their own is an administrator if they were one,
+      // and otherwise gets the workspace's default role.
+      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
       const base = rolePermissions(role);
       const given = u.permissions && typeof u.permissions === 'object' ? u.permissions : {};
       const permissions = {};
@@ -5014,7 +5250,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   Object.assign(AMI, {
     CONFIG_PATH, TEMPLATE_DIR, ATTACH_DIR, ROLES, SCHEMA_VERSION,
-    PERMISSIONS, USER_ROLES, rolePermissions, userCan,
+    PERMISSIONS, USER_ROLES, DEFAULT_ROLE, rolePermissions, userCan,
     attachDirFor, attachmentsForRole,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,
@@ -7488,7 +7724,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
-      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(t)) b.disabled = !hasUser;
+      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced', 'trackers'].includes(t)) b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -8421,6 +8657,88 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   const twoDp = (n) => (n == null || !Number.isFinite(n) ? ''
     : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+  /* ------------------------------------------------------------------ *
+   * Placeholders the PO scan cannot fill: the item tracker
+   * ------------------------------------------------------------------ *
+   *
+   * A template names what it wants in double braces — {{Lot Number}}, {{Truck
+   * Type}}, {{forwarder}}. The purchase order PDF is read first. Where it has
+   * nothing, the item's tracker is asked: a column heading matching the name
+   * gives that column's value for the PO(s) in the draft, and a fact from the top
+   * of the sheet (Supplier, HS code, Case weight…) is matched the same way.
+   * A blank cell stays blank and is reported; a name that could mean several
+   * columns is reported as ambiguous rather than guessed.
+   */
+
+  const TRACKER_FACTS = [
+    ['Product Name', 'productName'], ['Case Size', 'caseSize'], ['Customer', 'customer'],
+    ['Airline part/item #', 'airlinePart'], ['NAV Code', 'navCode'], ['Supplier', 'supplier'],
+    ['Collection Location', 'collectionLocation'], ['Country of Origin', 'countryOfOrigin'],
+    ['HS/HTS Code', 'hsCode'], ['Winery closed dates', 'wineryClosedDates'],
+    ['Minimum order quantity', 'minimumOrder'], ['Bottles/case', 'bottlesPerCase'],
+    ['Cases per pallet', 'casesPerPallet'], ['Case weight', 'caseWeight'],
+    ['Full Pallet Weight', 'palletWeight'], ['Production Lead Time (days)', 'leadTimeDays'],
+    ['Lead Time on Water/Road (days)', 'transitDays'],
+  ];
+
+  function trackerResolver(itemId, poNumbers) {
+    const st = itemState(itemId);
+    const book = st && (st.preview || st.base);
+    if (!book || !book.sheet || !book.header) return () => null;
+    const { sheet, header, config } = book;
+    const poCol = poColumn(header);
+    const wanted = new Set((poNumbers || []).map((p) => String(p).trim()));
+    const rows = AMI.dataRows(sheet, header).filter((r) => wanted.has(sheet.cellText(r, poCol).trim()));
+
+    const show = (r, col, heading) => {
+      const c = sheet.cell(r, col);
+      if (!c) return '';
+      const t = String(c.text || '').trim();
+      if (!t || /^to fill$/i.test(t)) return '';
+      if (c.num != null && /date|prior to/i.test(heading) && c.num > 30000 && c.num < 80000) {
+        return AMI.formatEmailDate(AMI.serialToDate(c.num));
+      }
+      return t;
+    };
+
+    const byColumn = (col) => {
+      const values = [];
+      for (const r of rows) {
+        const v = show(r, col.col, col.header);
+        if (v && !values.includes(v)) values.push(v);
+      }
+      const where = 'the tracker, column “' + col.header + '”';
+      if (!rows.length) return { value: '', source: where, why: 'PO ' + [...wanted].join(', ') + ' is not on this tracker yet' };
+      if (!values.length) return { value: '', source: where, why: 'the “' + col.header + '” column is blank for ' + (rows.length > 1 ? 'these POs' : 'this PO') };
+      return { value: values.join(', '), source: where };
+    };
+
+    const byFact = ([label, key]) => {
+      const v = config ? config[key] : null;
+      const where = 'the tracker, “' + label + '” at the top of the sheet';
+      if (v == null || String(v).trim() === '') return { value: '', source: where, why: 'the tracker has no “' + label + '” entry' };
+      return { value: String(v), source: where };
+    };
+
+    return (name) => {
+      const n = AMI.normName(name);
+      if (!n) return null;
+      const cols = header.columns;
+      const exactCol = cols.filter((c) => AMI.normName(c.header) === n);
+      if (exactCol.length === 1) return byColumn(exactCol[0]);
+      const exactFact = TRACKER_FACTS.filter(([label]) => AMI.normName(label) === n);
+      if (exactFact.length === 1) return byFact(exactFact[0]);
+      if (n.length >= 4) {
+        const likeCol = cols.filter((c) => AMI.normName(c.header).includes(n));
+        const likeFact = TRACKER_FACTS.filter(([label]) => AMI.normName(label).includes(n));
+        const all = likeCol.length + likeFact.length;
+        if (all === 1) return likeCol.length ? byColumn(likeCol[0]) : byFact(likeFact[0]);
+        if (all > 1) return { value: '', ambiguous: [...likeCol.map((c) => c.header), ...likeFact.map((f) => f[0])] };
+      }
+      return null;
+    };
+  }
+
   function emailVars(role) {
     const account = currentAccount() || {};
     const item = currentItem();
@@ -8498,6 +8816,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         airport: airport.code,
         airportCode: airport.code,
         airportName: airport.airport ? airport.airport.names[0] || airport.airport.city : '',
+        // Anything the PO scan cannot fill is looked up in the item tracker.
+        __resolve: item ? trackerResolver(item.id, rows.map((r) => r.po)) : null,
       },
     };
   }
@@ -8535,6 +8855,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   function auditPlaceholders(template, ctx) {
     const used = AMI.templatePlaceholders((template.html || '') + ' ' + (template.subject || ''));
     const manual = (state.emailOverrides.vars) || {};
+    const varKey = (name) => Object.keys(VAR_SOURCE).find((k) => AMI.normName(k) === AMI.normName(name));
 
     return used.map((name) => {
       const typed = manual[name];
@@ -8542,8 +8863,18 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         return { name, value: String(typed), source: 'you typed it', filled: true, manual: true };
       }
 
-      const value = ctx.vars[name];
-      const filled = value != null && String(value).trim() !== '';
+      const value = AMI.lookupVar(ctx.vars, name);
+      const filled = AMI.hasValue(value);
+
+      // Nothing on the PO for this one — the item tracker is the next place.
+      let fromTracker = null;
+      if (!filled && typeof ctx.vars.__resolve === 'function') {
+        const r = ctx.vars.__resolve(name);
+        if (r && AMI.hasValue(r.value)) {
+          return { name, value: String(r.value), source: r.source, filled: true, fromTracker: true };
+        }
+        fromTracker = r;
+      }
 
       if (isAirportField(name) && !filled) {
         return {
@@ -8558,10 +8889,14 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         name,
         value: filled ? String(value) : '',
         filled,
-        source: VAR_SOURCE[name] || 'not a field this portal fills',
-        why: filled ? '' : (VAR_SOURCE[name]
-          ? 'nothing in ' + VAR_SOURCE[name] + ' supplies it'
-          : 'the template asks for a field the portal does not know'),
+        source: VAR_SOURCE[varKey(name)] || 'not a field this portal fills',
+        why: filled ? '' : (fromTracker && fromTracker.ambiguous
+          ? 'it could mean more than one place in the tracker (' + fromTracker.ambiguous.join('; ') + ') — name one exactly'
+          : fromTracker && fromTracker.why
+            ? 'the PO has nothing for it and ' + fromTracker.why
+            : VAR_SOURCE[varKey(name)]
+              ? 'nothing in ' + VAR_SOURCE[varKey(name)] + ' supplies it, and the tracker has no matching column'
+              : 'neither the PO nor the tracker has anything called that'),
         derived: isAirportField(name) && ctx.airport.source !== 'printed',
         airport: isAirportField(name),
       };
@@ -8848,7 +9183,8 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
       const chip = f.manual ? el('span', { class: 'chip edited', text: 'typed in' })
         : (f.filled
-          ? (f.derived ? el('span', { class: 'chip computed', text: 'derived' })
+          ? (f.fromTracker ? el('span', { class: 'chip computed', text: 'from tracker' })
+            : f.derived ? el('span', { class: 'chip computed', text: 'derived' })
             : el('span', { class: 'chip pdf', text: 'filled' }))
           : el('span', { class: 'chip error', text: 'missing' }));
 
@@ -9462,6 +9798,18 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     }
     userTable.appendChild(userBody);
     host.appendChild(el('div', { class: 'table-scroll' }, [userTable]));
+    if (canManageUsers) {
+      host.appendChild(el('label', { class: 'field', style: 'max-width:420px;margin-top:10px' }, [
+        el('span', { text: 'New people start as' }),
+        el('select', {
+          onchange: async (e) => {
+            ws.settings.defaultRole = e.target.value;
+            if (await persistWorkspace()) toast('New people will start as ' + roleName(e.target.value) + '.', 'ok');
+          },
+        }, AMI.USER_ROLES.map((r) => el('option', { value: r.id, selected: r.id === ws.settings.defaultRole, text: r.name }))),
+        el('div', { class: 'note', text: 'Testing setup: everyone starts as an administrator. Change this before real use.' }),
+      ]));
+    }
     if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
       onclick: async () => {
@@ -9473,7 +9821,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         ws.users.push(AMI.normaliseWorkspace({
           users: [{
             id, name, email: '', divisionId: ws.divisions[0] ? ws.divisions[0].id : '',
-            accountIds: [], signature: '', defaultCc: '', role: first ? 'admin' : 'coordinator',
+            accountIds: [], signature: '', defaultCc: '', role: first ? 'admin' : ws.settings.defaultRole,
           }],
         }).users[0]);
         if (await persistWorkspace()) {
@@ -10253,6 +10601,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         customer: config.customer || account.name || '',
         product: config.productName || (item && item.product) || (item && item.name) || '',
         topic: topics.join(' / '),
+        __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,
         signature: user.signature || '',
@@ -10743,6 +11092,24 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       }
     }
     return out;
+  }
+
+  /**
+   * Something else wrote to a tracker — the Order trackers page. Take the new
+   * bytes in, re-plan anything waiting to be posted against them, and read every
+   * tracker again so each page shows the same thing.
+   */
+  async function trackerWritten(accountId, itemId, bytes) {
+    if (accountId === state.accountId) {
+      const st = itemState(itemId);
+      if (st) {
+        st.trackerBytes = bytes;
+        await rebuildPlans();
+        renderWorkspace(); renderReview();
+      }
+    }
+    state.portfolio = null;
+    await ensurePortfolio(true);
   }
 
   /** Open an order's drawer, once the portfolio has been read. */
@@ -12088,6 +12455,16 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       return '';
     });
 
+    // Colleagues write to the same trackers through the shared folder. Coming
+    // back to the tab, read them again — at most every twenty seconds.
+    let lastFocusRead = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !state.store || !currentUser()) return;
+      if (Date.now() - lastFocusRead < 20000) return;
+      lastFocusRead = Date.now();
+      ensurePortfolio(true);
+    });
+
     // A debounced save may still be pending when the tab goes away.
     const flush = () => { saveSessionSoon.flush(); };
     window.addEventListener('pagehide', flush);
@@ -12115,7 +12492,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     currentUser, currentAccount, visibleAccounts, can, requirePermission,
     ensurePortfolio, filteredPortfolio, allOrders, applyStatus, applyWork, openOrder,
     filterBar, pageHeader, closedToggle, stageOptions, stageTrailStrip, excludingClosed,
-    SOURCE_CHIP, SOURCE_LONG, roleName,
+    SOURCE_CHIP, SOURCE_LONG, roleName, trackerWritten, trackerResolver, saveLocal, loadLocal,
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -12369,7 +12746,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const slot = el('div', {});
     const acts = el('div', { class: 'wk-acts' });
     const mgr = ui.can('manageExceptions');
-    const tip = mgr ? null : 'Your role does not allow you to change exceptions.';
+    const tip = mgr ? null : 'Your role does not allow you to change flagged items.';
 
     const add = (text, status, cls) => acts.appendChild(el('button', {
       class: 'btn small' + (cls ? ' ' + cls : ''), text, disabled: !mgr, 'data-tip': tip,
@@ -12417,9 +12794,9 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
   /** Raise an exception by hand, on any order the person can see. */
   function raiseExceptionDialog(preset) {
     const orders = scopedOrders({ keepClosed: true });
-    if (!orders.length) { toast('No orders to raise an exception on.', 'error'); return; }
+    if (!orders.length) { toast('No orders to flag.', 'error'); return; }
     let close = null;
-    close = ui.openOverlay('Raise an exception', 'Something outside the tracker’s dates that needs attention on an order.', (body) => {
+    close = ui.openOverlay('Flag something', 'Something outside the tracker’s dates that needs attention on an order.', (body) => {
       const orderSel = el('select', {}, orders.slice().sort((a, b) => a.po.localeCompare(b.po)).map((o) => el('option', {
         value: o.key, selected: preset && preset.key === o.key, text: 'PO ' + o.po + ' — ' + orderWhere(o),
       })));
@@ -12435,7 +12812,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
         el('div', { class: 'grid-2' }, [field('Severity', sev), field('Due', due)]),
         field('Detail', detail),
         el('div', { class: 'btn-row' }, [el('button', {
-          class: 'btn primary', text: 'Raise exception',
+          class: 'btn primary', text: 'Flag it',
           onclick: async () => {
             const order = orders.find((o) => o.key === orderSel.value);
             if (!title.value.trim()) { toast('Give it a title.', 'error'); return; }
@@ -12443,7 +12820,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
               title: title.value, severity: sev.value, due: due.value, detail: detail.value,
               stageId: (AMI.workStage(order) || {}).id || '',
             }, by));
-            if (ok) { if (close) close(); refresh(); toast('Exception raised.', 'ok'); }
+            if (ok) { if (close) close(); refresh(); toast('Flagged.', 'ok'); }
           },
         })]),
       ]));
@@ -12499,17 +12876,17 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       el('h1', { text: greeting + ', ' + user.name.split(' ')[0] + '.' }),
       el('p', {
         text: dueTasks.length + ' task' + (dueTasks.length === 1 ? '' : 's') + ' due or overdue, '
-          + excs.length + ' open exception' + (excs.length === 1 ? '' : 's') + ' across '
+          + excs.length + ' open flag' + (excs.length === 1 ? '' : 's') + ' across '
           + plural(orders.length, 'open order') + '.',
       }),
     ]));
 
     host.appendChild(el('div', { class: 'tiles' }, [
-      tile('Overdue', overdueTasks + overdueExc, 'tasks and exceptions past their date', overdueTasks + overdueExc ? 'bad' : 'ok',
+      tile('Overdue', overdueTasks + overdueExc, 'tasks and flags past their date', overdueTasks + overdueExc ? 'bad' : 'ok',
         () => { view.tasks = 'overdue'; showTab('tasks'); }),
       tile('Due today', dueTasks.length - overdueTasks, 'tasks tied to a tracker date', 'warn',
         () => { view.tasks = 'today'; showTab('tasks'); }),
-      tile('Open exceptions', excs.length, high + ' high or critical', high ? 'bad' : (excs.length ? 'warn' : 'ok'),
+      tile('Flagged', excs.length, high + ' high or critical', high ? 'bad' : (excs.length ? 'warn' : 'ok'),
         () => { view.exceptions = 'open'; showTab('exceptions'); }),
       tile('Person checks waiting', gateWaiting, 'orders at Order Validation or Pre-Shipment Review', gateWaiting ? 'info' : 'ok',
         () => { state.filters.statusId = '__open'; showTab('orderstatus'); }),
@@ -12539,10 +12916,10 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
             el('span', { class: 'wk-kind', text: 'TASK' }),
             el('div', { class: 'wk-body' }, [taskLine(i.order, i.task, { showOrder: true })]),
           ]))))
-        : emptyState('Nothing needs you right now.', 'Tasks appear here once they fall due; exceptions appear as soon as the tracker’s dates raise them.'),
+        : emptyState('Nothing needs you right now.', 'Tasks appear here once they fall due; flags appear as soon as the tracker’s dates raise them.'),
       actionItems.length > shown.length
         ? el('div', { class: 'body' }, [el('button', { class: 'btn small', text: 'See all tasks', onclick: () => { view.tasks = 'soon'; showTab('tasks'); } }),
-          document.createTextNode(' '), el('button', { class: 'btn small', text: 'See all exceptions', onclick: () => showTab('exceptions') })])
+          document.createTextNode(' '), el('button', { class: 'btn small', text: 'See all flagged', onclick: () => showTab('exceptions') })])
         : null,
     ]);
 
@@ -12618,11 +12995,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const host = $('#exceptionsBody');
     if (!ready(host, renderExceptions)) return;
 
-    host.appendChild(ui.pageHeader('Work', 'Exceptions',
+    host.appendChild(ui.pageHeader('Work', 'Flagged',
       'Things that need attention on an order. Those marked “from tracker dates” are worked out from the tracker alone — a missed requested date with nothing recorded, '
-      + 'documents still blank close to collection, a delivery with no invoice number. You can also raise one by hand, and answer any of them.',
+      + 'documents still blank close to collection, a delivery with no invoice number. You can also flag one by hand, and answer any of them.',
       [ui.closedToggle(renderExceptions),
-        permButton('manageExceptions', { class: 'btn primary', text: '+ Raise exception', onclick: () => raiseExceptionDialog() })]));
+        permButton('manageExceptions', { class: 'btn primary', text: '+ Flag something', onclick: () => raiseExceptionDialog() })]));
     host.appendChild(ui.filterBar(renderExceptions, { withItem: true, withSearch: true }));
 
     const all = gatherExceptions(scopedOrders({ useQuery: true, keepClosed: true }), true);
@@ -12653,11 +13030,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       .sort((a, b) => (AMI.SEVERITY_RANK[b.exc.severity] - AMI.SEVERITY_RANK[a.exc.severity]) || a.order.po.localeCompare(b.order.po));
 
     host.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Exceptions'), el('span', { class: 'spacer' }),
+      el('h2', {}, [document.createTextNode('Flagged'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: shown.length + ' shown' })]),
       shown.length
         ? el('div', { class: 'wk-list' }, shown.slice(0, 200).map((i) => exceptionLine(i.order, i.exc, { showOrder: true })))
-        : emptyState('Nothing here.', view.exceptions === 'open' ? 'No open exceptions for these filters.' : 'Nothing matches these filters.'),
+        : emptyState('Nothing here.', view.exceptions === 'open' ? 'Nothing open is flagged for these filters.' : 'Nothing matches these filters.'),
     ]));
   }
 
@@ -12933,11 +13310,11 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     const list = AMI.exceptionsFor(order, workDoc(), { followUps: order.followUps });
     const open = list.filter(AMI.isOpenException);
     return el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Exceptions (' + open.length + ' open)'), el('span', { class: 'spacer' }),
-        permButton('manageExceptions', { class: 'btn small', text: '+ Raise exception', onclick: () => raiseExceptionDialog(order) })]),
+      el('h2', {}, [document.createTextNode('Flagged (' + open.length + ' open)'), el('span', { class: 'spacer' }),
+        permButton('manageExceptions', { class: 'btn small', text: '+ Flag something', onclick: () => raiseExceptionDialog(order) })]),
       list.length
         ? el('div', { class: 'wk-list' }, list.map((x) => exceptionLine(order, x)))
-        : emptyState('No exceptions.', 'None of the tracker’s dates raise one, and nobody has raised one by hand.'),
+        : emptyState('Nothing flagged.', 'None of the tracker’s dates flag this order, and nobody has flagged it by hand.'),
     ]);
   }
 
@@ -13005,7 +13382,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
           el('time', { text: a.at.slice(0, 16).replace('T', ' ') }),
           el('div', { text: a.who + ': ' + a.text }),
         ])))]
-        : [el('p', { class: 'help', text: 'Nothing recorded yet. Ticks, exceptions and stage changes made here are logged with who and when.' })]),
+        : [el('p', { class: 'help', text: 'Nothing recorded yet. Ticks, flags and stage changes made here are logged with who and when.' })]),
     ]);
   }
 
@@ -13161,6 +13538,339 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
   $('#drawerScrim').addEventListener('click', closeDrawer);
   wireSearch();
+})();
+</script>
+<script>/* AMI Order Desk (Teams) — the Order trackers page: edit tracker rows in place.
+ *
+ * Builds on `AMI.ui` (app-teams.js) and the cell-editing functions in engine.js.
+ *
+ * The tracker workbook in the shared folder is the one source of truth, so a
+ * change made here is a change to that file. Every save:
+ *   - checks the file has not changed on disk since it was opened, and refuses
+ *     if a colleague got there first;
+ *   - writes a timestamped backup beside the workbook;
+ *   - refuses any cell that holds a formula, so the tracker's shared formulas
+ *     are never overwritten;
+ *   - tells every other page to read the trackers again, and logs who changed
+ *     what on each affected order.
+ * Colleagues see the change when the shared folder syncs and they next open or
+ * return to the app. No network access of any kind.
+ */
+(function () {
+  'use strict';
+
+  const ui = typeof AMI !== 'undefined' ? AMI.ui : null;
+  if (!ui) return;
+  const { state, RENDERERS, $, el, clear, toast } = ui;
+
+  const SHOW = 40;
+
+  /** What is open: one item's tracker, and the edits not yet saved. */
+  let edit = null;
+  let showAll = false;
+  let query = '';
+
+  const fileOf = (p) => String(p || '').split('/').pop();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = () => {
+    const d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + pad(d.getMinutes());
+  };
+  const sameBytes = (a, b) => {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  const isoOf = (serial) => {
+    const d = AMI.serialToDate(serial);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  };
+
+  /** Every item the person can see that has a tracker to open. */
+  function trackerChoices() {
+    const out = [];
+    for (const account of ui.visibleAccounts()) {
+      for (const item of AMI.accountItems(account)) {
+        if (item.trackerPath) out.push({ account, item, key: account.id + '/' + item.id });
+      }
+    }
+    return out;
+  }
+
+  async function openTracker(choice) {
+    const bytes = await state.store.read(choice.item.trackerPath);
+    if (!bytes) throw new Error('The tracker is not at ' + choice.item.trackerPath + '.');
+    const wb = await AMI.Workbook.load(bytes);
+    let name = '';
+    if (choice.item.sheet && wb.sheet(choice.item.sheet) && AMI.findHeaderRow(wb.sheet(choice.item.sheet))) name = choice.item.sheet;
+    else for (const s of wb.sheets) if (!name && AMI.findHeaderRow(s)) name = s.name;
+    if (!name) throw new Error('No sheet in ' + fileOf(choice.item.trackerPath) + ' has a “PO#” header row.');
+    const sheet = wb.sheet(name);
+    edit = {
+      choice, bytes, wb, sheet, sheetName: name, header: AMI.findHeaderRow(sheet),
+      pending: new Map(), stale: false, store: state.store,
+    };
+  }
+
+  const keyOf = (row, col) => row + '|' + col;
+  const poOf = (row) => edit.sheet.cellText(row, (edit.header.columns.find((c) => /^PO\s*#/i.test(c.header)) || {}).col).trim();
+
+  /* ------------------------------------------------------------------ *
+   * Page
+   * ------------------------------------------------------------------ */
+
+  async function render() {
+    const host = $('#trackersBody');
+    clear(host);
+    if (!state.workspace || !ui.currentUser() || !state.store) {
+      host.appendChild(el('div', { class: 'empty', text: 'Open the workspace and choose your name first.' }));
+      return;
+    }
+    const choices = trackerChoices();
+    if (!choices.length) {
+      host.appendChild(ui.pageHeader('Work', 'Order trackers', '', []));
+      host.appendChild(el('div', { class: 'empty', text: 'None of your accounts has an item with a tracker yet. Add one under Accounts & people.' }));
+      return;
+    }
+
+    if (edit && edit.store !== state.store) edit = null;     // a different workspace folder
+    if (!edit || !choices.some((c) => c.key === edit.choice.key)) {
+      const preferred = choices.find((c) => c.account.id === state.accountId && c.item.id === state.itemId) || choices[0];
+      try { await openTracker(preferred); } catch (e) {
+        host.appendChild(el('div', { class: 'msg error' }, [el('span', { class: 'icon', text: '!' }), el('div', { text: e.message })]));
+        edit = null;
+        return;
+      }
+    }
+
+    host.appendChild(ui.pageHeader('Work', 'Order trackers',
+      'Edit the tracker itself. Each save updates the workbook in the shared folder, after writing a timestamped backup beside it. '
+      + 'Every other page reads the same file, so a date entered here moves an order along at once; colleagues see it when the shared folder syncs. '
+      + 'Cells the sheet calculates are shown but cannot be changed — the tracker’s formulas are never overwritten.',
+      [el('button', { class: 'btn', text: 'Reload from the folder', onclick: () => reload(true) })]));
+
+    const picker = el('select', {
+      'aria-label': 'Tracker',
+      onchange: async (e) => {
+        if (edit.pending.size && !window.confirm('You have ' + edit.pending.size + ' unsaved change(s). Switch trackers and lose them?')) {
+          e.target.value = edit.choice.key;
+          return;
+        }
+        const next = choices.find((c) => c.key === e.target.value);
+        try { await openTracker(next); showAll = false; query = ''; render(); } catch (err) { toast(err.message, 'error'); }
+      },
+    }, choices.map((c) => el('option', { value: c.key, selected: c.key === edit.choice.key, text: c.account.name + ' — ' + c.item.name })));
+
+    const search = el('input', { type: 'text', value: query, placeholder: 'PO number…' });
+    search.addEventListener('input', () => { query = search.value; drawTable(); });
+
+    host.appendChild(el('div', { class: 'filter-bar' }, [
+      el('label', { class: 'field' }, [el('span', { text: 'Tracker' }), picker]),
+      el('label', { class: 'field' }, [el('span', { text: 'Find' }), search]),
+      el('span', { class: 'spacer' }),
+      el('span', { class: 'context-note', text: fileOf(edit.choice.item.trackerPath) + ' · sheet “' + edit.sheetName + '”' }),
+    ]));
+
+    host.appendChild(el('div', { id: 'trackerStale' }));
+    host.appendChild(el('div', { class: 'card' }, [
+      el('h2', {}, [document.createTextNode('Orders'), el('span', { class: 'spacer' }), el('span', { class: 'context-note', id: 'trackerCount' })]),
+      el('div', { class: 'body' }, [el('div', { class: 'table-scroll tr-scroll', id: 'trackerTable' })]),
+    ]));
+    host.appendChild(el('div', { class: 'tr-savebar', id: 'trackerSave' }));
+
+    drawTable();
+    drawSave();
+    checkStale();
+  }
+
+  function visibleRows() {
+    const q = query.trim().toLowerCase();
+    const all = AMI.dataRows(edit.sheet, edit.header).slice().reverse();   // newest first
+    const matching = q ? all.filter((r) => poOf(r).toLowerCase().includes(q)) : all;
+    return { total: all.length, matching, shown: showAll || q ? matching : matching.slice(0, SHOW) };
+  }
+
+  function cellInput(row, col, heading) {
+    const cell = edit.sheet.cell(row, col);
+    const kind = AMI.columnKind(edit.sheet, edit.header, col);
+    const original = cellOriginal(cell, kind);
+    const key = keyOf(row, col);
+    const value = edit.pending.has(key) ? edit.pending.get(key) : original;
+    const input = el('input', {
+      type: kind === 'date' ? 'date' : 'text', value, class: 'tr-in',
+      'aria-label': heading + ', row ' + row, disabled: !ui.can('editTrackers'),
+      inputmode: kind === 'number' ? 'decimal' : null,
+    });
+    input.addEventListener('input', () => {
+      if (input.value === original) edit.pending.delete(key); else edit.pending.set(key, input.value);
+      input.parentNode.classList.toggle('tr-dirty', edit.pending.has(key));
+      drawSave();
+    });
+    return el('td', { class: edit.pending.has(key) ? 'tr-dirty' : '' }, [input]);
+  }
+
+  /** What a cell reads as in its editor: ISO for a date, plain text otherwise. */
+  function cellOriginal(cell, kind) {
+    if (!cell) return '';
+    const t = String(cell.text || '').trim();
+    if (!t || /^to fill$/i.test(t)) return '';
+    if (kind === 'date' && cell.num != null && Number.isFinite(cell.num) && cell.num > 1) return isoOf(cell.num);
+    return t;
+  }
+
+  function formulaCell(cell, heading) {
+    let shown = cell ? String(cell.text || '').trim() : '';
+    if (cell && cell.num != null && /date|prior to/i.test(heading) && cell.num > 30000 && cell.num < 80000) shown = AMI.formatShort(AMI.serialToDate(cell.num));
+    return el('td', { class: 'tr-formula', 'data-tip': 'Calculated by the sheet. It is shown for reference and cannot be edited here.', text: shown || '—' });
+  }
+
+  function drawTable() {
+    const host = $('#trackerTable');
+    if (!host || !edit) return;
+    clear(host);
+    const { total, matching, shown } = visibleRows();
+    const count = $('#trackerCount');
+    if (count) count.textContent = shown.length + ' of ' + (query.trim() ? matching.length + ' matching' : total) + ' rows, newest first';
+
+    const table = el('table', { class: 'data tr-table' });
+    table.appendChild(el('thead', {}, [el('tr', {}, edit.header.columns.map((c, i) => el('th', { class: i === 0 ? 'tr-sticky' : '', text: c.header })))]));
+    const body = el('tbody');
+    for (const row of shown) {
+      body.appendChild(el('tr', {}, edit.header.columns.map((c, i) => {
+        const cell = edit.sheet.cell(row, c.col);
+        if (i === 0) return el('td', { class: 'tr-sticky mono' }, [el('b', { text: poOf(row) })]);
+        if (cell && cell.formula) return formulaCell(cell, c.header);
+        return cellInput(row, c.col, c.header);
+      })));
+    }
+    table.appendChild(body);
+    host.appendChild(table);
+
+    if (!shown.length) host.appendChild(el('div', { class: 'wk-empty', text: 'No rows match.' }));
+    if (!showAll && !query.trim() && matching.length > SHOW) {
+      host.appendChild(el('div', { style: 'margin-top:10px' }, [el('button', {
+        class: 'btn small', text: 'Show all ' + matching.length + ' rows', onclick: () => { showAll = true; drawTable(); },
+      })]));
+    }
+  }
+
+  function drawSave() {
+    const bar = $('#trackerSave');
+    if (!bar || !edit) return;
+    clear(bar);
+    const n = edit.pending.size;
+    const allowed = ui.can('editTrackers');
+    bar.hidden = !n && allowed;
+    if (!allowed) {
+      bar.hidden = false;
+      bar.appendChild(el('span', { class: 'context-note', text: 'Your role can look at the tracker but not change it. An administrator can give you the “Edit order trackers” permission.' }));
+      return;
+    }
+    bar.appendChild(el('b', { text: n + ' unsaved change' + (n === 1 ? '' : 's') }));
+    bar.appendChild(el('span', { class: 'spacer' }));
+    bar.appendChild(el('button', { class: 'btn', text: 'Discard', onclick: () => { edit.pending.clear(); drawTable(); drawSave(); } }));
+    bar.appendChild(el('button', { class: 'btn primary', text: 'Save to the tracker', onclick: save }));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Staleness
+   * ------------------------------------------------------------------ */
+
+  /** Has anyone changed the workbook on disk since it was opened here? */
+  async function checkStale() {
+    if (!edit) return false;
+    const now = await state.store.read(edit.choice.item.trackerPath);
+    edit.stale = !sameBytes(now, edit.bytes);
+    const host = $('#trackerStale');
+    if (host) {
+      clear(host);
+      if (edit.stale) {
+        host.appendChild(el('div', { class: 'msg warn' }, [el('span', { class: 'icon', text: '!' }), el('div', {}, [
+          el('strong', { text: 'This tracker has changed in the shared folder since you opened it.' }),
+          el('span', { class: 'detail', text: 'Someone else saved it. Reload to see their changes; saving now would overwrite them, so it is refused.' }),
+          el('div', { class: 'btn-row' }, [el('button', { class: 'btn small primary', text: 'Reload', onclick: () => reload(true) })]),
+        ])]));
+      }
+    }
+    return edit.stale;
+  }
+
+  async function reload(confirmLoss) {
+    if (!edit) return;
+    if (confirmLoss && edit.pending.size && !window.confirm('Reloading discards your ' + edit.pending.size + ' unsaved change(s). Continue?')) return;
+    const choice = edit.choice;
+    try { await openTracker(choice); } catch (e) { toast(e.message, 'error'); return; }
+    render();
+    toast('Reloaded ' + fileOf(choice.item.trackerPath) + ' from the shared folder.', 'ok');
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Save
+   * ------------------------------------------------------------------ */
+
+  async function save() {
+    if (!edit || !edit.pending.size) return;
+    if (!ui.requirePermission('editTrackers', 'edit trackers')) return;
+    if (await checkStale()) { toast('The tracker changed in the shared folder since you opened it. Reload before saving.', 'error'); return; }
+
+    const { choice } = edit;
+    const path = choice.item.trackerPath;
+    let out;
+    const changes = [];
+    try {
+      // Apply to a fresh copy, so a refused batch leaves what is on screen as it was.
+      const wb = await AMI.Workbook.load(edit.bytes);
+      const sheet = wb.sheet(edit.sheetName);
+      const header = AMI.findHeaderRow(sheet);
+      const edits = [];
+      for (const [k, value] of edit.pending) {
+        const [row, col] = k.split('|');
+        edits.push({ row: Number(row), col, value });
+        const heading = (header.columns.find((c) => c.col === col) || {}).header || col;
+        changes.push({ po: poOf(Number(row)), heading, value: String(value).trim() || '(cleared)' });
+      }
+      AMI.applyCellEdits(wb, sheet, header, edits);
+      wb.dropCalcChain();
+      out = await wb.toBytes();
+    } catch (e) {
+      toast(e.message, 'error');
+      return;
+    }
+
+    try {
+      const parts = AMI.splitPath(path);
+      const name = parts.pop();
+      const dir = parts.join('/');
+      const backup = (dir ? dir + '/' : '') + name.replace(/\.xlsx?m?$/i, '') + ' (backup ' + stamp() + ').xlsx';
+      await state.store.write(backup, edit.bytes);
+      await state.store.write(path, out);
+    } catch (e) {
+      toast('Nothing was saved to ' + fileOf(path) + ': ' + e.message, 'error');
+      return;
+    }
+
+    const count = changes.length;
+    const byPo = new Map();
+    for (const c of changes) (byPo.get(c.po) || byPo.set(c.po, []).get(c.po)).push(c);
+
+    await openTracker(choice);
+    await ui.trackerWritten(choice.account.id, choice.item.id, out);
+    // Who changed what, on each order, in the log the drawer shows.
+    await ui.applyWork(null, (doc, by) => {
+      for (const [po, list] of byPo) {
+        AMI.logActivity(doc, AMI.statusKey(choice.account.id, choice.item.id, po), by,
+          'Edited the tracker: ' + list.map((c) => c.heading + ' → ' + c.value).join('; '));
+      }
+    });
+    render();
+    toast('Saved ' + count + ' change' + (count === 1 ? '' : 's') + ' to ' + fileOf(path) + '. A backup is beside it; every page now reads the update.', 'ok');
+  }
+
+  RENDERERS.trackers = render;
+  ui.hooks.trackersChanged = () => { if (state.tab === 'trackers') checkStale(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.tab === 'trackers') checkStale();
+  });
 })();
 </script>
 </body>

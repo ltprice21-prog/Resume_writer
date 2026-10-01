@@ -1557,6 +1557,29 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
 .ship-late { color: var(--critical-ink); font-weight: 600; }
 
+/* ---------- order trackers: editing the workbook in place ---------- */
+
+.tr-scroll { max-height: 68vh; overflow: auto; }
+.tr-table th, .tr-table td { white-space: nowrap; }
+.tr-table td { padding: 3px 6px; }
+.tr-sticky { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); }
+.tr-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); }
+.tr-table thead th.tr-sticky { z-index: 3; }
+.tr-table input.tr-in { width: 100%; min-width: 96px; height: 28px; padding: 2px 6px; font-size: 12px; }
+.tr-table input.tr-in[type="date"] { min-width: 132px; }
+.tr-formula { background: var(--surface-3); color: var(--muted); font-style: italic; min-width: 72px; }
+td.tr-dirty { background: var(--warning-soft); }
+td.tr-dirty .tr-in { border-color: var(--warning); }
+.tr-savebar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3);
+}
+.tr-savebar[hidden] { display: none; }
+.tr-savebar .spacer { flex: 1; }
+
 @media (max-width: 900px) {
   .cols { grid-template-columns: minmax(0, 1fr); }
 }

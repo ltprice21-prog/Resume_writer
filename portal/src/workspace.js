@@ -44,7 +44,8 @@
     { id: 'postOrders', label: 'Add purchase orders and post them to trackers' },
     { id: 'setStatus', label: 'Change an order’s stage' },
     { id: 'manageTasks', label: 'Tick off and add stage tasks' },
-    { id: 'manageExceptions', label: 'Raise, acknowledge and resolve exceptions' },
+    { id: 'manageExceptions', label: 'Flag, acknowledge and resolve flagged items' },
+    { id: 'editTrackers', label: 'Edit order trackers' },
     { id: 'sendEmails', label: 'Draft emails and chases' },
     { id: 'editTemplates', label: 'Edit email templates' },
     { id: 'editAccounts', label: 'Add and edit accounts and items' },
@@ -55,11 +56,22 @@
     { id: 'admin', name: 'Administrator', hint: 'Everything, including accounts, items and people.',
       can: PERMISSIONS.map((p) => p.id) },
     { id: 'coordinator', name: 'Order desk', hint: 'Runs orders end to end; does not change the shared setup.',
-      can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'sendEmails', 'editTemplates'] },
+      can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'] },
     { id: 'finance', name: 'Finance', hint: 'Moves orders through invoicing and settlement.',
-      can: ['setStatus', 'manageTasks', 'manageExceptions', 'sendEmails'] },
+      can: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'] },
     { id: 'viewer', name: 'Viewer', hint: 'Reads everything; changes nothing.', can: [] },
   ];
+
+  /**
+   * The role a person has when none was chosen for them — new people, and anyone
+   * saved before roles existed.
+   *
+   * TESTING: everyone starts as an administrator so nothing is in the way while
+   * the desk is being tried out. Before real use, set `settings.defaultRole` to
+   * 'coordinator' (or change it on the Accounts page) so new people start with
+   * the working permissions and not the setup ones.
+   */
+  const DEFAULT_ROLE = 'admin';
 
   function rolePermissions(roleId) {
     const role = USER_ROLES.find((r) => r.id === roleId) || USER_ROLES[1];
@@ -111,11 +123,12 @@
     const settings = Object.assign({}, ws.settings || {});
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
+    if (!USER_ROLES.some((r) => r.id === ws.settings.defaultRole)) ws.settings.defaultRole = DEFAULT_ROLE;
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => {
-      // A person saved before roles existed is an administrator or an ordinary
-      // member, exactly as they were — so nobody gains or loses anything.
-      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : 'coordinator');
+      // A person with no role of their own is an administrator if they were one,
+      // and otherwise gets the workspace's default role.
+      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
       const base = rolePermissions(role);
       const given = u.permissions && typeof u.permissions === 'object' ? u.permissions : {};
       const permissions = {};
@@ -598,7 +611,7 @@
 
   Object.assign(AMI, {
     CONFIG_PATH, TEMPLATE_DIR, ATTACH_DIR, ROLES, SCHEMA_VERSION,
-    PERMISSIONS, USER_ROLES, rolePermissions, userCan,
+    PERMISSIONS, USER_ROLES, DEFAULT_ROLE, rolePermissions, userCan,
     attachDirFor, attachmentsForRole,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,

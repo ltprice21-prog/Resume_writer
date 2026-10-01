@@ -1563,6 +1563,29 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
 
 .ship-late { color: var(--critical-ink); font-weight: 600; }
 
+/* ---------- order trackers: editing the workbook in place ---------- */
+
+.tr-scroll { max-height: 68vh; overflow: auto; }
+.tr-table th, .tr-table td { white-space: nowrap; }
+.tr-table td { padding: 3px 6px; }
+.tr-sticky { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); }
+.tr-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); }
+.tr-table thead th.tr-sticky { z-index: 3; }
+.tr-table input.tr-in { width: 100%; min-width: 96px; height: 28px; padding: 2px 6px; font-size: 12px; }
+.tr-table input.tr-in[type="date"] { min-width: 132px; }
+.tr-formula { background: var(--surface-3); color: var(--muted); font-style: italic; min-width: 72px; }
+td.tr-dirty { background: var(--warning-soft); }
+td.tr-dirty .tr-in { border-color: var(--warning); }
+.tr-savebar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3);
+}
+.tr-savebar[hidden] { display: none; }
+.tr-savebar .spacer { flex: 1; }
+
 @media (max-width: 900px) {
   .cols { grid-template-columns: minmax(0, 1fr); }
 }
@@ -3015,6 +3038,166 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     return xml;
   }
 
+  /* ------------------------------------------------------------------ *
+   * Editing rows already on the sheet
+   * ------------------------------------------------------------------ *
+   *
+   * The tracker's formulas are shared formulas; overwriting one with a value
+   * would silently break every row beneath it. So a cell that holds a formula is
+   * never written — the edit is refused by name — and everything else in the row,
+   * including styles, is left exactly as it was.
+   */
+
+  const rowPattern = (n) => new RegExp('<row\\b[^>]*\\sr="' + n + '"[^>]*?(?:/>|>[\\s\\S]*?</row>)');
+
+  /** Take one row apart into its opening tag and its cells, in column order. */
+  function readRowXml(sheet, rowNum) {
+    const m = rowPattern(rowNum).exec(sheet.xml);
+    if (!m) throw new Error('Row ' + rowNum + ' is not on the sheet.');
+    const whole = m[0];
+    const selfClosing = /\/>$/.test(whole) && !/<\/row>$/.test(whole);
+    const open = selfClosing ? whole.replace(/\s*\/>$/, '>') : whole.slice(0, whole.indexOf('>') + 1);
+    const body = selfClosing ? '' : whole.slice(open.length, whole.length - '</row>'.length);
+    const cells = [];
+    const re = new RegExp(CELL_RE.source, 'g');
+    let c;
+    while ((c = re.exec(body)) !== null) {
+      const ref = getAttr(c[1] || c[2] || '', 'r');
+      if (ref) cells.push({ col: ref.replace(/\d+/g, ''), xml: c[0] });
+    }
+    return { whole, open, cells };
+  }
+
+  function writeRowXml(sheet, rowNum, parts) {
+    const cells = parts.cells.slice().sort((a, b) => colToIndex(a.col) - colToIndex(b.col));
+    // The spans hint would be wrong if a cell has been added outside it.
+    const open = parts.open.replace(/\sspans="[^"]*"/, '');
+    sheet.xml = sheet.xml.replace(parts.whole, () => open + cells.map((c) => c.xml).join('') + '</row>');
+  }
+
+  /** The style a column's cells carry, taken from the nearest row that has one. */
+  function columnStyle(sheet, header, col) {
+    for (const r of dataRows(sheet, header).reverse()) {
+      const c = sheet.cell(r, col);
+      if (c && c.style != null) return c.style;
+    }
+    return null;
+  }
+
+  /** What kind of value a column holds: a date, a number, or text. */
+  function columnKind(sheet, header, col) {
+    const heading = (header.columns.find((c) => c.col === col) || {}).header || '';
+    if (/date|prior to/i.test(heading)) return 'date';
+    let numeric = 0;
+    let textual = 0;
+    for (const r of dataRows(sheet, header)) {
+      const c = sheet.cell(r, col);
+      if (!c || c.text === '' || c.formula) continue;
+      if (c.num != null && c.type !== 's' && c.type !== 'inlineStr' && c.type !== 'str') numeric++;
+      else textual++;
+    }
+    return numeric > 0 && numeric >= textual ? 'number' : 'text';
+  }
+
+  /** Turn what a person typed into what the cell should hold, or say why not. */
+  function parseCellInput(kind, raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (text === '') return { value: '' };
+    if (kind === 'date') {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+      const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : parseDate(text);
+      if (!d || Number.isNaN(d.getTime())) return { error: '“' + text + '” is not a date' };
+      return { value: dateToSerial(d) };
+    }
+    if (kind === 'number') {
+      const n = Number(text.replace(/,/g, ''));
+      if (!Number.isFinite(n)) return { error: '“' + text + '” is not a number' };
+      return { value: n };
+    }
+    return { value: text };
+  }
+
+  /**
+   * Write a batch of edits into existing rows. All or nothing: every edit is
+   * checked first, and a single formula cell or unreadable value refuses the lot.
+   * Each edit is { row, col, value } with `value` as typed.
+   */
+  function applyCellEdits(wb, sheet, header, edits) {
+    const problems = [];
+    const planned = [];
+    for (const e of edits) {
+      const heading = (header.columns.find((c) => c.col === e.col) || {}).header || e.col;
+      const cell = sheet.cell(e.row, e.col);
+      if (cell && cell.formula) {
+        problems.push('“' + heading + '” on row ' + e.row + ' is a formula — the sheet calculates it');
+        continue;
+      }
+      const kind = columnKind(sheet, header, e.col);
+      const parsed = parseCellInput(kind, e.value);
+      if (parsed.error) { problems.push('“' + heading + '” on row ' + e.row + ': ' + parsed.error); continue; }
+      planned.push({ row: e.row, col: e.col, kind, value: parsed.value, style: cell && cell.style != null ? cell.style : columnStyle(sheet, header, e.col) });
+    }
+    if (problems.length) throw new Error(problems.join('; ') + '. Nothing was changed.');
+    if (!planned.length) return { changed: 0 };
+
+    for (const p of planned) {
+      const parts = readRowXml(sheet, p.row);
+      const fresh = cellXml(p.col + p.row, p.style, p.kind, p.value, null);
+      const at = parts.cells.findIndex((c) => c.col === p.col);
+      if (at >= 0) parts.cells[at] = { col: p.col, xml: fresh };
+      else parts.cells.push({ col: p.col, xml: fresh });
+      writeRowXml(sheet, p.row, parts);
+    }
+    wb.commitSheet(sheet);
+
+    refreshFormulaCaches(wb, sheet, header, Math.min(...planned.map((p) => p.row)));
+    markFullCalcOnLoad(wb);
+    return { changed: planned.length };
+  }
+
+  /**
+   * After an input changes, bring the cached results of the formulas beneath it
+   * up to date, so anything reading the file without recalculating — this app, a
+   * preview pane — sees current numbers. Only the small subset of formulas
+   * evaluateFormula understands is refreshed; the rest are left for Excel, which
+   * is told to recalculate on open.
+   */
+  function refreshFormulaCaches(wb, sheet, header, fromRow) {
+    const pending = new Map();
+    const rows = dataRows(sheet, header).filter((r) => r >= fromRow);
+    for (const r of rows) {
+      const parts = readRowXml(sheet, r);
+      let touched = false;
+      const cells = [...sheet.rows.get(r).cells.values()].sort((a, b) => colToIndex(a.col) - colToIndex(b.col));
+      for (const c of cells) {
+        if (!c.formula) continue;
+        const f = sheet.formulaTextFor(c);
+        if (!f) continue;
+        const val = evaluateFormula(sheet, shiftFormula(f.text, r - f.baseRow), r, pending);
+        if (val == null) continue;
+        pending.set(c.col + r, val);
+        if (c.type && c.type !== 'n') continue;
+        const at = parts.cells.findIndex((x) => x.col === c.col);
+        if (at < 0) continue;
+        const xml = parts.cells[at].xml;
+        const next = /<v>[\s\S]*?<\/v>/.test(xml) ? xml.replace(/<v>[\s\S]*?<\/v>/, '<v>' + val + '</v>')
+          : xml.replace(/<\/c>$/, '<v>' + val + '</v></c>');
+        if (next !== xml) { parts.cells[at] = { col: c.col, xml: next }; touched = true; }
+      }
+      if (touched) writeRowXml(sheet, r, parts);
+    }
+    wb.commitSheet(sheet);
+  }
+
+  /** Ask Excel to recalculate every formula the next time the workbook is opened. */
+  function markFullCalcOnLoad(wb) {
+    const entry = wb.map.get('xl/workbook.xml');
+    if (!entry) return;
+    const xml = DEC.decode(entry.bytes);
+    if (!/<calcPr\b/.test(xml) || /fullCalcOnLoad=/.test(xml)) return;
+    entry.bytes = ENC.encode(xml.replace(/<calcPr\b/, '<calcPr fullCalcOnLoad="1"'));
+  }
+
   /**
    * Evaluate the small subset of formulas the tracker uses, so the written row
    * carries a correct cached value and the UI can show what Excel will display.
@@ -3373,8 +3556,42 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
       + '</tr></thead><tbody>' + trs + '</tbody></table>';
   }
 
+  /*
+   * A placeholder is any text between double braces — {{poList}}, {{Lot Number}},
+   * {{Truck Type}}. Names are compared ignoring case, spaces and punctuation, so
+   * {{PO list}} finds `poList` and {{lot number}} finds the tracker's "Lot Number".
+   */
+  const PLACEHOLDER_RE = /\{\{\s*([^{}<>]+?)\s*\}\}/g;
+  const normName = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const hasValue = (v) => v != null && String(v).trim() !== '';
+
+  /** The value a placeholder names among `vars`, matching on the exact or the normalised name. */
+  function lookupVar(vars, name) {
+    if (vars[name] != null) return vars[name];
+    const n = normName(name);
+    if (!n) return undefined;
+    for (const key of Object.keys(vars)) {
+      if (key.startsWith('__')) continue;
+      if (normName(key) === n && vars[key] != null) return vars[key];
+    }
+    return undefined;
+  }
+
+  /**
+   * Fill a template. A value read from the PO comes first; where the PO has none
+   * the optional `vars.__resolve(name)` — the item tracker — is asked. A
+   * placeholder neither can fill becomes empty, never a guess.
+   */
   function fillTemplate(template, vars) {
-    return String(template).replace(/\{\{(\w+)\}\}/g, (m, k) => (vars[k] == null ? '' : String(vars[k])));
+    return String(template).replace(PLACEHOLDER_RE, (m, name) => {
+      const direct = lookupVar(vars, name);
+      if (hasValue(direct)) return String(direct);
+      if (typeof vars.__resolve === 'function') {
+        const r = vars.__resolve(name);
+        if (r && hasValue(r.value)) return String(r.value);
+      }
+      return direct == null ? '' : String(direct);
+    });
   }
 
   /** Distinct PO stems, e.g. 350632-1..4 and 350633-1..2 become "350632 - 350633". */
@@ -3396,6 +3613,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     unzip, zip, crc32, concatBytes,
     // xlsx
     Workbook, Sheet, findHeaderRow, dataRows, readSheetConfig,
+    applyCellEdits, columnKind, parseCellInput,
     colToIndex, indexToCol, escapeXml, unescapeXml,
     // dates
     dateToSerial, serialToDate, parseDate, formatEmailDate, formatISO, formatShort, daysBetween,
@@ -3408,7 +3626,7 @@ td.num.over { color: var(--critical-ink); font-weight: 700; }
     // follow-ups
     FOLLOW_UP_RULES, findOpenItems, supersededBy,
     // email
-    buildEml, orderTableHtml, fillTemplate, poGroups, TABLE_COLUMNS, b64,
+    buildEml, orderTableHtml, fillTemplate, lookupVar, normName, hasValue, poGroups, TABLE_COLUMNS, b64,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

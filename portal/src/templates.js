@@ -678,7 +678,7 @@
   /** List the {{placeholders}} a template uses, in order of first appearance. */
   function templatePlaceholders(html) {
     const out = [];
-    const re = /\{\{(\w+)\}\}/g;
+    const re = /\{\{\s*([^{}<>]+?)\s*\}\}/g;
     let m;
     while ((m = re.exec(String(html || ''))) !== null) if (!out.includes(m[1])) out.push(m[1]);
     return out;

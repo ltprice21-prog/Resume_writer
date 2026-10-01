@@ -245,7 +245,7 @@
     const slot = el('div', {});
     const acts = el('div', { class: 'wk-acts' });
     const mgr = ui.can('manageExceptions');
-    const tip = mgr ? null : 'Your role does not allow you to change exceptions.';
+    const tip = mgr ? null : 'Your role does not allow you to change flagged items.';
 
     const add = (text, status, cls) => acts.appendChild(el('button', {
       class: 'btn small' + (cls ? ' ' + cls : ''), text, disabled: !mgr, 'data-tip': tip,
@@ -293,9 +293,9 @@
   /** Raise an exception by hand, on any order the person can see. */
   function raiseExceptionDialog(preset) {
     const orders = scopedOrders({ keepClosed: true });
-    if (!orders.length) { toast('No orders to raise an exception on.', 'error'); return; }
+    if (!orders.length) { toast('No orders to flag.', 'error'); return; }
     let close = null;
-    close = ui.openOverlay('Raise an exception', 'Something outside the tracker’s dates that needs attention on an order.', (body) => {
+    close = ui.openOverlay('Flag something', 'Something outside the tracker’s dates that needs attention on an order.', (body) => {
       const orderSel = el('select', {}, orders.slice().sort((a, b) => a.po.localeCompare(b.po)).map((o) => el('option', {
         value: o.key, selected: preset && preset.key === o.key, text: 'PO ' + o.po + ' — ' + orderWhere(o),
       })));
@@ -311,7 +311,7 @@
         el('div', { class: 'grid-2' }, [field('Severity', sev), field('Due', due)]),
         field('Detail', detail),
         el('div', { class: 'btn-row' }, [el('button', {
-          class: 'btn primary', text: 'Raise exception',
+          class: 'btn primary', text: 'Flag it',
           onclick: async () => {
             const order = orders.find((o) => o.key === orderSel.value);
             if (!title.value.trim()) { toast('Give it a title.', 'error'); return; }
@@ -319,7 +319,7 @@
               title: title.value, severity: sev.value, due: due.value, detail: detail.value,
               stageId: (AMI.workStage(order) || {}).id || '',
             }, by));
-            if (ok) { if (close) close(); refresh(); toast('Exception raised.', 'ok'); }
+            if (ok) { if (close) close(); refresh(); toast('Flagged.', 'ok'); }
           },
         })]),
       ]));
@@ -375,17 +375,17 @@
       el('h1', { text: greeting + ', ' + user.name.split(' ')[0] + '.' }),
       el('p', {
         text: dueTasks.length + ' task' + (dueTasks.length === 1 ? '' : 's') + ' due or overdue, '
-          + excs.length + ' open exception' + (excs.length === 1 ? '' : 's') + ' across '
+          + excs.length + ' open flag' + (excs.length === 1 ? '' : 's') + ' across '
           + plural(orders.length, 'open order') + '.',
       }),
     ]));
 
     host.appendChild(el('div', { class: 'tiles' }, [
-      tile('Overdue', overdueTasks + overdueExc, 'tasks and exceptions past their date', overdueTasks + overdueExc ? 'bad' : 'ok',
+      tile('Overdue', overdueTasks + overdueExc, 'tasks and flags past their date', overdueTasks + overdueExc ? 'bad' : 'ok',
         () => { view.tasks = 'overdue'; showTab('tasks'); }),
       tile('Due today', dueTasks.length - overdueTasks, 'tasks tied to a tracker date', 'warn',
         () => { view.tasks = 'today'; showTab('tasks'); }),
-      tile('Open exceptions', excs.length, high + ' high or critical', high ? 'bad' : (excs.length ? 'warn' : 'ok'),
+      tile('Flagged', excs.length, high + ' high or critical', high ? 'bad' : (excs.length ? 'warn' : 'ok'),
         () => { view.exceptions = 'open'; showTab('exceptions'); }),
       tile('Person checks waiting', gateWaiting, 'orders at Order Validation or Pre-Shipment Review', gateWaiting ? 'info' : 'ok',
         () => { state.filters.statusId = '__open'; showTab('orderstatus'); }),
@@ -415,10 +415,10 @@
             el('span', { class: 'wk-kind', text: 'TASK' }),
             el('div', { class: 'wk-body' }, [taskLine(i.order, i.task, { showOrder: true })]),
           ]))))
-        : emptyState('Nothing needs you right now.', 'Tasks appear here once they fall due; exceptions appear as soon as the tracker’s dates raise them.'),
+        : emptyState('Nothing needs you right now.', 'Tasks appear here once they fall due; flags appear as soon as the tracker’s dates raise them.'),
       actionItems.length > shown.length
         ? el('div', { class: 'body' }, [el('button', { class: 'btn small', text: 'See all tasks', onclick: () => { view.tasks = 'soon'; showTab('tasks'); } }),
-          document.createTextNode(' '), el('button', { class: 'btn small', text: 'See all exceptions', onclick: () => showTab('exceptions') })])
+          document.createTextNode(' '), el('button', { class: 'btn small', text: 'See all flagged', onclick: () => showTab('exceptions') })])
         : null,
     ]);
 
@@ -494,11 +494,11 @@
     const host = $('#exceptionsBody');
     if (!ready(host, renderExceptions)) return;
 
-    host.appendChild(ui.pageHeader('Work', 'Exceptions',
+    host.appendChild(ui.pageHeader('Work', 'Flagged',
       'Things that need attention on an order. Those marked “from tracker dates” are worked out from the tracker alone — a missed requested date with nothing recorded, '
-      + 'documents still blank close to collection, a delivery with no invoice number. You can also raise one by hand, and answer any of them.',
+      + 'documents still blank close to collection, a delivery with no invoice number. You can also flag one by hand, and answer any of them.',
       [ui.closedToggle(renderExceptions),
-        permButton('manageExceptions', { class: 'btn primary', text: '+ Raise exception', onclick: () => raiseExceptionDialog() })]));
+        permButton('manageExceptions', { class: 'btn primary', text: '+ Flag something', onclick: () => raiseExceptionDialog() })]));
     host.appendChild(ui.filterBar(renderExceptions, { withItem: true, withSearch: true }));
 
     const all = gatherExceptions(scopedOrders({ useQuery: true, keepClosed: true }), true);
@@ -529,11 +529,11 @@
       .sort((a, b) => (AMI.SEVERITY_RANK[b.exc.severity] - AMI.SEVERITY_RANK[a.exc.severity]) || a.order.po.localeCompare(b.order.po));
 
     host.appendChild(el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Exceptions'), el('span', { class: 'spacer' }),
+      el('h2', {}, [document.createTextNode('Flagged'), el('span', { class: 'spacer' }),
         el('span', { class: 'context-note', text: shown.length + ' shown' })]),
       shown.length
         ? el('div', { class: 'wk-list' }, shown.slice(0, 200).map((i) => exceptionLine(i.order, i.exc, { showOrder: true })))
-        : emptyState('Nothing here.', view.exceptions === 'open' ? 'No open exceptions for these filters.' : 'Nothing matches these filters.'),
+        : emptyState('Nothing here.', view.exceptions === 'open' ? 'Nothing open is flagged for these filters.' : 'Nothing matches these filters.'),
     ]));
   }
 
@@ -809,11 +809,11 @@
     const list = AMI.exceptionsFor(order, workDoc(), { followUps: order.followUps });
     const open = list.filter(AMI.isOpenException);
     return el('div', { class: 'card' }, [
-      el('h2', {}, [document.createTextNode('Exceptions (' + open.length + ' open)'), el('span', { class: 'spacer' }),
-        permButton('manageExceptions', { class: 'btn small', text: '+ Raise exception', onclick: () => raiseExceptionDialog(order) })]),
+      el('h2', {}, [document.createTextNode('Flagged (' + open.length + ' open)'), el('span', { class: 'spacer' }),
+        permButton('manageExceptions', { class: 'btn small', text: '+ Flag something', onclick: () => raiseExceptionDialog(order) })]),
       list.length
         ? el('div', { class: 'wk-list' }, list.map((x) => exceptionLine(order, x)))
-        : emptyState('No exceptions.', 'None of the tracker’s dates raise one, and nobody has raised one by hand.'),
+        : emptyState('Nothing flagged.', 'None of the tracker’s dates flag this order, and nobody has flagged it by hand.'),
     ]);
   }
 
@@ -881,7 +881,7 @@
           el('time', { text: a.at.slice(0, 16).replace('T', ' ') }),
           el('div', { text: a.who + ': ' + a.text }),
         ])))]
-        : [el('p', { class: 'help', text: 'Nothing recorded yet. Ticks, exceptions and stage changes made here are logged with who and when.' })]),
+        : [el('p', { class: 'help', text: 'Nothing recorded yet. Ticks, flags and stage changes made here are logged with who and when.' })]),
     ]);
   }
 

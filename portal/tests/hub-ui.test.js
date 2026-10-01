@@ -71,7 +71,8 @@ async function buildBundle() {
       items: [{ id: 'tmp', name: 'Test Tempranillo', trackerPath: 'trackers/Test.xlsx', sheet: '2026 Cycle' }] }],
     users: [
       { id: 'boss', name: 'Ada Admin', divisionId: 'eu', accountIds: [], isAdmin: true },
-      { id: 'desk', name: 'Dan Desk', divisionId: 'eu', accountIds: [] },
+      { id: 'desk', name: 'Dan Desk', divisionId: 'eu', accountIds: [], role: 'coordinator' },
+      { id: 'newbie', name: 'Nia New', divisionId: 'eu', accountIds: [] },
       { id: 'look', name: 'Vera Viewer', divisionId: 'eu', accountIds: [], role: 'viewer' },
     ],
   };
@@ -175,10 +176,10 @@ async function buildBundle() {
   await page.locator('#drawer .tsk-add button').click();
   await wait(700);
   ok('a task can be added', /Call the forwarder/.test(await page.locator('#drawer').innerText()));
-  await page.locator('#drawer button', { hasText: '+ Raise exception' }).click();
+  await page.locator('#drawer button', { hasText: '+ Flag something' }).click();
   await wait(300);
   await page.locator('.overlay input[type="text"]').fill('Pallet count disputed');
-  await page.locator('.overlay button', { hasText: 'Raise exception' }).click();
+  await page.locator('.overlay button', { hasText: 'Flag it' }).click();
   await wait(900);
   ok('an exception can be raised by hand', /Pallet count disputed/.test(await page.locator('#drawer').innerText()));
   await page.locator('#drawer button', { hasText: /Mark .* complete/ }).click();
@@ -206,8 +207,10 @@ async function buildBundle() {
   await page.waitForSelector('#drawer .dr-body');
   ok('a viewer cannot tick a step', await page.locator('#drawer .tsk-box').first().isDisabled());
   ok('or move an order on', await page.locator('#drawer button', { hasText: /Mark .* complete/ }).isDisabled());
-  ok('or raise an exception', await page.locator('#drawer button', { hasText: '+ Raise exception' }).isDisabled());
+  ok('or raise an exception', await page.locator('#drawer button', { hasText: '+ Flag something' }).isDisabled());
   await page.keyboard.press('Escape');
+  await go('trackers');
+  ok('or edit a tracker', (await page.locator('#trackerTable input').first().isDisabled()));
   await go('accounts');
   ok('or change accounts and people', (await page.locator('#accountsBody button', { hasText: /^(Add|Edit)/ }).count()) === 0);
 
@@ -227,11 +230,49 @@ async function buildBundle() {
   await page.locator('#accountsBody tr', { hasText: 'Dan Desk' }).locator('button', { hasText: 'Edit' }).click();
   await wait(400);
   ok('an administrator can edit a person\'s role and permissions',
-    (await page.locator('#entityEditor select option').count()) >= 4 && (await page.locator('#entityEditor input[data-permission]').count()) === 8);
+    (await page.locator('#entityEditor select option').count()) >= 4 && (await page.locator('#entityEditor input[data-permission]').count()) === 9);
   await page.locator('#entityEditor select').nth(1).selectOption('viewer');
   await wait(200);
   const boxes = await page.locator('#entityEditor input[data-permission]').evaluateAll((els) => els.map((e) => e.checked));
   ok('choosing Viewer clears the permissions', boxes.every((c) => !c));
+
+  console.log('\nNew people');
+  await go('accounts');
+  ok('someone with no role starts as an administrator in this testing setup',
+    /Nia New[\s\S]*administrator/i.test(await page.locator('#accountsBody tr', { hasText: 'Nia New' }).innerText()));
+
+  console.log('\nOrder trackers');
+  await go('trackers');
+  ok('the page lists the tracker\'s rows', (await page.locator('#trackerTable tbody tr').count()) === 5);
+  const rail = await page.locator('#rail .nav span:not(.nav-badge):not(.step-no)').allInnerTexts();
+  ok('it is the last page in the Work section', rail.indexOf('Order trackers') === rail.indexOf('Invoiced archive') + 1 && rail.indexOf('Order trackers') < rail.indexOf('Purchase orders'));
+  ok('the Work section runs in the agreed order', rail.slice(0, 9).join('|') === 'My Work|Account Health|Tasks|Flagged|Follow-ups|Orders|Shipments|Invoiced archive|Order trackers', rail.slice(0, 9).join('|'));
+  const t400 = page.locator('#trackerTable tr', { hasText: 'T-400' });
+  await t400.locator('input[aria-label^="Actual Collection Date"]').fill('2026-09-20');
+  ok('an edit is counted as unsaved', /1 unsaved change/.test(await page.locator('#trackerSave').innerText()));
+  await page.locator('#trackerSave button', { hasText: 'Save to the tracker' }).click();
+  await wait(1500);
+  ok('saving clears the unsaved count', await page.locator('#trackerSave').isHidden());
+  ok('and the saved date is in the tracker', (await page.locator('#trackerTable tr', { hasText: 'T-400' }).locator('input[aria-label^="Actual Collection Date"]').inputValue()) === '2026-09-20');
+  await go('orderstatus');
+  await page.locator('#orderStatusBody table.data tbody tr button.wk-link', { hasText: 'T-400' }).click();
+  await page.waitForSelector('#drawer .dr-body');
+  ok('every other page reads it at once: the order moved to Shipment Execution', /Shipment Execution/.test(await page.locator('#drawer .dr-head').innerText()));
+  ok('and the edit is in its activity log', /Edited the tracker: Actual Collection Date from Cellars/.test(await page.locator('#drawer .activity').innerText()));
+  await page.keyboard.press('Escape');
+
+  console.log('\nTemplate placeholders');
+  const resolved = await page.evaluate(() => {
+    const r = AMI.ui.trackerResolver('tmp', ['T-200']);
+    return { truck: r('Truck Type'), loose: r('truck  TYPE'), product: r('Product Name'), qty: r('Quantity'), none: r('Nonsense field') };
+  });
+  ok('a placeholder named like a tracker column reads that column for the PO', resolved.truck.value === 'Reefer' && /Truck Type/.test(resolved.truck.source));
+  ok('case and spacing do not matter', resolved.loose.value === 'Reefer');
+  ok('a fact from the top of the sheet is found too', resolved.product.value === 'Test Tempranillo');
+  ok('a name that fits several columns is reported, not guessed', resolved.qty.value === '' && resolved.qty.ambiguous.length >= 3);
+  ok('a name nothing matches is left alone', resolved.none === null);
+  const filled = await page.evaluate(() => AMI.fillTemplate('Truck: {{Truck Type}} / PO {{poList}}', { poList: 'T-200', __resolve: AMI.ui.trackerResolver('tmp', ['T-200']) }));
+  ok('a template fills from the PO first and the tracker second', filled === 'Truck: Reefer / PO T-200', filled);
 
   console.log('\nPhone width');
   await page.setViewportSize({ width: 420, height: 860 });

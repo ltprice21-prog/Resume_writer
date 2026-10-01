@@ -363,7 +363,7 @@
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
-      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced'].includes(t)) b.disabled = !hasUser;
+      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments', 'invoiced', 'trackers'].includes(t)) b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
@@ -1296,6 +1296,88 @@
   const twoDp = (n) => (n == null || !Number.isFinite(n) ? ''
     : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
+  /* ------------------------------------------------------------------ *
+   * Placeholders the PO scan cannot fill: the item tracker
+   * ------------------------------------------------------------------ *
+   *
+   * A template names what it wants in double braces — {{Lot Number}}, {{Truck
+   * Type}}, {{forwarder}}. The purchase order PDF is read first. Where it has
+   * nothing, the item's tracker is asked: a column heading matching the name
+   * gives that column's value for the PO(s) in the draft, and a fact from the top
+   * of the sheet (Supplier, HS code, Case weight…) is matched the same way.
+   * A blank cell stays blank and is reported; a name that could mean several
+   * columns is reported as ambiguous rather than guessed.
+   */
+
+  const TRACKER_FACTS = [
+    ['Product Name', 'productName'], ['Case Size', 'caseSize'], ['Customer', 'customer'],
+    ['Airline part/item #', 'airlinePart'], ['NAV Code', 'navCode'], ['Supplier', 'supplier'],
+    ['Collection Location', 'collectionLocation'], ['Country of Origin', 'countryOfOrigin'],
+    ['HS/HTS Code', 'hsCode'], ['Winery closed dates', 'wineryClosedDates'],
+    ['Minimum order quantity', 'minimumOrder'], ['Bottles/case', 'bottlesPerCase'],
+    ['Cases per pallet', 'casesPerPallet'], ['Case weight', 'caseWeight'],
+    ['Full Pallet Weight', 'palletWeight'], ['Production Lead Time (days)', 'leadTimeDays'],
+    ['Lead Time on Water/Road (days)', 'transitDays'],
+  ];
+
+  function trackerResolver(itemId, poNumbers) {
+    const st = itemState(itemId);
+    const book = st && (st.preview || st.base);
+    if (!book || !book.sheet || !book.header) return () => null;
+    const { sheet, header, config } = book;
+    const poCol = poColumn(header);
+    const wanted = new Set((poNumbers || []).map((p) => String(p).trim()));
+    const rows = AMI.dataRows(sheet, header).filter((r) => wanted.has(sheet.cellText(r, poCol).trim()));
+
+    const show = (r, col, heading) => {
+      const c = sheet.cell(r, col);
+      if (!c) return '';
+      const t = String(c.text || '').trim();
+      if (!t || /^to fill$/i.test(t)) return '';
+      if (c.num != null && /date|prior to/i.test(heading) && c.num > 30000 && c.num < 80000) {
+        return AMI.formatEmailDate(AMI.serialToDate(c.num));
+      }
+      return t;
+    };
+
+    const byColumn = (col) => {
+      const values = [];
+      for (const r of rows) {
+        const v = show(r, col.col, col.header);
+        if (v && !values.includes(v)) values.push(v);
+      }
+      const where = 'the tracker, column “' + col.header + '”';
+      if (!rows.length) return { value: '', source: where, why: 'PO ' + [...wanted].join(', ') + ' is not on this tracker yet' };
+      if (!values.length) return { value: '', source: where, why: 'the “' + col.header + '” column is blank for ' + (rows.length > 1 ? 'these POs' : 'this PO') };
+      return { value: values.join(', '), source: where };
+    };
+
+    const byFact = ([label, key]) => {
+      const v = config ? config[key] : null;
+      const where = 'the tracker, “' + label + '” at the top of the sheet';
+      if (v == null || String(v).trim() === '') return { value: '', source: where, why: 'the tracker has no “' + label + '” entry' };
+      return { value: String(v), source: where };
+    };
+
+    return (name) => {
+      const n = AMI.normName(name);
+      if (!n) return null;
+      const cols = header.columns;
+      const exactCol = cols.filter((c) => AMI.normName(c.header) === n);
+      if (exactCol.length === 1) return byColumn(exactCol[0]);
+      const exactFact = TRACKER_FACTS.filter(([label]) => AMI.normName(label) === n);
+      if (exactFact.length === 1) return byFact(exactFact[0]);
+      if (n.length >= 4) {
+        const likeCol = cols.filter((c) => AMI.normName(c.header).includes(n));
+        const likeFact = TRACKER_FACTS.filter(([label]) => AMI.normName(label).includes(n));
+        const all = likeCol.length + likeFact.length;
+        if (all === 1) return likeCol.length ? byColumn(likeCol[0]) : byFact(likeFact[0]);
+        if (all > 1) return { value: '', ambiguous: [...likeCol.map((c) => c.header), ...likeFact.map((f) => f[0])] };
+      }
+      return null;
+    };
+  }
+
   function emailVars(role) {
     const account = currentAccount() || {};
     const item = currentItem();
@@ -1373,6 +1455,8 @@
         airport: airport.code,
         airportCode: airport.code,
         airportName: airport.airport ? airport.airport.names[0] || airport.airport.city : '',
+        // Anything the PO scan cannot fill is looked up in the item tracker.
+        __resolve: item ? trackerResolver(item.id, rows.map((r) => r.po)) : null,
       },
     };
   }
@@ -1410,6 +1494,7 @@
   function auditPlaceholders(template, ctx) {
     const used = AMI.templatePlaceholders((template.html || '') + ' ' + (template.subject || ''));
     const manual = (state.emailOverrides.vars) || {};
+    const varKey = (name) => Object.keys(VAR_SOURCE).find((k) => AMI.normName(k) === AMI.normName(name));
 
     return used.map((name) => {
       const typed = manual[name];
@@ -1417,8 +1502,18 @@
         return { name, value: String(typed), source: 'you typed it', filled: true, manual: true };
       }
 
-      const value = ctx.vars[name];
-      const filled = value != null && String(value).trim() !== '';
+      const value = AMI.lookupVar(ctx.vars, name);
+      const filled = AMI.hasValue(value);
+
+      // Nothing on the PO for this one — the item tracker is the next place.
+      let fromTracker = null;
+      if (!filled && typeof ctx.vars.__resolve === 'function') {
+        const r = ctx.vars.__resolve(name);
+        if (r && AMI.hasValue(r.value)) {
+          return { name, value: String(r.value), source: r.source, filled: true, fromTracker: true };
+        }
+        fromTracker = r;
+      }
 
       if (isAirportField(name) && !filled) {
         return {
@@ -1433,10 +1528,14 @@
         name,
         value: filled ? String(value) : '',
         filled,
-        source: VAR_SOURCE[name] || 'not a field this portal fills',
-        why: filled ? '' : (VAR_SOURCE[name]
-          ? 'nothing in ' + VAR_SOURCE[name] + ' supplies it'
-          : 'the template asks for a field the portal does not know'),
+        source: VAR_SOURCE[varKey(name)] || 'not a field this portal fills',
+        why: filled ? '' : (fromTracker && fromTracker.ambiguous
+          ? 'it could mean more than one place in the tracker (' + fromTracker.ambiguous.join('; ') + ') — name one exactly'
+          : fromTracker && fromTracker.why
+            ? 'the PO has nothing for it and ' + fromTracker.why
+            : VAR_SOURCE[varKey(name)]
+              ? 'nothing in ' + VAR_SOURCE[varKey(name)] + ' supplies it, and the tracker has no matching column'
+              : 'neither the PO nor the tracker has anything called that'),
         derived: isAirportField(name) && ctx.airport.source !== 'printed',
         airport: isAirportField(name),
       };
@@ -1723,7 +1822,8 @@
 
       const chip = f.manual ? el('span', { class: 'chip edited', text: 'typed in' })
         : (f.filled
-          ? (f.derived ? el('span', { class: 'chip computed', text: 'derived' })
+          ? (f.fromTracker ? el('span', { class: 'chip computed', text: 'from tracker' })
+            : f.derived ? el('span', { class: 'chip computed', text: 'derived' })
             : el('span', { class: 'chip pdf', text: 'filled' }))
           : el('span', { class: 'chip error', text: 'missing' }));
 
@@ -2337,6 +2437,18 @@
     }
     userTable.appendChild(userBody);
     host.appendChild(el('div', { class: 'table-scroll' }, [userTable]));
+    if (canManageUsers) {
+      host.appendChild(el('label', { class: 'field', style: 'max-width:420px;margin-top:10px' }, [
+        el('span', { text: 'New people start as' }),
+        el('select', {
+          onchange: async (e) => {
+            ws.settings.defaultRole = e.target.value;
+            if (await persistWorkspace()) toast('New people will start as ' + roleName(e.target.value) + '.', 'ok');
+          },
+        }, AMI.USER_ROLES.map((r) => el('option', { value: r.id, selected: r.id === ws.settings.defaultRole, text: r.name }))),
+        el('div', { class: 'note', text: 'Testing setup: everyone starts as an administrator. Change this before real use.' }),
+      ]));
+    }
     if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
       onclick: async () => {
@@ -2348,7 +2460,7 @@
         ws.users.push(AMI.normaliseWorkspace({
           users: [{
             id, name, email: '', divisionId: ws.divisions[0] ? ws.divisions[0].id : '',
-            accountIds: [], signature: '', defaultCc: '', role: first ? 'admin' : 'coordinator',
+            accountIds: [], signature: '', defaultCc: '', role: first ? 'admin' : ws.settings.defaultRole,
           }],
         }).users[0]);
         if (await persistWorkspace()) {
@@ -3128,6 +3240,7 @@
         customer: config.customer || account.name || '',
         product: config.productName || (item && item.product) || (item && item.name) || '',
         topic: topics.join(' / '),
+        __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,
         signature: user.signature || '',
@@ -3618,6 +3731,24 @@
       }
     }
     return out;
+  }
+
+  /**
+   * Something else wrote to a tracker — the Order trackers page. Take the new
+   * bytes in, re-plan anything waiting to be posted against them, and read every
+   * tracker again so each page shows the same thing.
+   */
+  async function trackerWritten(accountId, itemId, bytes) {
+    if (accountId === state.accountId) {
+      const st = itemState(itemId);
+      if (st) {
+        st.trackerBytes = bytes;
+        await rebuildPlans();
+        renderWorkspace(); renderReview();
+      }
+    }
+    state.portfolio = null;
+    await ensurePortfolio(true);
   }
 
   /** Open an order's drawer, once the portfolio has been read. */
@@ -4963,6 +5094,16 @@
       return '';
     });
 
+    // Colleagues write to the same trackers through the shared folder. Coming
+    // back to the tab, read them again — at most every twenty seconds.
+    let lastFocusRead = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !state.store || !currentUser()) return;
+      if (Date.now() - lastFocusRead < 20000) return;
+      lastFocusRead = Date.now();
+      ensurePortfolio(true);
+    });
+
     // A debounced save may still be pending when the tab goes away.
     const flush = () => { saveSessionSoon.flush(); };
     window.addEventListener('pagehide', flush);
@@ -4990,7 +5131,7 @@
     currentUser, currentAccount, visibleAccounts, can, requirePermission,
     ensurePortfolio, filteredPortfolio, allOrders, applyStatus, applyWork, openOrder,
     filterBar, pageHeader, closedToggle, stageOptions, stageTrailStrip, excludingClosed,
-    SOURCE_CHIP, SOURCE_LONG, roleName,
+    SOURCE_CHIP, SOURCE_LONG, roleName, trackerWritten, trackerResolver, saveLocal, loadLocal,
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -217,10 +217,13 @@ const memoryStore = () => {
   });
   const role = (id) => ws.users.find((u) => u.id === id).role;
   check('a saved administrator stays one', role('bo'), 'admin');
-  check('a saved member becomes an order-desk user', role('ann'), 'coordinator');
+  check('a saved member starts as an administrator in this testing setup', role('ann'), 'admin');
+  const careful = AMI.normaliseWorkspace({ settings: { defaultRole: 'coordinator' }, users: [{ id: 'ann', name: 'Ann' }] });
+  check('and as an order-desk user once the default is changed', careful.users[0].role, 'coordinator');
   ok('an administrator can do everything', AMI.PERMISSIONS.every((p) => AMI.userCan(ws, 'bo', p.id)));
-  ok('an order-desk user can post but not change accounts or people',
-    AMI.userCan(ws, 'ann', 'postOrders') && !AMI.userCan(ws, 'ann', 'editAccounts') && !AMI.userCan(ws, 'ann', 'manageUsers'));
+  ok('an order-desk user can post and edit trackers but not change accounts or people',
+    AMI.userCan(careful, 'ann', 'postOrders') && AMI.userCan(careful, 'ann', 'editTrackers')
+    && !AMI.userCan(careful, 'ann', 'editAccounts') && !AMI.userCan(careful, 'ann', 'manageUsers'));
   ok('finance can change stages but not post to trackers', AMI.userCan(ws, 'fin', 'setStatus') && !AMI.userCan(ws, 'fin', 'postOrders'));
   ok('a viewer can do nothing', AMI.PERMISSIONS.every((p) => !AMI.userCan(ws, 'vi', p.id)));
   ok('an administrator can tailor one person', !AMI.userCan(ws, 'cus', 'sendEmails') && AMI.userCan(ws, 'cus', 'editAccounts'));

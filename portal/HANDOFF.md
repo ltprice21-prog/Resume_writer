@@ -43,7 +43,7 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # fixture-free: workflow (71), orderwork (50), hub-ui (42); the rest need fixtures
+node portal/tests/*.test.js # fixture-free: workflow (71), orderwork (51), trackeredit (25), hub-ui (58); the rest need fixtures
 ```
 
 | Source | Responsibility |
@@ -57,7 +57,8 @@ node portal/tests/*.test.js # fixture-free: workflow (71), orderwork (50), hub-u
 | `persist.js` | IndexedDB wrapper for the folder handle and session, permission queries, debounce |
 | `orderwork.js` | Per-stage checklists, automatic and manual exceptions, shipment lines, `order-work.json` merge/save |
 | `app.js` / `app-teams.js` | The two UIs. `app-teams.js` holds the workspace, the order desk and the dashboard, and exposes `AMI.ui` |
-| `app-hub.js` | My Work, Tasks, Exceptions, Shipments, the order drawer and search. Builds on `AMI.ui`; registers its renderers into `RENDERERS` and its callbacks into `hooks` |
+| `app-trackers.js` | The Order trackers page. Edits go through `AMI.applyCellEdits` (engine.js): formula cells are refused, cached formula results are refreshed, `fullCalcOnLoad` is set; each save checks the file is unchanged on disk, writes a backup, writes the workbook, then `ui.trackerWritten` re-plans pending POs and re-reads the portfolio |
+| `app-hub.js` | My Work, Tasks, Flagged (internally "exceptions"), Shipments, Invoiced archive, the order drawer and search. Builds on `AMI.ui`; registers its renderers into `RENDERERS` and its callbacks into `hooks` |
 | `styles.css` | Salesforce-Lightning-style system, light and dark as deliberate palettes |
 
 ### Provenance tags
@@ -177,6 +178,20 @@ is that stage's checklist that is open.
 
 Permissions (`AMI.PERMISSIONS`, `AMI.USER_ROLES`, `AMI.userCan`) gate actions in `app-teams.js`
 through `requirePermission`. They organise the interface; they are not a security boundary.
+
+### Placeholders
+
+`{{…}}` is free text (`PLACEHOLDER_RE` in engine.js), matched on `normName` — lower-case letters
+and digits only. `fillTemplate` takes a value from `vars` first (exact, then normalised key);
+if that is blank it calls `vars.__resolve(name)`, which `trackerResolver` in app-teams.js
+supplies: an exact tracker column heading, an exact sheet fact (`TRACKER_FACTS`), then a unique
+contains-match; several candidates return `{ ambiguous }`. Blank cells and `to fill` are blank.
+`auditPlaceholders` reports the source and the reason for every gap.
+
+### Roles: testing default
+
+`DEFAULT_ROLE = 'admin'` in workspace.js, overridable per workspace by `settings.defaultRole`.
+It applies to new people and anyone saved with no role. Change it before real use.
 
 ### Persistence
 
