@@ -32,6 +32,42 @@
     { id: 'internal', name: 'Internal', hint: 'Handovers, escalations, accounting notes.' },
   ];
 
+  /**
+   * What a person may do in the app. An administrator sets these per person.
+   *
+   * Like the account assignment below, this shapes what the app offers — it is
+   * not a lock. Anyone who can open the shared folder can open its files, so
+   * genuinely restricted material belongs in a folder with its own SharePoint
+   * permissions.
+   */
+  const PERMISSIONS = [
+    { id: 'postOrders', label: 'Add purchase orders and post them to trackers' },
+    { id: 'setStatus', label: 'Change an order’s stage' },
+    { id: 'manageTasks', label: 'Tick off and add stage tasks' },
+    { id: 'manageExceptions', label: 'Raise, acknowledge and resolve exceptions' },
+    { id: 'sendEmails', label: 'Draft emails and chases' },
+    { id: 'editTemplates', label: 'Edit email templates' },
+    { id: 'editAccounts', label: 'Add and edit accounts and items' },
+    { id: 'manageUsers', label: 'Add people and change their roles and permissions' },
+  ];
+
+  const USER_ROLES = [
+    { id: 'admin', name: 'Administrator', hint: 'Everything, including accounts, items and people.',
+      can: PERMISSIONS.map((p) => p.id) },
+    { id: 'coordinator', name: 'Order desk', hint: 'Runs orders end to end; does not change the shared setup.',
+      can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'sendEmails', 'editTemplates'] },
+    { id: 'finance', name: 'Finance', hint: 'Moves orders through invoicing and settlement.',
+      can: ['setStatus', 'manageTasks', 'manageExceptions', 'sendEmails'] },
+    { id: 'viewer', name: 'Viewer', hint: 'Reads everything; changes nothing.', can: [] },
+  ];
+
+  function rolePermissions(roleId) {
+    const role = USER_ROLES.find((r) => r.id === roleId) || USER_ROLES[1];
+    const out = {};
+    for (const p of PERMISSIONS) out[p.id] = role.can.includes(p.id);
+    return out;
+  }
+
   function slug(text) {
     return String(text || '').toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -76,16 +112,29 @@
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
-    ws.users = (ws.users || []).map((u) => ({
-      id: slug(u.id || u.name),
-      name: u.name || '',
-      email: u.email || '',
-      divisionId: u.divisionId || '',
-      accountIds: Array.isArray(u.accountIds) ? u.accountIds.slice() : [],
-      signature: u.signature || '',
-      defaultCc: u.defaultCc || '',
-      isAdmin: !!u.isAdmin,
-    }));
+    ws.users = (ws.users || []).map((u) => {
+      // A person saved before roles existed is an administrator or an ordinary
+      // member, exactly as they were — so nobody gains or loses anything.
+      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : 'coordinator');
+      const base = rolePermissions(role);
+      const given = u.permissions && typeof u.permissions === 'object' ? u.permissions : {};
+      const permissions = {};
+      for (const p of PERMISSIONS) {
+        permissions[p.id] = role === 'admin' ? true : (p.id in given ? !!given[p.id] : base[p.id]);
+      }
+      return {
+        id: slug(u.id || u.name),
+        name: u.name || '',
+        email: u.email || '',
+        divisionId: u.divisionId || '',
+        accountIds: Array.isArray(u.accountIds) ? u.accountIds.slice() : [],
+        signature: u.signature || '',
+        defaultCc: u.defaultCc || '',
+        role,
+        permissions,
+        isAdmin: role === 'admin',
+      };
+    });
     ws.accounts = (ws.accounts || []).map((a) => {
       const account = {
         id: slug(a.id || a.name),
@@ -214,6 +263,18 @@
       return ws.accounts.filter((a) => user.accountIds.includes(a.id));
     }
     return ws.accounts.filter((a) => a.divisionId === user.divisionId);
+  }
+
+  /**
+   * Whether a person may do something. In a workspace with no people yet,
+   * anyone may — someone has to be able to add the first administrator.
+   */
+  function userCan(ws, userId, permission) {
+    if (!ws || !ws.users || !ws.users.length) return true;
+    const user = ws.users.find((u) => u.id === userId);
+    if (!user) return false;
+    if (user.isAdmin) return true;
+    return !!(user.permissions && user.permissions[permission]);
   }
 
   function divisionName(ws, divisionId) {
@@ -537,6 +598,7 @@
 
   Object.assign(AMI, {
     CONFIG_PATH, TEMPLATE_DIR, ATTACH_DIR, ROLES, SCHEMA_VERSION,
+    PERMISSIONS, USER_ROLES, rolePermissions, userCan,
     attachDirFor, attachmentsForRole,
     defaultWorkspace, normaliseWorkspace, validateWorkspace,
     accountsForUser, accountsByDivision, divisionName,

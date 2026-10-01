@@ -36,8 +36,10 @@ const TARGETS = [
       WORKSPACE: 'workspace.js',
       PERSIST: 'persist.js',
       STATUS: 'status.js',
+      ORDERWORK: 'orderwork.js',
       CHARTS: 'charts.js',
       APP: 'app-teams.js',
+      HUB: 'app-hub.js',
     },
   },
 ];

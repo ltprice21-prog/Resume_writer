@@ -200,7 +200,7 @@ async function buildBundle() {
   await page.goto('file://' + PORTAL);
   console.log('\nShell');
   ok('page title', await page.title() === 'AMI Order Desk — Teams');
-  ok('nine tabs', (await page.locator('nav.tabs button').count()) === 9);
+  ok('thirteen pages in the rail', (await page.locator('#rail [data-tab]').count()) === 13);
 
   console.log('\nWorkspace load');
   const [chooser] = await Promise.all([
@@ -215,9 +215,9 @@ async function buildBundle() {
   ok('items counted across accounts', /Items\s*2/.test(strip), strip.replace(/\n/g, ' | '));
 
   console.log('\nIdentity and account visibility');
-  const userSelect = page.locator('#contextBar select').first();
-  const accountSelect = page.locator('#contextBar select').nth(1);
-  const itemSelect = page.locator('#contextBar select').nth(2);
+  const userSelect = page.locator('#meSlot select');
+  const accountSelect = page.locator('#contextBar select').first();
+  const itemSelect = page.locator('#contextBar select').nth(1);
 
   await userSelect.selectOption('eu-coordinator');
   await page.waitForTimeout(1500);
@@ -241,7 +241,7 @@ async function buildBundle() {
     (wsText.match(/\b12\b/g) || []).length >= 2, wsText.replace(/\n/g, ' | ').slice(0, 400));
 
   console.log('\nPO routing');
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.locator('#ordersBody input[type="file"]').setInputFiles(fixture(/Purchase_Order.*\.pdf$/i));
   await page.waitForSelector('#ordersBody .po-card', { timeout: 20000 });
 
@@ -260,7 +260,7 @@ async function buildBundle() {
     && routeOptions.some((o) => o.includes('Montenero Tracking Chart.xlsx')), routeOptions.join(' | '));
 
   console.log('\nReview is grouped per item tracker');
-  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.locator('#rail [data-tab="review"]').click();
   await page.waitForSelector('#reviewBody .card');
   let reviewText = await page.locator('#reviewBody').innerText();
   ok('the group names the item and its workbook',
@@ -278,24 +278,24 @@ async function buildBundle() {
     (await page.locator('#reviewBody .po-card header .chip').first().innerText()).toLowerCase().includes('ready'));
 
   console.log('\nRe-routing by hand');
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.locator('#ordersBody .po-card select').first().selectOption('montenero');
   await page.waitForTimeout(1200);
-  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.locator('#rail [data-tab="review"]').click();
   await page.waitForSelector('#reviewBody .card');
   reviewText = await page.locator('#reviewBody').innerText();
   ok('the order moves to the other item tracker',
     /Montenero Tracking Chart\.xlsx/.test(reviewText) && !/Evidencia Tracking Chart\.xlsx/.test(reviewText),
     reviewText.replace(/\n/g, ' | ').slice(0, 300));
 
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.locator('#ordersBody .po-card select').first().selectOption('evidencia');
   await page.waitForTimeout(1200);
 
   console.log('\nAn unrouted PO cannot be posted');
   await page.locator('#ordersBody .po-card select').first().selectOption('');
   await page.waitForTimeout(1200);
-  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.locator('#rail [data-tab="review"]').click();
   await page.waitForSelector('#reviewBody');
   reviewText = await page.locator('#reviewBody').innerText();
   ok('unassigned POs are called out', /not assigned to an item/i.test(reviewText),
@@ -303,17 +303,17 @@ async function buildBundle() {
   ok('and no post button is offered for them',
     (await page.locator('#reviewBody button', { hasText: 'Post ' }).count()) === 0);
 
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.locator('#ordersBody .po-card select').first().selectOption('evidencia');
   await page.waitForTimeout(1200);
 
   console.log('\nPosting reaches only the routed tracker');
-  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.locator('#rail [data-tab="review"]').click();
   await page.waitForSelector('#reviewBody .card');
   await page.locator('#reviewBody button', { hasText: 'Post 1 order(s) to Evidencia Tempranillo' }).click();
   await page.waitForTimeout(2500);
 
-  await page.locator('nav.tabs button[data-tab="workspace"]').click();
+  await page.locator('#rail [data-tab="workspace"]').click();
   await page.waitForTimeout(800);
   const afterPost = await page.locator('#workspaceBody .table-scroll').first().innerText();
   const rowsAfter = afterPost.split('\n');
@@ -323,7 +323,7 @@ async function buildBundle() {
   ok('both trackers still listed', rowsAfter.length > 2);
 
   console.log('\nEmails are per item');
-  await page.locator('nav.tabs button[data-tab="email"]').click();
+  await page.locator('#rail [data-tab="email"]').click();
   await page.waitForSelector('#emailBody select');
   let subject = await page.locator('#emailBody input').nth(2).inputValue();
   ok('vendor subject built from the account template',
@@ -421,7 +421,7 @@ async function buildBundle() {
   console.log('\nSwitching item switches the draft context');
   await itemSelect.selectOption('montenero');
   await page.waitForTimeout(1000);
-  await page.locator('nav.tabs button[data-tab="email"]').click();
+  await page.locator('#rail [data-tab="email"]').click();
   await page.waitForTimeout(600);
   const monteneroEmail = await page.locator('#emailBody').innerText();
   ok('no orders for the other item is stated plainly',
@@ -430,7 +430,7 @@ async function buildBundle() {
     /Draft for Evidencia Tempranillo \(1\)/.test(monteneroEmail), monteneroEmail.replace(/\n/g, ' | ').slice(0, 300));
 
   console.log('\nItem-scoped templates');
-  await page.locator('nav.tabs button[data-tab="templates"]').click();
+  await page.locator('#rail [data-tab="templates"]').click();
   await page.waitForSelector('#templatesBody table.data');
   const tplText = await page.locator('#templatesBody').innerText();
   ok('account-wide templates are labelled', /ALL ITEMS/i.test(tplText), tplText.replace(/\n/g, ' | ').slice(0, 400));
@@ -441,7 +441,7 @@ async function buildBundle() {
   console.log('\nAdministering items');
   await userSelect.selectOption('us-coordinator');
   await page.waitForTimeout(1800);
-  await page.locator('nav.tabs button[data-tab="accounts"]').click();
+  await page.locator('#rail [data-tab="accounts"]').click();
   await page.waitForSelector('#accountsBody table.data');
   const accountsText = await page.locator('#accountsBody').innerText();
   ok('the account list shows its items',
@@ -521,7 +521,7 @@ async function buildBundle() {
   await page.waitForTimeout(1800);
   await accountSelect.selectOption('aeromexico');
   await waitForItems();
-  await page.locator('nav.tabs button[data-tab="followups"]').click();
+  await page.locator('#rail [data-tab="followups"]').click();
   await page.waitForSelector('#followBody table.data');
   const follow = await page.locator('#followBody').innerText();
   ok('open items listed', /\d+ open/i.test(follow), follow.slice(0, 200).replace(/\n/g, ' | '));
@@ -532,7 +532,7 @@ async function buildBundle() {
     followHeaders.some((h) => /item/i.test(h)), followHeaders.join(' | '));
 
   console.log('\nAccount Health dashboard');
-  await page.locator('nav.tabs button[data-tab="dashboard"]').click();
+  await page.locator('#rail [data-tab="dashboard"]').click();
   await page.waitForSelector('#dashboardBody .stat-row', { timeout: 30000 });
 
   const dashText = await page.locator('#dashboardBody').innerText();
@@ -768,7 +768,7 @@ async function buildBundle() {
     dashItemOptions.join(' | '));
 
   console.log('\nSetting a status');
-  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.locator('#rail [data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
   const beforeText = await page.locator('#orderStatusBody table.data tbody tr').first().innerText();
   ok('an invoiced order sits in the financial-close phase',
@@ -811,7 +811,7 @@ async function buildBundle() {
 
   await accountSelect.selectOption('aeromexico');
   await waitForItems();
-  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.locator('#rail [data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody table.data tbody tr', { timeout: 20000 });
 
   const firstRowSelect = page.locator('#orderStatusBody table.data tbody tr').first().locator('select');
@@ -829,13 +829,13 @@ async function buildBundle() {
     /set by a person/i.test(afterText), afterText.replace(/\n/g, ' | '));
   ok('and names who set it', /EU Coordinator/.test(afterText), afterText.replace(/\n/g, ' | '));
 
-  await page.locator('nav.tabs button[data-tab="dashboard"]').click();
+  await page.locator('#rail [data-tab="dashboard"]').click();
   await page.waitForSelector('#dashboardBody .stat-row');
   const dashAfter = await page.locator('#dashboardBody').innerText();
   ok('the dashboard reflects the change', /Closed/.test(dashAfter));
 
   console.log('\nAccount summary');
-  await page.locator('nav.tabs button[data-tab="orderstatus"]').click();
+  await page.locator('#rail [data-tab="orderstatus"]').click();
   await page.waitForSelector('#orderStatusBody .filter-bar');
   await page.locator('#orderStatusBody .filter-bar select').nth(1).selectOption('aeromexico');
   await page.waitForTimeout(700);
@@ -866,7 +866,7 @@ async function buildBundle() {
 
   console.log('\nRemembering work across closing the app');
   // Load a PO and let the debounced autosave land.
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.waitForSelector('#ordersBody input[type="file"]', { state: 'attached' });
   await page.locator('#ordersBody input[type="file"]').setInputFiles(fixture(/Purchase_Order.*\.pdf$/i));
   await page.waitForSelector('#ordersBody .po-card', { timeout: 20000 });
@@ -912,12 +912,12 @@ async function buildBundle() {
   ok('the order comes back', /350633-2/.test(restored), restored.replace(/\n/g, ' | '));
   ok('and is routed to its item again', /evidencia tempranillo/i.test(restored), restored.replace(/\n/g, ' | '));
 
-  await page.locator('nav.tabs button[data-tab="review"]').click();
+  await page.locator('#rail [data-tab="review"]').click();
   await page.waitForSelector('#reviewBody .po-card');
   ok('a restored order is validated exactly like a fresh one',
     (await page.locator('#reviewBody .po-card header .chip').first().innerText()).toLowerCase().includes('blocked'));
 
-  await page.locator('nav.tabs button[data-tab="orders"]').click();
+  await page.locator('#rail [data-tab="orders"]').click();
   await page.waitForSelector('#ordersBody .po-card');
   await page.locator('#ordersBody .po-card button', { hasText: 'Remove' }).click();
   await page.waitForTimeout(1200);
@@ -935,7 +935,7 @@ async function buildBundle() {
   ok('clearing the batch clears what was saved', afterClear === null, JSON.stringify(afterClear));
 
   console.log('\nChanging the source folder');
-  await page.locator('nav.tabs button[data-tab="workspace"]').click();
+  await page.locator('#rail [data-tab="workspace"]').click();
   await page.waitForSelector('#workspaceBody table.data');
   const wsPanel = await page.locator('#workspaceBody').innerText();
   ok('the source can be changed after the fact',
@@ -953,7 +953,7 @@ async function buildBundle() {
   await switchChooser.setFiles(bundlePath);
   await page.waitForSelector('#contextBar .context-row', { timeout: 15000 });
   await page.waitForTimeout(1200);
-  const afterSwitch = await page.locator('#contextBar select').first().inputValue();
+  const afterSwitch = await page.locator('#meSlot select').inputValue();
   ok('switching source starts from a clean identity', afterSwitch === '' || afterSwitch === 'eu-coordinator',
     'user select = ' + afterSwitch);
   ok('and the new workspace loads',

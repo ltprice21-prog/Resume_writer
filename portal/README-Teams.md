@@ -18,6 +18,7 @@ AMI Order Desk/                       <- a SharePoint library, synced through On
   AMI-Order-Desk-Teams.html           the app
   workspace.json                      divisions, accounts, items, people, contacts, rules
   order-status.json                   the stage each order is at
+  order-work.json                     ticked checklist steps, tasks, exceptions, activity
   order-desk-sessions/                unposted work, one file per person
   templates/
     aeromexico/
@@ -49,6 +50,107 @@ The synced folder reaches the same files with none of that. If you later want th
 connection, what IT would need to provide is: an app registration with delegated
 `Files.ReadWrite.All` and `Sites.ReadWrite.All`, admin consent, and somewhere to host the
 page. The file layout above would not change; only how it is read.
+
+---
+
+## The layout: rail, top bar, drawer
+
+The app is laid out like the Global Wine Operations Hub. A **rail** down the left holds every
+page (a bar along the bottom on a phone). A **top bar** holds search, *I am* — who you are —
+and **+ New order**, which takes you to the purchase-order page. Below it, a thin strip chooses
+which account and item you are entering orders for. Orders open in a **drawer** on the right, so
+the list behind them keeps its place. Light and dark both follow the computer's setting.
+
+| Rail | What it is |
+| --- | --- |
+| **My Work** | What needs you today: tasks that have fallen due, open exceptions, tracker dates in the next 14 days, person checks waiting, chases to send |
+| **Account Health** | The dashboard — contracts, what is coming, the pipeline, what needs attention |
+| **Orders** | Every order and where it stands; click a PO to open it |
+| **Tasks** | The standard steps for each order's current stage, across all orders |
+| **Exceptions** | Things that need attention, with severity and an answer for each |
+| **Shipments** | Every collection and delivery, from the tracker's dated columns |
+| **Follow-ups** | Blank tracker cells being chased, and the draft emails |
+| **Purchase orders → Review & post → Emails** | The order desk itself: read PDFs, check the rows, post, send |
+| **Templates**, **Accounts & people**, **Workspace** | Setup |
+
+**Search** (press `/`) finds an order by PO, account, item, lot number, NAV invoice or a word in
+the tracker's notes, and opens its drawer.
+
+### The order drawer
+
+Everything about one order in one place: the twelve stages in four phases with what the tracker
+shows done; the stage control; the checklist for the stage being worked; exceptions; the
+tracker's own dates and quantities; chases still open; and an activity log.
+
+### Stage checklists
+
+Each stage has the division's standard steps — *Confirm PO details*, *Create the supplier PO*,
+*Schedule collection*, and so on. They are the process, held in the app; they are not read from
+anything and say nothing about a particular order. A step is **done only because a person ticked
+it**, and the tick records who and when. The tracker moving on never ticks anything, and ticking
+never moves the tracker or the order's stage.
+
+A step has a **due date only where the tracker gives one**: logistics steps are due three days
+before the requested collection date, documentation two, pre-shipment one, shipment steps on the
+collection date, delivery on the customer's required date. Each says which date it came from.
+Steps with no anchor have no due date until someone sets one. Anyone can add their own task to an
+order, give a step an owner, or set a date.
+
+The steps shown are for the stage an order is **working on** — the one after the furthest it has
+reached.
+
+### Exceptions
+
+Flagged automatically, from the tracker and nothing else, and each says which dates produced it:
+
+| Flag | When | Severity |
+| --- | --- | --- |
+| Collection overdue | The requested collection date has passed with no collection recorded | High; Critical at 7 days |
+| Delivery overdue | The customer's required date has passed with no delivery recorded | High; Critical at 7 days |
+| Documents still blank | A documents chase is live and collection is within 3 days or past | High; Critical within a day |
+| Delivered, not invoiced | Delivered 3 or more days ago and no NAV invoice number | Medium |
+| Date looks mistyped | A tracker date outside the plausible window (ignored, as before) | Medium |
+| Stage behind the tracker | A stage set by hand is earlier than the tracker shows | Low |
+
+Closed orders raise nothing. Anyone with the permission can also **raise one by hand**, with a
+type, severity, due date and detail. Every exception can be **acknowledged**, **escalated** and
+**resolved** — resolving needs an answer (*Fixed by supplier*, *Tracker corrected*, …) and
+optionally a root cause. If the tracker is corrected and an automatic flag's cause goes away, it
+reads *Cleared* rather than vanishing, and can be archived.
+
+### Shipments
+
+One line per order: where it is (*Awaiting collection*, *Collected, not yet delivered*,
+*Delivered*, or *No collection date in the tracker*), the four dates, truck type, cases, pallets
+and lot. All of it is tracker columns. Where the tracker is blank the page says so.
+
+---
+
+## Roles and permissions
+
+**Accounts & people** lists everyone. An administrator edits a person: a **role** sets a starting
+point, then each permission can be ticked or unticked for that person.
+
+| Permission | Administrator | Order desk | Finance | Viewer |
+| --- | :-: | :-: | :-: | :-: |
+| Add purchase orders and post to trackers | ✓ | ✓ | | |
+| Change an order's stage | ✓ | ✓ | ✓ | |
+| Tick off and add stage tasks | ✓ | ✓ | ✓ | |
+| Raise, acknowledge and resolve exceptions | ✓ | ✓ | ✓ | |
+| Draft emails and chases | ✓ | ✓ | ✓ | |
+| Edit email templates | ✓ | ✓ | | |
+| **Add and edit accounts and items** | ✓ | | | |
+| **Add people and change roles and permissions** | ✓ | | | |
+
+People saved before roles existed keep exactly what they had: an administrator stays one, a
+member becomes *Order desk*. A workspace always keeps at least one administrator, and the first
+person added to an empty workspace is made one.
+
+A control the role does not allow is switched off with the reason in its tooltip.
+
+> **This shapes what the app offers; it does not lock files.** Anyone who can open the shared
+> folder can open any file in it. Material that must be genuinely restricted belongs in a
+> folder with its own SharePoint permissions.
 
 ---
 
@@ -302,7 +404,8 @@ is no narrative text beyond the headings.
 
 The Workspace page shows a table of exactly this, live, for the browser you are actually in.
 
-**Everything shared** — statuses, templates, workspace configuration, tracker rows — is written
+**Everything shared** — statuses, ticked steps, tasks, exceptions, activity, templates, people and
+permissions, workspace configuration, tracker rows — is written
 to the shared folder the moment you change it. Never waiting on a save, in any browser.
 
 **Unposted purchase orders**, with their item routing and edits, are written to
@@ -471,6 +574,11 @@ An unset contact produces an empty To box — never a guess.
 saved while you were editing, you are told who and when, and asked whether to overwrite or
 reload theirs. Nothing is silently clobbered.
 
+`order-status.json` and `order-work.json` are merged **entry by entry**, newest wins, rather than
+refused whole. Two people working different orders — or different steps of one — both keep their
+changes; only two edits to the very same step at the same moment resolve to the later one.
+Activity logs are combined, not replaced.
+
 Trackers are unchanged from the single-account version: a timestamped backup is written
 beside the file before every post.
 
@@ -491,9 +599,11 @@ portal/
     airports.js                   airport table and address lookup
     workspace.js                  divisions, accounts, items, people, templates, attachments
     status.js                     the twelve-stage workflow, derivation, contracts, schedule, roll-ups
+    orderwork.js                  stage checklists, exceptions, shipment lines, order-work.json
     charts.js                     stat tiles, bars, columns, stage fills
     persist.js                    remembering the folder and unposted work
-    app.js / app-teams.js         the two interfaces
+    app.js / app-teams.js         the two interfaces (app-teams.js: workspace, desk, dashboard)
+    app-hub.js                    My Work, Tasks, Exceptions, Shipments, the order drawer, search
     styles.css                    shared
     shell.html / shell-teams.html
   tests/
@@ -502,6 +612,8 @@ portal/
     teams.test.js        137 assertions   templates, workspace model, routing, airports, attachments
     status.test.js       175 assertions   stages, contracts, lateness, schedule, roll-ups, charts
     workflow.test.js      66 assertions   the twelve-stage workflow — needs no fixtures
+    orderwork.test.js     50 assertions   checklists, exceptions, shipments, merging, permissions — no fixtures
+    hub-ui.test.js        35 assertions   the new pages, drawer, search and permissions in Chromium — no fixtures
     teams-ui.test.js     180 assertions   multi-account app, dashboard, drill-down, persistence
 ```
 
@@ -511,13 +623,15 @@ node portal/tests/engine.test.js <fixturesDir>
 node portal/tests/teams.test.js <fixturesDir>
 node portal/tests/status.test.js <fixturesDir>
 node portal/tests/workflow.test.js                  # no fixtures needed
+node portal/tests/orderwork.test.js                 # no fixtures needed
+node portal/tests/hub-ui.test.js                    # needs playwright; no fixtures
 node portal/tests/ui.test.js <fixturesDir>          # needs playwright
 node portal/tests/teams-ui.test.js <fixturesDir>    # needs playwright
 ```
 
 ### Colour, and not depending on it
 
-Chrome uses one blue accent. Order stages use a **separate single-hue ordinal ramp**, so a stage
+Chrome uses one wine-coloured accent (the hub's). Order stages use a **separate single-hue ordinal ramp**, so a stage
 colour can never be mistaken for a button, and *further along the pipeline* always reads as
 *stronger* — darker on the light theme, lighter on the dark one. Both ramps were checked with
 the data-visualisation validator for monotone lightness, visible step gaps and contrast against

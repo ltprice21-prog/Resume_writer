@@ -43,7 +43,7 @@ the sources and rebuild, never the HTML.
 
 ```
 node portal/build.js        # inlines src/* into both HTML files
-node portal/tests/*.test.js # 678 assertions across five files
+node portal/tests/*.test.js # fixture-free: workflow (66), orderwork (50), hub-ui (35); the rest need fixtures
 ```
 
 | Source | Responsibility |
@@ -51,11 +51,13 @@ node portal/tests/*.test.js # 678 assertions across five files
 | `engine.js` | ZIP read/write, XLSX model, PDF text extraction, row planning, validation, follow-up rules, `.eml` building |
 | `templates.js` | Importing `.msg` / `.oft` / `.eml` / `.docx` / `.html` / `.txt`, CFB parsing, RTF decompression, placeholders, internal-note stripping |
 | `airports.js` | Airport table and address lookup, with a hard refusal to pick between a city's airports |
-| `workspace.js` | Divisions, accounts, items, users, templates, standing attachments, store interface, PO→item matching, recipient resolution |
+| `workspace.js` | Divisions, accounts, items, users (roles and per-person permissions, `userCan`), templates, standing attachments, store interface, PO→item matching, recipient resolution |
 | `status.js` | The four order stages, derivation from the tracker, contract standing, the schedule, account summaries |
 | `charts.js` | Stat tiles, stacked bars, column charts, stage fills — all inline SVG |
 | `persist.js` | IndexedDB wrapper for the folder handle and session, permission queries, debounce |
-| `app.js` / `app-teams.js` | The two UIs |
+| `orderwork.js` | Per-stage checklists, automatic and manual exceptions, shipment lines, `order-work.json` merge/save |
+| `app.js` / `app-teams.js` | The two UIs. `app-teams.js` holds the workspace, the order desk and the dashboard, and exposes `AMI.ui` |
+| `app-hub.js` | My Work, Tasks, Exceptions, Shipments, the order drawer and search. Builds on `AMI.ui`; registers its renderers into `RENDERERS` and its callbacks into `hooks` |
 | `styles.css` | Salesforce-Lightning-style system, light and dark as deliberate palettes |
 
 ### Provenance tags
@@ -147,6 +149,22 @@ Three sources, kept distinct: the PO PDFs in hand, standing files on the item
 under `attachments/<account>/<item>/` in the shared folder, and per-draft files
 held in `state.draftAttachments` and never written anywhere. A missing standing
 file blocks the draft with its name rather than sending one short.
+
+### Work around the order
+
+`order-work.json` holds only what a person did: ticked checklist steps, added tasks, exceptions
+raised or answered, and an activity log, each stamped with who and when. It never holds a date,
+quantity or stage of its own — those come from the tracker and `order-status.json`. The checklist
+wording is the division's standard process, in `orderwork.js`; a step is done only if a person
+ticked it. Automatic exceptions are computed on every render from tracker dates and the live
+follow-up rules (never stored, except the answer a person gave). Due dates are tied to the
+requested collection / required delivery dates where one applies, and say so.
+
+An order's *work stage* is `nextForOrder(order)` — the stage after the furthest reached — and it
+is that stage's checklist that is open.
+
+Permissions (`AMI.PERMISSIONS`, `AMI.USER_ROLES`, `AMI.userCan`) gate actions in `app-teams.js`
+through `requirePermission`. They organise the interface; they are not a security boundary.
 
 ### Persistence
 

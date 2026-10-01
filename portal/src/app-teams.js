@@ -237,8 +237,10 @@
     loading: false,
     // Account Health
     statusDoc: null,
+    workDoc: null,            // tasks, exceptions and activity (order-work.json)
     portfolio: null,          // [{ account, item, sheet, header, config, orders, followUps }]
     portfolioLoading: false,
+    tab: 'workspace',
     filters: { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' },
     excludeClosed: false,
     scheduleBy: 'week',       // 'week' | 'month' on the upcoming-dates card
@@ -254,6 +256,9 @@
 
   let nextId = 1;
 
+  /** Set by app-hub.js: the drawer, the search box and the badges it keeps. */
+  const hooks = {};
+
   const loadLocal = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}'); } catch (e) { return {}; } };
   const saveLocal = (patch) => {
     try { localStorage.setItem(LOCAL_KEY, JSON.stringify(Object.assign(loadLocal(), patch))); } catch (e) { /* memory only */ }
@@ -264,6 +269,18 @@
   const currentItem = () => AMI.findItem(currentAccount(), state.itemId);
   const visibleAccounts = () => (state.workspace && state.userId ? AMI.accountsForUser(state.workspace, state.userId) : []);
   const itemState = (id) => state.itemStates.get(id) || null;
+
+  /** Whether the signed-in person may do something; see AMI.PERMISSIONS. */
+  const can = (permission) => AMI.userCan(state.workspace, state.userId, permission);
+
+  /** Say why not, once, and report false so callers can stop. */
+  function requirePermission(permission, what) {
+    if (can(permission)) return true;
+    const p = AMI.PERMISSIONS.find((x) => x.id === permission);
+    toast('Your role does not allow you to ' + (what || (p ? p.label.toLowerCase() : 'do that'))
+      + '. An administrator can change this under Accounts.', 'error');
+    return false;
+  }
 
   /**
    * Whether finished orders are being left out of the view. A per-person choice,
@@ -326,8 +343,10 @@
   };
 
   function showTab(name) {
-    $$('nav.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    if (hooks.closeDrawer) hooks.closeDrawer();
+    $$('#rail [data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
     $$('section.panel').forEach((s) => { s.hidden = s.dataset.panel !== name; });
+    state.tab = name;
     if (RENDERERS[name]) RENDERERS[name]();
     window.scrollTo({ top: 0 });
   }
@@ -337,15 +356,19 @@
     const hasAccount = !!currentAccount();
     const anyTracker = [...state.itemStates.values()].some((s) => s.trackerBytes);
     const hasPos = state.pos.some((p) => p.include && p.po);
-    $$('nav.tabs button').forEach((b) => {
+    $$('#rail [data-tab]').forEach((b) => {
       const t = b.dataset.tab;
       if (t === 'workspace') return;
       if (t === 'accounts') b.disabled = !hasUser;
-      else if (t === 'dashboard' || t === 'orderstatus') b.disabled = !hasUser;
+      else if (['dashboard', 'orderstatus', 'mywork', 'tasks', 'exceptions', 'shipments'].includes(t)) b.disabled = !hasUser;
       else if (t === 'templates') b.disabled = !hasAccount;
       else if (t === 'orders' || t === 'followups') b.disabled = !anyTracker;
       else b.disabled = !anyTracker || !hasPos;
     });
+    const search = $('#globalSearch');
+    if (search) search.disabled = !hasUser;
+    const newBtn = $('#newOrderBtn');
+    if (newBtn) newBtn.disabled = !anyTracker;
   }
 
   /* ------------------------------------------------------------------ *
@@ -354,7 +377,9 @@
 
   function renderHeaderBar() {
     const host = $('#contextBar');
+    const meSlot = $('#meSlot');
     clear(host);
+    if (meSlot) clear(meSlot);
     if (!state.workspace) { host.hidden = true; return; }
     host.hidden = false;
 
@@ -368,8 +393,11 @@
       onchange: async (e) => {
         state.userId = e.target.value;
         saveLocal({ userId: state.userId });
+        // What a person can see depends on who they are, so read it again.
+        state.portfolio = null;
         const list = visibleAccounts();
         await selectAccount(list.length ? list[0].id : '');
+        if (state.userId) ensurePortfolio();
       },
     }, [
       el('option', { value: '', text: 'Choose your name…', selected: !state.userId }),
@@ -405,9 +433,13 @@
       : [el('option', { value: '', text: 'No items yet' })]);
 
     const st = itemState(state.itemId);
+    if (meSlot) {
+      meSlot.appendChild(el('span', { class: 'hide-sm', text: 'I am' }));
+      meSlot.appendChild(userSelect);
+      if (user) meSlot.appendChild(el('span', { class: 'chip ' + (user.isAdmin ? 'ok' : 'manual'), text: roleName(user.role) }));
+    }
     host.appendChild(el('div', { class: 'context-row' }, [
-      el('span', { class: 'context-label', text: 'You' }), userSelect,
-      el('span', { class: 'context-label', text: 'Account' }), accountSelect,
+      el('span', { class: 'context-label', text: 'Entering orders for' }), accountSelect,
       el('span', { class: 'context-label', text: 'Item' }), itemSelect,
       user && user.divisionId
         ? el('span', { class: 'chip manual', text: AMI.divisionName(state.workspace, user.divisionId) })
@@ -458,6 +490,13 @@
       toast(e.message, 'error');
     }
 
+    try {
+      state.workDoc = await AMI.loadWork(store);
+    } catch (e) {
+      state.workDoc = AMI.emptyWorkDoc();
+      toast(e.message, 'error');
+    }
+
     const saved = loadLocal();
     state.excludeClosed = !!saved.excludeClosed;
     if (saved.scheduleBy === 'month' || saved.scheduleBy === 'week') state.scheduleBy = saved.scheduleBy;
@@ -475,6 +514,10 @@
     else { renderWorkspace(); refreshTabs(); }
     if (!created && currentUser()) showTab(state.pendingSession ? 'orders' : 'dashboard');
     if (state.pendingSession) renderIntake();
+
+    // Read every tracker once, in the background, so search, the badges and My
+    // Work have something to show without waiting for a page that needs it.
+    if (!created && currentUser()) ensurePortfolio();
 
     if (created) {
       toast('New workspace created. Add divisions, accounts and items under Accounts.', 'ok');
@@ -853,7 +896,7 @@
       el('td', {}, [el('span', { class: 'chip ' + (tone || 'manual'), text: state_ })]),
     ]));
 
-    row('Statuses, templates, accounts, tracker rows', 'The shared folder, written as you change them',
+    row('Statuses, tasks, exceptions, templates, accounts, people, tracker rows', 'The shared folder, written as you change them',
       'always saved', 'ok');
     row('Unposted purchase orders',
       state.store.kind === 'folder' ? SESSION_DIR + '/ in the shared folder' : 'this browser only (no folder open)',
@@ -917,6 +960,7 @@
    * ------------------------------------------------------------------ */
 
   async function addPdfs(files) {
+    if (!requirePermission('postOrders', 'add purchase orders')) return;
     const account = currentAccount();
     const items = AMI.accountItems(account);
     const configs = itemConfigs();
@@ -1211,6 +1255,7 @@
   }
 
   async function postItem(itemId, quiet) {
+    if (!requirePermission('postOrders', 'post to trackers')) return;
     const st = itemState(itemId);
     if (!st || !st.preview || st.posted) return;
     const entries = posForItem(itemId);
@@ -1936,6 +1981,7 @@
       el('button', {
         class: 'btn primary', text: 'Download Outlook draft (.eml)',
         onclick: async () => {
+          if (!requirePermission('sendEmails', 'draft emails')) return;
           const user = currentUser() || {};
           let files;
           try {
@@ -1983,6 +2029,7 @@
       el('button', {
         class: 'btn', text: 'New blank template',
         onclick: async () => {
+          if (!requirePermission('editTemplates', 'edit templates')) return;
           const saved = await AMI.saveTemplate(state.store, account.id, {
             label: 'Untitled template', role: state.selectedRole, itemId: '', subject: '',
             html: '<p></p>', source: 'created here',
@@ -2025,6 +2072,7 @@
             el('button', {
               class: 'btn small danger', text: 'Delete',
               onclick: async () => {
+                if (!requirePermission('editTemplates', 'edit templates')) return;
                 if (!window.confirm('Delete "' + (t.label || t.id) + '" for everyone on this account?')) return;
                 await AMI.deleteTemplate(state.store, account.id, t.id);
                 state.templates = await AMI.listTemplates(state.store, account.id);
@@ -2047,6 +2095,7 @@
   }
 
   async function importTemplate(file) {
+    if (!requirePermission('editTemplates', 'edit templates')) return;
     const account = currentAccount();
     try {
       const parsed = await AMI.parseTemplateFile(new Uint8Array(await file.arrayBuffer()), file.name);
@@ -2074,6 +2123,7 @@
   }
 
   function openTemplateEditor(templateId) {
+    if (!requirePermission('editTemplates', 'edit templates')) return;
     const account = currentAccount();
     const host = $('#templateEditor');
     if (!host) return;
@@ -2198,15 +2248,15 @@
     if (!state.workspace) { host.appendChild(el('div', { class: 'empty', text: 'Open the workspace folder first.' })); return; }
 
     const ws = state.workspace;
-    const user = currentUser();
-    const canEdit = !user || user.isAdmin || !ws.users.length;
+    const canEdit = can('editAccounts');
+    const canManageUsers = can('manageUsers');
 
     for (const i of AMI.validateWorkspace(ws).slice(0, 8)) {
       host.appendChild(el('div', { class: 'msg ' + i.level }, [el('span', { class: 'icon', text: '!' }), el('div', { text: i.message })]));
     }
     if (!canEdit) {
       host.appendChild(el('div', { class: 'msg info' }, [el('span', { class: 'icon', text: 'i' }),
-        el('div', { text: 'You can view this, but only administrators change the shared setup.' })]));
+        el('div', { text: 'You can view this. Adding accounts and items needs the “Add and edit accounts and items” permission, which an administrator gives.' })]));
     }
 
     host.appendChild(el('h3', { text: 'Divisions' }));
@@ -2275,22 +2325,29 @@
         el('td', {}, [el('b', { text: u.name }), u.email ? el('div', { class: 'note', text: u.email }) : null]),
         el('td', { text: AMI.divisionName(ws, u.divisionId) || '—' }),
         el('td', { text: assigned }),
-        el('td', {}, [u.isAdmin ? el('span', { class: 'chip ok', text: 'admin' }) : el('span', { class: 'chip manual', text: 'member' })]),
-        el('td', {}, [canEdit ? el('button', { class: 'btn small', text: 'Edit', onclick: () => openUserEditor(u.id) }) : null]),
+        el('td', {}, [
+          el('span', { class: 'chip ' + (u.isAdmin ? 'ok' : 'manual'), text: roleName(u.role) }),
+          u.isAdmin ? null : el('div', { class: 'note', text: permissionSummary(u) }),
+        ]),
+        el('td', {}, [canManageUsers ? el('button', { class: 'btn small', text: 'Edit', onclick: () => openUserEditor(u.id) }) : null]),
       ]));
     }
     userTable.appendChild(userBody);
     host.appendChild(el('div', { class: 'table-scroll' }, [userTable]));
-    host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
+    if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
       onclick: async () => {
+        if (!requirePermission('manageUsers', 'add people')) return;
         const name = window.prompt('Full name');
         if (!name) return;
         const id = AMI.uniqueId(name, ws.users.map((x) => x.id));
-        ws.users.push({
-          id, name, email: '', divisionId: ws.divisions[0] ? ws.divisions[0].id : '',
-          accountIds: [], signature: '', defaultCc: '', isAdmin: ws.users.length === 0,
-        });
+        const first = ws.users.length === 0;
+        ws.users.push(AMI.normaliseWorkspace({
+          users: [{
+            id, name, email: '', divisionId: ws.divisions[0] ? ws.divisions[0].id : '',
+            accountIds: [], signature: '', defaultCc: '', role: first ? 'admin' : 'coordinator',
+          }],
+        }).users[0]);
         if (await persistWorkspace()) {
           if (!state.userId) { state.userId = id; saveLocal({ userId: id }); }
           renderAccounts(); renderHeaderBar();
@@ -2308,6 +2365,16 @@
     ]));
 
     host.appendChild(el('div', { id: 'entityEditor' }));
+  }
+
+  const roleName = (id) => (AMI.USER_ROLES.find((r) => r.id === id) || { name: id }).name;
+
+  /** What a non-administrator can and cannot do, in a few words. */
+  function permissionSummary(u) {
+    const on = AMI.PERMISSIONS.filter((p) => u.permissions && u.permissions[p.id]);
+    if (!on.length) return 'read only';
+    if (on.length === AMI.PERMISSIONS.length) return 'every permission';
+    return on.length + ' of ' + AMI.PERMISSIONS.length + ' permissions';
   }
 
   const editorField = (labelText, input, help) => el('label', { class: 'field' }, [
@@ -2533,6 +2600,7 @@
   }
 
   async function openAccountEditor(accountId) {
+    if (!requirePermission('editAccounts', 'edit accounts and items')) return;
     const ws = state.workspace;
     const a = ws.accounts.find((x) => x.id === accountId);
     const host = $('#entityEditor');
@@ -2647,6 +2715,7 @@
   }
 
   function openItemEditor(accountId, itemId) {
+    if (!requirePermission('editAccounts', 'edit accounts and items')) return;
     const ws = state.workspace;
     const a = ws.accounts.find((x) => x.id === accountId);
     const it = AMI.findItem(a, itemId);
@@ -2721,6 +2790,7 @@
   }
 
   function openUserEditor(userId) {
+    if (!requirePermission('manageUsers', 'change people and permissions')) return;
     const ws = state.workspace;
     const u = ws.users.find((x) => x.id === userId);
     const host = $('#entityEditor');
@@ -2733,7 +2803,24 @@
       el('option', { value: '', text: '— none —', selected: !u.divisionId }),
       ...ws.divisions.map((d) => el('option', { value: d.id, selected: d.id === u.divisionId, text: d.name })),
     ]);
-    const admin = el('input', { type: 'checkbox', checked: u.isAdmin });
+    const role = el('select', {}, AMI.USER_ROLES.map((r) => el('option', {
+      value: r.id, selected: r.id === u.role, text: r.name + ' — ' + r.hint,
+    })));
+    const permBoxes = AMI.PERMISSIONS.map((p) => {
+      const box = el('input', { type: 'checkbox', checked: !!(u.permissions && u.permissions[p.id]) });
+      box.dataset.permission = p.id;
+      return el('label', { class: 'check-inline' }, [box, document.createTextNode(p.label)]);
+    });
+    const syncPermissions = () => {
+      const preset = AMI.rolePermissions(role.value);
+      permBoxes.forEach((l) => {
+        const b = l.querySelector('input');
+        b.checked = role.value === 'admin' ? true : preset[b.dataset.permission];
+        b.disabled = role.value === 'admin';
+      });
+    };
+    role.addEventListener('change', syncPermissions);
+    if (u.isAdmin) permBoxes.forEach((l) => { l.querySelector('input').disabled = true; });
     const signature = el('textarea', { rows: 6 });
     signature.value = u.signature || '';
     const defaultCc = el('input', { type: 'text', value: u.defaultCc });
@@ -2754,7 +2841,10 @@
           editorField('Name', name), editorField('Email', email),
           editorField('Division', division), editorField('Always Cc', defaultCc),
         ]),
-        el('label', { class: 'check-inline' }, [admin, document.createTextNode('Administrator — can change accounts, items and people')]),
+        el('h3', { text: 'Role and permissions' }),
+        el('p', { class: 'help', text: 'A role sets a starting point; tick or untick below to tailor it for this person. Administrators always have every permission.' }),
+        editorField('Role', role),
+        el('div', { class: 'check-grid' }, permBoxes),
         editorField('Email signature (HTML)', signature, 'Paste your Outlook signature once. Templates insert it at {{signature}}.'),
         el('h3', { text: 'Accounts this person works' }),
         el('p', { class: 'help', text: 'Leave all unticked to give them every account in their division.' }),
@@ -2766,7 +2856,15 @@
               u.name = name.value.trim() || u.name;
               u.email = email.value.trim();
               u.divisionId = division.value;
-              u.isAdmin = admin.checked;
+              const lastAdmin = u.isAdmin && role.value !== 'admin'
+                && !ws.users.some((x) => x !== u && x.isAdmin);
+              if (lastAdmin) { toast('Keep at least one administrator.', 'error'); return; }
+              u.role = role.value;
+              u.isAdmin = role.value === 'admin';
+              for (const l of permBoxes) {
+                const b = l.querySelector('input');
+                u.permissions[b.dataset.permission] = u.isAdmin ? true : b.checked;
+              }
               u.signature = signature.value;
               u.defaultCc = defaultCc.value.trim();
               u.accountIds = accountBoxes.map((l) => l.querySelector('input')).filter((b) => b.checked)
@@ -2781,6 +2879,10 @@
           el('button', {
             class: 'btn danger', text: 'Remove person',
             onclick: async () => {
+              if (u.isAdmin && !ws.users.some((x) => x !== u && x.isAdmin)) {
+                toast('Keep at least one administrator.', 'error');
+                return;
+              }
               if (!window.confirm('Remove ' + u.name + ' from the workspace?')) return;
               ws.users = ws.users.filter((x) => x !== u);
               if (await persistWorkspace()) {
@@ -2967,6 +3069,7 @@
   }
 
   function buildChaseEmails(party, items) {
+    if (!requirePermission('sendEmails', 'draft emails')) return;
     const chosen = items.filter((i) => state.selectedItems.has(i.itemId + ':' + i.row + ':' + i.ruleId));
     if (!chosen.length) { toast('Nothing selected in that group.', 'error'); return; }
 
@@ -3243,6 +3346,7 @@
     state.emailOverrides = {};
     state.portfolio = null;
     state.statusDoc = null;
+    state.workDoc = null;
     state.pendingSession = null;
     state.summaryHtml = '';
     state.filters = { divisionId: '', accountId: '', itemId: '', statusId: '', query: '' };
@@ -3336,10 +3440,19 @@
    * Read every item tracker across the user's accounts once, so the dashboard
    * can span accounts and divisions. Cached until something is posted.
    */
+  let portfolioRead = null;   // { userId, promise } while trackers are being read
+
   async function ensurePortfolio(force) {
     if (state.portfolio && !force) return state.portfolio;
     if (!state.store || !state.workspace) return [];
+    if (portfolioRead && portfolioRead.userId === state.userId && !force) return portfolioRead.promise;
+    const mine = { userId: state.userId, promise: null };
+    mine.promise = readPortfolio().finally(() => { if (portfolioRead === mine) portfolioRead = null; });
+    portfolioRead = mine;
+    return mine.promise;
+  }
 
+  async function readPortfolio() {
     state.portfolioLoading = true;
     const out = [];
     const problems = [];
@@ -3380,6 +3493,7 @@
     state.portfolio = out;
     state.portfolioProblems = problems;
     state.portfolioLoading = false;
+    if (hooks.portfolioReady) hooks.portfolioReady();
     return out;
   }
 
@@ -3429,6 +3543,7 @@
   }
 
   async function applyStatus(key, statusId, note) {
+    if (!requirePermission('setStatus', 'change an order’s stage')) return false;
     const user = currentUser();
     const by = user ? user.name : '';
     if (!state.statusDoc) state.statusDoc = AMI.emptyStatusDoc();
@@ -3436,11 +3551,61 @@
     else AMI.clearStatus(state.statusDoc, key);
     try {
       state.statusDoc = await AMI.saveStatuses(state.store, state.statusDoc, { by });
+      if (hooks.statusChanged) hooks.statusChanged();
       return true;
     } catch (e) {
       toast('Status not saved: ' + e.message, 'error');
       return false;
     }
+  }
+
+  /**
+   * Change the tasks, exceptions or activity on orders, then save.
+   *
+   * `mutate` receives the working document and edits it in place. The save
+   * merges with whatever a colleague wrote meanwhile, entry by entry, so this
+   * never overwrites their ticks.
+   */
+  async function applyWork(permission, mutate) {
+    if (permission && !requirePermission(permission)) return false;
+    if (!state.store) { toast('Open the workspace folder first.', 'error'); return false; }
+    if (!state.workDoc) state.workDoc = AMI.emptyWorkDoc();
+    const user = currentUser();
+    try {
+      mutate(state.workDoc, user ? user.name : '');
+      state.workDoc = await AMI.saveWork(state.store, state.workDoc, { by: user ? user.name : '' });
+      if (hooks.workChanged) hooks.workChanged();
+      return true;
+    } catch (e) {
+      toast(e.message || 'Could not save.', 'error');
+      return false;
+    }
+  }
+
+  /**
+   * Every order the person can see, decorated, with the follow-ups that belong
+   * to each one attached. Unlike `filteredOrders`, the account and item filters
+   * of the Orders page do not apply — the new pages carry their own.
+   */
+  function allOrders() {
+    const now = new Date();
+    const doc = state.statusDoc || AMI.emptyStatusDoc();
+    const out = [];
+    for (const p of state.portfolio || []) {
+      const decorated = AMI.withSchedule(AMI.decorate(p.orders, doc, now), now);
+      for (const o of decorated) {
+        o.followUps = (p.followUps || []).filter((f) => f.row === o.row);
+        o.divisionName = AMI.divisionName(state.workspace, o.divisionId);
+        out.push(o);
+      }
+    }
+    return out;
+  }
+
+  /** Open an order's drawer, once the portfolio has been read. */
+  async function openOrder(key) {
+    if (!state.portfolio) await ensurePortfolio();
+    if (hooks.openOrder) hooks.openOrder(key);
   }
 
   /* ------------------------------------------------------------------ *
@@ -4411,6 +4576,7 @@
         el('span', { class: 'kan-age', text: order.ageDays == null ? '' : order.ageDays + ' d' }),
       ]),
     ]);
+    card.addEventListener('click', () => openOrder(order.key));
     card.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', order.key);
       e.dataTransfer.effectAllowed = 'move';
@@ -4595,7 +4761,7 @@
 
       tbody.appendChild(el('tr', {}, [
         el('td', {}, [box]),
-        el('td', { class: 'mono', text: o.po }),
+        el('td', {}, [el('button', { class: 'wk-link mono', text: o.po, onclick: () => openOrder(o.key) })]),
         el('td', { text: o.accountName }),
         el('td', { text: o.itemName }),
         el('td', { class: 'num', text: o.values.cases != null ? String(o.values.cases) : '—' }),
@@ -4753,7 +4919,9 @@
    * ------------------------------------------------------------------ */
 
   function init() {
-    $$('nav.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    $$('#rail [data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    const newOrder = $('#newOrderBtn');
+    if (newOrder) newOrder.addEventListener('click', () => showTab('orders'));
     if (typeof window.showDirectoryPicker !== 'function') {
       const note = $('#noFolderNote');
       if (note) note.hidden = false;
@@ -4791,6 +4959,15 @@
       renderWorkspace();
     }
   }
+
+  /* What app-hub.js builds on. Kept to the functions it needs. */
+  AMI.ui = {
+    state, hooks, RENDERERS, $, $$, el, clear, toast, openOverlay, showTab,
+    currentUser, currentAccount, visibleAccounts, can, requirePermission,
+    ensurePortfolio, filteredPortfolio, allOrders, applyStatus, applyWork, openOrder,
+    filterBar, pageHeader, closedToggle, stageOptions, stageTrailStrip, excludingClosed,
+    SOURCE_CHIP, SOURCE_LONG, roleName,
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
