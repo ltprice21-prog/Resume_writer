@@ -124,6 +124,11 @@
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
     if (!USER_ROLES.some((r) => r.id === ws.settings.defaultRole)) ws.settings.defaultRole = DEFAULT_ROLE;
+    // The US / international team's address, one per counterparty role. An
+    // administrator types it in; the app never works one out.
+    const teamIn = ws.settings.teamEmails && typeof ws.settings.teamEmails === 'object' ? ws.settings.teamEmails : {};
+    ws.settings.teamEmails = {};
+    for (const r of ROLES) ws.settings.teamEmails[r.id] = String(teamIn[r.id] || '').trim();
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => {
       // A person with no role of their own is an administrator if they were one,
@@ -537,6 +542,12 @@
    * purchase order and falling back to the account's saved contact.
    * Every result reports which of the two it came from.
    */
+  /** The team address an administrator set for a counterparty role, or ''. */
+  function teamEmailFor(ws, roleId) {
+    const t = ws && ws.settings && ws.settings.teamEmails;
+    return (t && t[roleId]) || '';
+  }
+
   function resolveRecipients(account, item, role, po, user) {
     const accountContact = (account && account.contacts && account.contacts[role]) || {};
     const itemContact = (item && item.contacts && item.contacts[role]) || {};
@@ -618,7 +629,7 @@
     accountItems, findItem, addItem, matchItemForPo,
     templateFileText, parseTemplateFileText, templateDirFor, templatePathFor,
     loadWorkspace, saveWorkspace, listTemplates, saveTemplate, deleteTemplate,
-    resolveRecipients, formatAddress, findWorkbooks, splitPath, slug, uniqueId,
+    resolveRecipients, teamEmailFor, formatAddress, findWorkbooks, splitPath, slug, uniqueId,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

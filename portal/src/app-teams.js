@@ -1320,6 +1320,20 @@
     ['Lead Time on Water/Road (days)', 'transitDays'],
   ];
 
+  /**
+   * Template names that mean one specific tracker heading. Keys are the
+   * placeholder name with case, spaces and punctuation ignored; values are the
+   * heading (or top-of-sheet entry) they read.
+   */
+  const TRACKER_ALIASES = {
+    itemname: 'Product Name',
+    caseandpacksize: 'Case size',
+    finalcustomer: 'Customer',
+    shipmentmethod: 'Method of Shipment',
+    countryoforigin: 'Country of Origin',
+    shippingagentname: 'Forwarder',
+  };
+
   function trackerResolver(itemId, poNumbers) {
     const st = itemState(itemId);
     const book = st && (st.preview || st.base);
@@ -1359,9 +1373,25 @@
       return { value: String(v), source: where };
     };
 
+    // A name an administrator has tied to one tracker heading is looked up there
+    // and nowhere else, whatever else the name might loosely match.
+    const byAlias = (target) => {
+      const t = AMI.normName(target);
+      const col = header.columns.filter((c) => AMI.normName(c.header) === t);
+      let r;
+      if (col.length === 1) r = byColumn(col[0]);
+      else {
+        const fact = TRACKER_FACTS.filter(([label]) => AMI.normName(label) === t);
+        r = fact.length === 1 ? byFact(fact[0])
+          : { value: '', source: 'the tracker', why: 'the tracker has no “' + target + '” column or entry' };
+      }
+      return Object.assign(r, { fixed: true });
+    };
+
     return (name) => {
       const n = AMI.normName(name);
       if (!n) return null;
+      if (TRACKER_ALIASES[n]) return byAlias(TRACKER_ALIASES[n]);
       const cols = header.columns;
       const exactCol = cols.filter((c) => AMI.normName(c.header) === n);
       if (exactCol.length === 1) return byColumn(exactCol[0]);
@@ -1424,8 +1454,9 @@
     const airport = AMI.airportForAddress(deliveryLines);
 
     return {
-      rows, included, first, recipients, item, airport,
+      rows, included, first, recipients, item, airport, role,
       vars: {
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
         account: account.name || '',
         item: item ? item.name : '',
         division: AMI.divisionName(state.workspace, account.divisionId) || '',
@@ -1471,7 +1502,10 @@
    * computed from the tracker and values a person typed — and the difference
    * matters when someone is checking a draft before it goes out.
    */
+  const TEAM_EMAIL_SOURCE = 'the team email an administrator set for this role';
+
   const VAR_SOURCE = {
+    usIntTeamEmail: TEAM_EMAIL_SOURCE,
     account: 'the account', item: 'the item', division: 'the account',
     customer: 'the tracker', product: 'the PO', size: 'the PO',
     vendorContact: 'the PO', recipientName: 'the saved contact', senderName: 'your profile',
@@ -1532,7 +1566,9 @@
         why: filled ? '' : (fromTracker && fromTracker.ambiguous
           ? 'it could mean more than one place in the tracker (' + fromTracker.ambiguous.join('; ') + ') — name one exactly'
           : fromTracker && fromTracker.why
-            ? 'the PO has nothing for it and ' + fromTracker.why
+            ? (fromTracker.fixed ? '' : 'the PO has nothing for it and ') + fromTracker.why
+            : VAR_SOURCE[varKey(name)] === TEAM_EMAIL_SOURCE
+              ? 'no team email has been set for the ' + ctx.role + ' role — an administrator sets it under Accounts & people'
             : VAR_SOURCE[varKey(name)]
               ? 'nothing in ' + VAR_SOURCE[varKey(name)] + ' supplies it, and the tracker has no matching column'
               : 'neither the PO nor the tracker has anything called that'),
@@ -2066,7 +2102,8 @@
       editArea,
     ]));
 
-    const attachBox = el('input', { type: 'checkbox', checked: state.selectedRole === 'vendor' });
+    // Off unless ticked: nothing goes out with the PO PDFs by default.
+    const attachBox = el('input', { type: 'checkbox', checked: false });
     const standing = AMI.attachmentsForRole(item, state.selectedRole);
     host.appendChild(attachmentsPanel(account, item, standing, attachBox, included));
 
@@ -2448,6 +2485,30 @@
         }, AMI.USER_ROLES.map((r) => el('option', { value: r.id, selected: r.id === ws.settings.defaultRole, text: r.name }))),
         el('div', { class: 'note', text: 'Testing setup: everyone starts as an administrator. Change this before real use.' }),
       ]));
+    }
+    if (canManageUsers) {
+      const teamInputs = {};
+      host.appendChild(el('h3', { text: 'Team email by role' }));
+      host.appendChild(el('div', { class: 'note', text: 'Fills {{US/Int team email}} in a template. The address used is the one set for the role the email is going to.' }));
+      const rows = AMI.ROLES.map((r) => {
+        const input = el('input', {
+          type: 'text', value: AMI.teamEmailFor(ws, r.id), placeholder: 'team@example.com',
+        });
+        teamInputs[r.id] = input;
+        return el('div', { class: 'contact-row' }, [
+          el('div', { class: 'contact-role' }, [el('b', { text: r.name }), el('div', { class: 'note', text: r.hint })]),
+          input,
+        ]);
+      });
+      host.appendChild(el('div', {}, rows));
+      host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
+        class: 'btn', text: 'Save team emails',
+        onclick: async () => {
+          if (!requirePermission('manageUsers', 'set team emails')) return;
+          for (const r of AMI.ROLES) ws.settings.teamEmails[r.id] = teamInputs[r.id].value.trim();
+          if (await persistWorkspace()) toast('Team emails saved.', 'ok');
+        },
+      })]));
     }
     if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
@@ -3240,6 +3301,7 @@
         customer: config.customer || account.name || '',
         product: config.productName || (item && item.product) || (item && item.name) || '',
         topic: topics.join(' / '),
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
         __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,

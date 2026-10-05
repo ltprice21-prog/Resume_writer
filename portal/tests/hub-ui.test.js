@@ -40,7 +40,7 @@ const HEAD = ['PO#', 'Quantity (bt)', 'Quantity (cs)', 'Quantity (pallets)', 'Bo
 const ROWS = [
   { 'PO#': 'T-100', 'Quantity (cs)': 336, 'PO Received Date': rel(-10) },
   { 'PO#': 'T-200', 'Quantity (cs)': 336, 'PO Received Date': rel(-30), 'PO date sent to winery': rel(-28), 'Winery Confirmed Available Date': rel(-20),
-    'AMI Requested Collection Date': rel(-6), 'Customer Required Delivery Date': rel(-4), 'Truck Type': 'Reefer' },
+    'AMI Requested Collection Date': rel(-6), 'Customer Required Delivery Date': rel(-4), 'Truck Type': 'Reefer', 'Method of Shipment': 'OTR', 'Forwarder': 'STPI' },
   { 'PO#': 'T-300', 'Quantity (cs)': 288, 'PO date sent to winery': rel(-40), 'Actual Collection Date from Cellars': rel(-20),
     'AMI Requested Collection Date': rel(-22), 'Delivery date to CDG': rel(-15) },
   { 'PO#': 'T-350', 'Quantity (cs)': 144, 'PO date sent to winery': rel(-60), 'Actual Collection Date from Cellars': rel(-45),
@@ -53,6 +53,9 @@ const cell = (ref, v) => (typeof v === 'number' ? '<c r="' + ref + '"><v>' + v +
 
 async function buildBundle() {
   let rows = '<row r="2">' + cell('B2', 'Product Name:') + cell('C2', 'Test Tempranillo') + '</row>'
+    + '<row r="3">' + cell('B3', 'Case Size:') + cell('C3', '6 x 75cl') + '</row>'
+    + '<row r="4">' + cell('B4', 'Customer:') + cell('C4', 'Test Airline Ltd') + '</row>'
+    + '<row r="5">' + cell('B5', 'Country of Origin:') + cell('C5', 'Spain') + '</row>'
     + '<row r="7">' + cell('B7', 'NAV Code:') + cell('C7', 'TESTTMP') + '</row>'
     + '<row r="10">' + HEAD.map((h, i) => cell(L(i) + '10', h)).join('') + '</row>';
   ROWS.forEach((r, i) => {
@@ -273,6 +276,37 @@ async function buildBundle() {
   ok('a name nothing matches is left alone', resolved.none === null);
   const filled = await page.evaluate(() => AMI.fillTemplate('Truck: {{Truck Type}} / PO {{poList}}', { poList: 'T-200', __resolve: AMI.ui.trackerResolver('tmp', ['T-200']) }));
   ok('a template fills from the PO first and the tracker second', filled === 'Truck: Reefer / PO T-200', filled);
+
+  const aliases = await page.evaluate(() => {
+    const r = AMI.ui.trackerResolver('tmp', ['T-200']);
+    const f = (n) => r(n).value;
+    return {
+      item: f('Item name'), size: f('Case and Pack Size'), customer: f('Final customer'), method: f('Shipment Method'),
+      origin: f('Country of Origin'), agent: f('Shipping agent name'), loose: f('  shipping AGENT name '),
+      blank: AMI.ui.trackerResolver('tmp', ['T-100'])('Shipping agent name'),
+    };
+  });
+  ok('Item name reads Product Name', aliases.item === 'Test Tempranillo');
+  ok('Case and Pack Size reads Case size', aliases.size === '6 x 75cl');
+  ok('Final customer reads Customer', aliases.customer === 'Test Airline Ltd');
+  ok('Shipment Method reads Method of Shipment', aliases.method === 'OTR');
+  ok('Country of Origin reads the tracker', aliases.origin === 'Spain');
+  ok('Shipping agent name reads Forwarder, spacing and case ignored', aliases.agent === 'STPI' && aliases.loose === 'STPI');
+  ok('a PO with a blank Forwarder cell stays blank and says why', aliases.blank.value === '' && /blank/.test(aliases.blank.why));
+
+  console.log('\nTeam email by role');
+  await go('accounts');
+  await page.locator('h3', { hasText: 'Team email by role' }).waitFor();
+  await page.locator('.contact-row', { hasText: 'Vendor / winery' }).locator('input').fill('us-int@example.com');
+  await page.locator('button', { hasText: 'Save team emails' }).click();
+  await page.waitForTimeout(300);
+  const team = await page.evaluate(() => ({
+    vendor: AMI.teamEmailFor(AMI.ui.state.workspace, 'vendor'),
+    trucker: AMI.teamEmailFor(AMI.ui.state.workspace, 'trucker'),
+    filled: AMI.fillTemplate('Contact {{US/Int team email}}', { usIntTeamEmail: AMI.teamEmailFor(AMI.ui.state.workspace, 'vendor') }),
+  }));
+  ok('an administrator sets a team email per role', team.vendor === 'us-int@example.com' && team.trucker === '');
+  ok('{{US/Int team email}} fills from the role’s address', team.filled === 'Contact us-int@example.com');
 
   console.log('\nPhone width');
   await page.setViewportSize({ width: 420, height: 860 });

@@ -537,6 +537,12 @@ Names are compared ignoring case, spaces and punctuation.
    `{{Country of Origin}}`, `{{Case weight}}`, `{{Collection Location}}`, and so on. Where the PO
    names a field but the scan found nothing for it (`{{forwarder}}`), the tracker's column of the
    same name fills the gap.
+   **Fixed names** read one tracker heading, always from the tracker and never from the PO:
+   `{{Item name}}` = Product Name, `{{Case and Pack Size}}` = Case size, `{{Final customer}}` =
+   Customer, `{{Shipment Method}}` = Method of Shipment, `{{Country of Origin}}` = Country of
+   Origin, `{{Shipping agent name}}` = Forwarder.
+   **`{{US/Int team email}}`** is typed in by an administrator, per role, under *Accounts & people →
+   Team email by role*; the draft uses the address for the role it is addressed to.
 3. **Nothing** — left empty, never guessed, and reported on the *Fields in this template* panel.
 
 A name that fits more than one tracker column (`{{Quantity}}` is three) is reported as ambiguous
