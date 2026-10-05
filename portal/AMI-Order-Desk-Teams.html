@@ -1626,8 +1626,8 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
 <div class="app-shell">
   <nav class="rail" id="rail" role="tablist" aria-label="Main">
     <div class="rail-brand">
-      <div class="rail-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
-      <div><b>AMI Order Desk</b><span>Wine logistics</span></div>
+      <div class="rail-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/></svg></div>
+      <div><b>AMI Order Desk</b><span>Global Wine Ops</span></div>
     </div>
     <div class="rail-label">Work</div>
     <button class="nav" data-tab="mywork" role="tab" aria-selected="false" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>My Work</span><span class="nav-badge" data-badge="mywork" hidden></span></button>
@@ -4694,12 +4694,20 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
   const USER_ROLES = [
     { id: 'admin', name: 'Administrator', hint: 'Everything, including accounts, items and people.',
       can: PERMISSIONS.map((p) => p.id) },
-    { id: 'coordinator', name: 'Order desk', hint: 'Runs orders end to end; does not change the shared setup.',
+    { id: 'user', name: 'User', hint: 'Runs orders end to end; does not change the shared setup. Tick or untick below to tailor it.',
       can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'] },
-    { id: 'finance', name: 'Finance', hint: 'Moves orders through invoicing and settlement.',
-      can: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'] },
-    { id: 'viewer', name: 'Viewer', hint: 'Reads everything; changes nothing.', can: [] },
   ];
+
+  /**
+   * Workspaces saved before there were just two roles. Each becomes a plain
+   * user, starting from the permissions its old role carried, so nobody gains or
+   * loses anything when an older file is opened.
+   */
+  const LEGACY_ROLES = {
+    coordinator: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'],
+    finance: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'],
+    viewer: [],
+  };
 
   /**
    * The role a person has when none was chosen for them — new people, and anyone
@@ -4707,15 +4715,16 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
    *
    * TESTING: everyone starts as an administrator so nothing is in the way while
    * the desk is being tried out. Before real use, set `settings.defaultRole` to
-   * 'coordinator' (or change it on the Accounts page) so new people start with
+   * 'user' (or change it on the Accounts page) so new people start with
    * the working permissions and not the setup ones.
    */
   const DEFAULT_ROLE = 'admin';
 
   function rolePermissions(roleId) {
     const role = USER_ROLES.find((r) => r.id === roleId) || USER_ROLES[1];
+    const can = LEGACY_ROLES[roleId] || role.can;
     const out = {};
-    for (const p of PERMISSIONS) out[p.id] = role.can.includes(p.id);
+    for (const p of PERMISSIONS) out[p.id] = can.includes(p.id);
     return out;
   }
 
@@ -4763,17 +4772,14 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
     if (!USER_ROLES.some((r) => r.id === ws.settings.defaultRole)) ws.settings.defaultRole = DEFAULT_ROLE;
-    // The US / international team's address, one per counterparty role. An
-    // administrator types it in; the app never works one out.
-    const teamIn = ws.settings.teamEmails && typeof ws.settings.teamEmails === 'object' ? ws.settings.teamEmails : {};
-    ws.settings.teamEmails = {};
-    for (const r of ROLES) ws.settings.teamEmails[r.id] = String(teamIn[r.id] || '').trim();
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => {
       // A person with no role of their own is an administrator if they were one,
       // and otherwise gets the workspace's default role.
-      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
-      const base = rolePermissions(role);
+      const legacy = LEGACY_ROLES[u.role] ? u.role : '';
+      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role
+        : legacy ? 'user' : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
+      const base = rolePermissions(legacy || role);
       const given = u.permissions && typeof u.permissions === 'object' ? u.permissions : {};
       const permissions = {};
       for (const p of PERMISSIONS) {
@@ -4787,6 +4793,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
         accountIds: Array.isArray(u.accountIds) ? u.accountIds.slice() : [],
         signature: u.signature || '',
         defaultCc: u.defaultCc || '',
+        teamEmail: String(u.teamEmail || '').trim(),
         role,
         permissions,
         isAdmin: role === 'admin',
@@ -5181,10 +5188,10 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
    * purchase order and falling back to the account's saved contact.
    * Every result reports which of the two it came from.
    */
-  /** The team address an administrator set for a counterparty role, or ''. */
-  function teamEmailFor(ws, roleId) {
-    const t = ws && ws.settings && ws.settings.teamEmails;
-    return (t && t[roleId]) || '';
+  /** The US / international team address an administrator gave a person, or ''. */
+  function teamEmailFor(ws, userId) {
+    const u = ws && ws.users && ws.users.find((x) => x.id === userId);
+    return (u && u.teamEmail) || '';
   }
 
   function resolveRecipients(account, item, role, po, user) {
@@ -8828,7 +8835,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
     return {
       rows, included, first, recipients, item, airport, role,
       vars: {
-        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, user.id),
         account: account.name || '',
         item: item ? item.name : '',
         division: AMI.divisionName(state.workspace, account.divisionId) || '',
@@ -8874,7 +8881,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
    * computed from the tracker and values a person typed — and the difference
    * matters when someone is checking a draft before it goes out.
    */
-  const TEAM_EMAIL_SOURCE = 'the team email an administrator set for this role';
+  const TEAM_EMAIL_SOURCE = 'the team email an administrator set on your profile';
 
   const VAR_SOURCE = {
     usIntTeamEmail: TEAM_EMAIL_SOURCE,
@@ -8940,7 +8947,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
           : fromTracker && fromTracker.why
             ? (fromTracker.fixed ? '' : 'the PO has nothing for it and ') + fromTracker.why
             : VAR_SOURCE[varKey(name)] === TEAM_EMAIL_SOURCE
-              ? 'no team email has been set for the ' + ctx.role + ' role — an administrator sets it under Accounts & people'
+              ? 'no team email has been set for you — an administrator adds it on your person under Accounts & people'
             : VAR_SOURCE[varKey(name)]
               ? 'nothing in ' + VAR_SOURCE[varKey(name)] + ' supplies it, and the tracker has no matching column'
               : 'neither the PO nor the tracker has anything called that'),
@@ -9858,30 +9865,6 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
         el('div', { class: 'note', text: 'Testing setup: everyone starts as an administrator. Change this before real use.' }),
       ]));
     }
-    if (canManageUsers) {
-      const teamInputs = {};
-      host.appendChild(el('h3', { text: 'Team email by role' }));
-      host.appendChild(el('div', { class: 'note', text: 'Fills {{US/Int team email}} in a template. The address used is the one set for the role the email is going to.' }));
-      const rows = AMI.ROLES.map((r) => {
-        const input = el('input', {
-          type: 'text', value: AMI.teamEmailFor(ws, r.id), placeholder: 'team@example.com',
-        });
-        teamInputs[r.id] = input;
-        return el('div', { class: 'contact-row' }, [
-          el('div', { class: 'contact-role' }, [el('b', { text: r.name }), el('div', { class: 'note', text: r.hint })]),
-          input,
-        ]);
-      });
-      host.appendChild(el('div', {}, rows));
-      host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
-        class: 'btn', text: 'Save team emails',
-        onclick: async () => {
-          if (!requirePermission('manageUsers', 'set team emails')) return;
-          for (const r of AMI.ROLES) ws.settings.teamEmails[r.id] = teamInputs[r.id].value.trim();
-          if (await persistWorkspace()) toast('Team emails saved.', 'ok');
-        },
-      })]));
-    }
     if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
       onclick: async () => {
@@ -10372,6 +10355,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
     const signature = el('textarea', { rows: 6 });
     signature.value = u.signature || '';
     const defaultCc = el('input', { type: 'text', value: u.defaultCc });
+    const teamEmail = el('input', { type: 'text', value: u.teamEmail || '', placeholder: 'team@example.com' });
 
     const accountBoxes = ws.accounts.map((a) => {
       const box = el('input', { type: 'checkbox', checked: u.accountIds.includes(a.id) });
@@ -10388,6 +10372,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
         el('div', { class: 'grid-2' }, [
           editorField('Name', name), editorField('Email', email),
           editorField('Division', division), editorField('Always Cc', defaultCc),
+          editorField('US/Int team email', teamEmail, 'Fills {{US/Int team email}} in templates whenever this person drafts an email.'),
         ]),
         el('h3', { text: 'Role and permissions' }),
         el('p', { class: 'help', text: 'A role sets a starting point; tick or untick below to tailor it for this person. Administrators always have every permission.' }),
@@ -10415,6 +10400,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
               }
               u.signature = signature.value;
               u.defaultCc = defaultCc.value.trim();
+              u.teamEmail = teamEmail.value.trim();
               u.accountIds = accountBoxes.map((l) => l.querySelector('input')).filter((b) => b.checked)
                 .map((b) => b.dataset.accountId);
               if (await persistWorkspace()) {
@@ -10673,7 +10659,7 @@ td.tr-dirty .tr-in { border-color: var(--warning); }
         customer: config.customer || account.name || '',
         product: config.productName || (item && item.product) || (item && item.name) || '',
         topic: topics.join(' / '),
-        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, user.id),
         __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,

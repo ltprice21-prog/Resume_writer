@@ -218,17 +218,21 @@ const memoryStore = () => {
   const role = (id) => ws.users.find((u) => u.id === id).role;
   check('a saved administrator stays one', role('bo'), 'admin');
   check('a saved member starts as an administrator in this testing setup', role('ann'), 'admin');
-  const careful = AMI.normaliseWorkspace({ settings: { defaultRole: 'coordinator' }, users: [{ id: 'ann', name: 'Ann' }] });
-  check('and as an order-desk user once the default is changed', careful.users[0].role, 'coordinator');
+  const careful = AMI.normaliseWorkspace({ settings: { defaultRole: 'user' }, users: [{ id: 'ann', name: 'Ann' }] });
+  check('and as a plain user once the default is changed', careful.users[0].role, 'user');
+  check('there are two roles: Administrator and User', AMI.USER_ROLES.map((r) => r.name), ['Administrator', 'User']);
+  check('older Finance, Viewer and Order desk roles become User', ['fin', 'vi', 'cus'].map(role), ['user', 'user', 'user']);
   ok('an administrator can do everything', AMI.PERMISSIONS.every((p) => AMI.userCan(ws, 'bo', p.id)));
-  ok('an order-desk user can post and edit trackers but not change accounts or people',
+  ok('a user can post and edit trackers but not change accounts or people',
     AMI.userCan(careful, 'ann', 'postOrders') && AMI.userCan(careful, 'ann', 'editTrackers')
     && !AMI.userCan(careful, 'ann', 'editAccounts') && !AMI.userCan(careful, 'ann', 'manageUsers'));
-  ok('finance can change stages but not post to trackers', AMI.userCan(ws, 'fin', 'setStatus') && !AMI.userCan(ws, 'fin', 'postOrders'));
-  ok('a viewer can do nothing', AMI.PERMISSIONS.every((p) => !AMI.userCan(ws, 'vi', p.id)));
+  ok('a migrated finance user can change stages but not post to trackers', AMI.userCan(ws, 'fin', 'setStatus') && !AMI.userCan(ws, 'fin', 'postOrders'));
+  ok('a migrated viewer can do nothing', AMI.PERMISSIONS.every((p) => !AMI.userCan(ws, 'vi', p.id)));
   ok('an administrator can tailor one person', !AMI.userCan(ws, 'cus', 'sendEmails') && AMI.userCan(ws, 'cus', 'editAccounts'));
   ok('someone unknown can do nothing', !AMI.userCan(ws, 'nobody', 'setStatus'));
   ok('an empty workspace lets the first person set it up', AMI.userCan(AMI.normaliseWorkspace({}), '', 'manageUsers'));
+  const team = AMI.normaliseWorkspace({ users: [{ id: 'a', name: 'A', teamEmail: ' us@x.com ' }, { id: 'b', name: 'B' }] });
+  check('a team email belongs to a person', [AMI.teamEmailFor(team, 'a'), AMI.teamEmailFor(team, 'b'), AMI.teamEmailFor(team, 'zz')], ['us@x.com', '', '']);
   const again = AMI.normaliseWorkspace(JSON.parse(JSON.stringify(ws)));
   check('normalising twice changes nothing', again.users, ws.users);
 

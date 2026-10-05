@@ -159,23 +159,26 @@ Needs the *Edit order trackers* permission. Close the workbook in Excel first �
 ## Roles and permissions
 
 **Accounts & people** lists everyone. An administrator edits a person: a **role** sets a starting
-point, then each permission can be ticked or unticked for that person.
+point, then each permission can be ticked or unticked for that person. There are two roles:
+**User** and **Administrator**. An administrator can change anyone's role to Administrator, or back.
+Workspaces saved with the older Order desk, Finance and Viewer roles open as *User*, keeping the
+permissions those roles had.
 
-| Permission | Administrator | Order desk | Finance | Viewer |
-| --- | :-: | :-: | :-: | :-: |
-| Add purchase orders and post to trackers | ✓ | ✓ | | |
-| Change an order's stage | ✓ | ✓ | ✓ | |
-| Tick off and add stage tasks | ✓ | ✓ | ✓ | |
-| Flag, acknowledge and resolve flagged items | ✓ | ✓ | ✓ | |
-| Edit order trackers | ✓ | ✓ | ✓ | |
-| Draft emails and chases | ✓ | ✓ | ✓ | |
-| Edit email templates | ✓ | ✓ | | |
-| **Add and edit accounts and items** | ✓ | | | |
-| **Add people and change roles and permissions** | ✓ | | | |
+| Permission | Administrator | User (starting point) |
+| --- | :-: | :-: |
+| Add purchase orders and post to trackers | ✓ | ✓ |
+| Change an order's stage | ✓ | ✓ |
+| Tick off and add stage tasks | ✓ | ✓ |
+| Flag, acknowledge and resolve flagged items | ✓ | ✓ |
+| Edit order trackers | ✓ | ✓ |
+| Draft emails and chases | ✓ | ✓ |
+| Edit email templates | ✓ | ✓ |
+| **Add and edit accounts and items** | ✓ |  |
+| **Add people and change roles and permissions** | ✓ |  |
 
 **Testing setup: everyone starts as an administrator.** A new person, and anyone saved without a
 role, gets the workspace's default role — *Administrator* for now. On **Accounts & people**, *New
-people start as* changes it (`settings.defaultRole` in `workspace.json`); set it to *Order desk*
+people start as* changes it (`settings.defaultRole` in `workspace.json`); set it to *User*
 before real use. Someone already saved as an administrator stays one. A workspace always keeps at least one administrator, and the first
 person added to an empty workspace is made one.
 
@@ -541,8 +544,8 @@ Names are compared ignoring case, spaces and punctuation.
    `{{Item name}}` = Product Name, `{{Case and Pack Size}}` = Case size, `{{Final customer}}` =
    Customer, `{{Shipment Method}}` = Method of Shipment, `{{Country of Origin}}` = Country of
    Origin, `{{Shipping agent name}}` = Forwarder.
-   **`{{US/Int team email}}`** is typed in by an administrator, per role, under *Accounts & people →
-   Team email by role*; the draft uses the address for the role it is addressed to.
+   **`{{US/Int team email}}`** is a field on each person (*Accounts & people → Edit → US/Int team
+   email*), set by an administrator. A draft uses the address of the person drafting it.
 3. **Nothing** — left empty, never guessed, and reported on the *Fields in this template* panel.
 
 A name that fits more than one tracker column (`{{Quantity}}` is three) is reported as ambiguous

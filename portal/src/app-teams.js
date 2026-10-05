@@ -1456,7 +1456,7 @@
     return {
       rows, included, first, recipients, item, airport, role,
       vars: {
-        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, user.id),
         account: account.name || '',
         item: item ? item.name : '',
         division: AMI.divisionName(state.workspace, account.divisionId) || '',
@@ -1502,7 +1502,7 @@
    * computed from the tracker and values a person typed — and the difference
    * matters when someone is checking a draft before it goes out.
    */
-  const TEAM_EMAIL_SOURCE = 'the team email an administrator set for this role';
+  const TEAM_EMAIL_SOURCE = 'the team email an administrator set on your profile';
 
   const VAR_SOURCE = {
     usIntTeamEmail: TEAM_EMAIL_SOURCE,
@@ -1568,7 +1568,7 @@
           : fromTracker && fromTracker.why
             ? (fromTracker.fixed ? '' : 'the PO has nothing for it and ') + fromTracker.why
             : VAR_SOURCE[varKey(name)] === TEAM_EMAIL_SOURCE
-              ? 'no team email has been set for the ' + ctx.role + ' role — an administrator sets it under Accounts & people'
+              ? 'no team email has been set for you — an administrator adds it on your person under Accounts & people'
             : VAR_SOURCE[varKey(name)]
               ? 'nothing in ' + VAR_SOURCE[varKey(name)] + ' supplies it, and the tracker has no matching column'
               : 'neither the PO nor the tracker has anything called that'),
@@ -2486,30 +2486,6 @@
         el('div', { class: 'note', text: 'Testing setup: everyone starts as an administrator. Change this before real use.' }),
       ]));
     }
-    if (canManageUsers) {
-      const teamInputs = {};
-      host.appendChild(el('h3', { text: 'Team email by role' }));
-      host.appendChild(el('div', { class: 'note', text: 'Fills {{US/Int team email}} in a template. The address used is the one set for the role the email is going to.' }));
-      const rows = AMI.ROLES.map((r) => {
-        const input = el('input', {
-          type: 'text', value: AMI.teamEmailFor(ws, r.id), placeholder: 'team@example.com',
-        });
-        teamInputs[r.id] = input;
-        return el('div', { class: 'contact-row' }, [
-          el('div', { class: 'contact-role' }, [el('b', { text: r.name }), el('div', { class: 'note', text: r.hint })]),
-          input,
-        ]);
-      });
-      host.appendChild(el('div', {}, rows));
-      host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
-        class: 'btn', text: 'Save team emails',
-        onclick: async () => {
-          if (!requirePermission('manageUsers', 'set team emails')) return;
-          for (const r of AMI.ROLES) ws.settings.teamEmails[r.id] = teamInputs[r.id].value.trim();
-          if (await persistWorkspace()) toast('Team emails saved.', 'ok');
-        },
-      })]));
-    }
     if (canManageUsers) host.appendChild(el('div', { class: 'btn-row' }, [el('button', {
       class: 'btn', text: ws.users.length ? 'Add person' : 'Add yourself',
       onclick: async () => {
@@ -3000,6 +2976,7 @@
     const signature = el('textarea', { rows: 6 });
     signature.value = u.signature || '';
     const defaultCc = el('input', { type: 'text', value: u.defaultCc });
+    const teamEmail = el('input', { type: 'text', value: u.teamEmail || '', placeholder: 'team@example.com' });
 
     const accountBoxes = ws.accounts.map((a) => {
       const box = el('input', { type: 'checkbox', checked: u.accountIds.includes(a.id) });
@@ -3016,6 +2993,7 @@
         el('div', { class: 'grid-2' }, [
           editorField('Name', name), editorField('Email', email),
           editorField('Division', division), editorField('Always Cc', defaultCc),
+          editorField('US/Int team email', teamEmail, 'Fills {{US/Int team email}} in templates whenever this person drafts an email.'),
         ]),
         el('h3', { text: 'Role and permissions' }),
         el('p', { class: 'help', text: 'A role sets a starting point; tick or untick below to tailor it for this person. Administrators always have every permission.' }),
@@ -3043,6 +3021,7 @@
               }
               u.signature = signature.value;
               u.defaultCc = defaultCc.value.trim();
+              u.teamEmail = teamEmail.value.trim();
               u.accountIds = accountBoxes.map((l) => l.querySelector('input')).filter((b) => b.checked)
                 .map((b) => b.dataset.accountId);
               if (await persistWorkspace()) {
@@ -3301,7 +3280,7 @@
         customer: config.customer || account.name || '',
         product: config.productName || (item && item.product) || (item && item.name) || '',
         topic: topics.join(' / '),
-        usIntTeamEmail: AMI.teamEmailFor(state.workspace, role),
+        usIntTeamEmail: AMI.teamEmailFor(state.workspace, user.id),
         __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,

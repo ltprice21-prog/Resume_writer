@@ -233,11 +233,13 @@ async function buildBundle() {
   await page.locator('#accountsBody tr', { hasText: 'Dan Desk' }).locator('button', { hasText: 'Edit' }).click();
   await wait(400);
   ok('an administrator can edit a person\'s role and permissions',
-    (await page.locator('#entityEditor select option').count()) >= 4 && (await page.locator('#entityEditor input[data-permission]').count()) === 9);
-  await page.locator('#entityEditor select').nth(1).selectOption('viewer');
+    (await page.locator('#entityEditor select option').count()) >= 3 && (await page.locator('#entityEditor input[data-permission]').count()) === 9);
+  ok('the role choice is just Administrator or User',
+    JSON.stringify(await page.locator('#entityEditor select').nth(1).locator('option').evaluateAll((o) => o.map((x) => x.textContent.split(' — ')[0]))) === '["Administrator","User"]');
+  await page.locator('#entityEditor select').nth(1).selectOption('admin');
   await wait(200);
   const boxes = await page.locator('#entityEditor input[data-permission]').evaluateAll((els) => els.map((e) => e.checked));
-  ok('choosing Viewer clears the permissions', boxes.every((c) => !c));
+  ok('renaming a user to Administrator gives every permission', boxes.every((c) => c));
 
   console.log('\nNew people');
   await go('accounts');
@@ -294,19 +296,22 @@ async function buildBundle() {
   ok('Shipping agent name reads Forwarder, spacing and case ignored', aliases.agent === 'STPI' && aliases.loose === 'STPI');
   ok('a PO with a blank Forwarder cell stays blank and says why', aliases.blank.value === '' && /blank/.test(aliases.blank.why));
 
-  console.log('\nTeam email by role');
+  console.log('\nTeam email and branding');
   await go('accounts');
-  await page.locator('h3', { hasText: 'Team email by role' }).waitFor();
-  await page.locator('.contact-row', { hasText: 'Vendor / winery' }).locator('input').fill('us-int@example.com');
-  await page.locator('button', { hasText: 'Save team emails' }).click();
-  await page.waitForTimeout(300);
+  await page.locator('#accountsBody tr', { hasText: 'Dan Desk' }).locator('button', { hasText: 'Edit' }).click();
+  await wait(400);
+  await page.locator('#entityEditor input[placeholder="team@example.com"]').fill('us-int@example.com');
+  await page.locator('#entityEditor button', { hasText: 'Save person' }).click();
+  await wait(500);
   const team = await page.evaluate(() => ({
-    vendor: AMI.teamEmailFor(AMI.ui.state.workspace, 'vendor'),
-    trucker: AMI.teamEmailFor(AMI.ui.state.workspace, 'trucker'),
-    filled: AMI.fillTemplate('Contact {{US/Int team email}}', { usIntTeamEmail: AMI.teamEmailFor(AMI.ui.state.workspace, 'vendor') }),
+    dan: AMI.teamEmailFor(AMI.ui.state.workspace, 'desk'),
+    ada: AMI.teamEmailFor(AMI.ui.state.workspace, 'boss'),
+    filled: AMI.fillTemplate('Contact {{US/Int team email}}', { usIntTeamEmail: AMI.teamEmailFor(AMI.ui.state.workspace, 'desk') }),
   }));
-  ok('an administrator sets a team email per role', team.vendor === 'us-int@example.com' && team.trucker === '');
-  ok('{{US/Int team email}} fills from the role’s address', team.filled === 'Contact us-int@example.com');
+  ok('an administrator assigns a team email to a person', team.dan === 'us-int@example.com' && team.ada === '');
+  ok('{{US/Int team email}} fills from that person’s address', team.filled === 'Contact us-int@example.com');
+  ok('the header reads Global Wine Ops', /Global Wine Ops/.test(await page.locator('.rail-brand').innerText()));
+  ok('the logo is a globe', (await page.locator('.rail-mark svg circle').count()) === 1);
 
   console.log('\nPhone width');
   await page.setViewportSize({ width: 420, height: 860 });

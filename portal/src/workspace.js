@@ -55,12 +55,20 @@
   const USER_ROLES = [
     { id: 'admin', name: 'Administrator', hint: 'Everything, including accounts, items and people.',
       can: PERMISSIONS.map((p) => p.id) },
-    { id: 'coordinator', name: 'Order desk', hint: 'Runs orders end to end; does not change the shared setup.',
+    { id: 'user', name: 'User', hint: 'Runs orders end to end; does not change the shared setup. Tick or untick below to tailor it.',
       can: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'] },
-    { id: 'finance', name: 'Finance', hint: 'Moves orders through invoicing and settlement.',
-      can: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'] },
-    { id: 'viewer', name: 'Viewer', hint: 'Reads everything; changes nothing.', can: [] },
   ];
+
+  /**
+   * Workspaces saved before there were just two roles. Each becomes a plain
+   * user, starting from the permissions its old role carried, so nobody gains or
+   * loses anything when an older file is opened.
+   */
+  const LEGACY_ROLES = {
+    coordinator: ['postOrders', 'setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails', 'editTemplates'],
+    finance: ['setStatus', 'manageTasks', 'manageExceptions', 'editTrackers', 'sendEmails'],
+    viewer: [],
+  };
 
   /**
    * The role a person has when none was chosen for them — new people, and anyone
@@ -68,15 +76,16 @@
    *
    * TESTING: everyone starts as an administrator so nothing is in the way while
    * the desk is being tried out. Before real use, set `settings.defaultRole` to
-   * 'coordinator' (or change it on the Accounts page) so new people start with
+   * 'user' (or change it on the Accounts page) so new people start with
    * the working permissions and not the setup ones.
    */
   const DEFAULT_ROLE = 'admin';
 
   function rolePermissions(roleId) {
     const role = USER_ROLES.find((r) => r.id === roleId) || USER_ROLES[1];
+    const can = LEGACY_ROLES[roleId] || role.can;
     const out = {};
-    for (const p of PERMISSIONS) out[p.id] = role.can.includes(p.id);
+    for (const p of PERMISSIONS) out[p.id] = can.includes(p.id);
     return out;
   }
 
@@ -124,17 +133,14 @@
     delete settings.autoCloseInvoiced;
     ws.settings = Object.assign({ excludeClosed: false }, settings);
     if (!USER_ROLES.some((r) => r.id === ws.settings.defaultRole)) ws.settings.defaultRole = DEFAULT_ROLE;
-    // The US / international team's address, one per counterparty role. An
-    // administrator types it in; the app never works one out.
-    const teamIn = ws.settings.teamEmails && typeof ws.settings.teamEmails === 'object' ? ws.settings.teamEmails : {};
-    ws.settings.teamEmails = {};
-    for (const r of ROLES) ws.settings.teamEmails[r.id] = String(teamIn[r.id] || '').trim();
     ws.divisions = (ws.divisions || []).map((d) => ({ id: slug(d.id || d.name), name: d.name || d.id }));
     ws.users = (ws.users || []).map((u) => {
       // A person with no role of their own is an administrator if they were one,
       // and otherwise gets the workspace's default role.
-      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
-      const base = rolePermissions(role);
+      const legacy = LEGACY_ROLES[u.role] ? u.role : '';
+      const role = USER_ROLES.some((r) => r.id === u.role) ? u.role
+        : legacy ? 'user' : (u.isAdmin ? 'admin' : ws.settings.defaultRole);
+      const base = rolePermissions(legacy || role);
       const given = u.permissions && typeof u.permissions === 'object' ? u.permissions : {};
       const permissions = {};
       for (const p of PERMISSIONS) {
@@ -148,6 +154,7 @@
         accountIds: Array.isArray(u.accountIds) ? u.accountIds.slice() : [],
         signature: u.signature || '',
         defaultCc: u.defaultCc || '',
+        teamEmail: String(u.teamEmail || '').trim(),
         role,
         permissions,
         isAdmin: role === 'admin',
@@ -542,10 +549,10 @@
    * purchase order and falling back to the account's saved contact.
    * Every result reports which of the two it came from.
    */
-  /** The team address an administrator set for a counterparty role, or ''. */
-  function teamEmailFor(ws, roleId) {
-    const t = ws && ws.settings && ws.settings.teamEmails;
-    return (t && t[roleId]) || '';
+  /** The US / international team address an administrator gave a person, or ''. */
+  function teamEmailFor(ws, userId) {
+    const u = ws && ws.users && ws.users.find((x) => x.id === userId);
+    return (u && u.teamEmail) || '';
   }
 
   function resolveRecipients(account, item, role, po, user) {
