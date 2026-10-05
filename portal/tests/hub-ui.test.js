@@ -250,8 +250,8 @@ async function buildBundle() {
   await go('trackers');
   ok('the page lists the tracker\'s rows', (await page.locator('#trackerTable tbody tr').count()) === 5);
   const rail = await page.locator('#rail .nav span:not(.nav-badge):not(.step-no)').allInnerTexts();
-  ok('it is the last page in the Work section', rail.indexOf('Order trackers') === rail.indexOf('Invoiced archive') + 1 && rail.indexOf('Order trackers') < rail.indexOf('Purchase orders'));
-  ok('the Work section runs in the agreed order', rail.slice(0, 9).join('|') === 'My Work|Account Health|Tasks|Flagged|Follow-ups|Orders|Shipments|Invoiced archive|Order trackers', rail.slice(0, 9).join('|'));
+  ok('it is the last page in the Work section', rail.indexOf('Invoiced archive') === rail.indexOf('Order trackers') + 1 && rail.indexOf('Invoiced archive') < rail.indexOf('Purchase orders'));
+  ok('the Work section runs in the agreed order', rail.slice(0, 9).join('|') === 'My Work|Account Health|Tasks|Flagged|Follow-ups|Orders|Shipments|Order trackers|Invoiced archive', rail.slice(0, 9).join('|'));
   const t400 = page.locator('#trackerTable tr', { hasText: 'T-400' });
   await t400.locator('input[aria-label^="Actual Collection Date"]').fill('2026-09-20');
   ok('an edit is counted as unsaved', /1 unsaved change/.test(await page.locator('#trackerSave').innerText()));
