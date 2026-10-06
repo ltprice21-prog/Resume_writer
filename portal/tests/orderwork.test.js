@@ -5,6 +5,7 @@
  * Needs no fixtures: the tracker is built in memory with the real headings.
  */
 require('../src/engine.js');
+require('../src/templates.js');
 require('../src/workspace.js');
 require('../src/status.js');
 require('../src/charts.js');
@@ -235,6 +236,31 @@ const memoryStore = () => {
   check('a team email belongs to a person', [AMI.teamEmailFor(team, 'a'), AMI.teamEmailFor(team, 'b'), AMI.teamEmailFor(team, 'zz')], ['us@x.com', '', '']);
   const again = AMI.normaliseWorkspace(JSON.parse(JSON.stringify(ws)));
   check('normalising twice changes nothing', again.users, ws.users);
+
+  console.log('\nNothing after the sign-off');
+  const tidy = (h) => AMI.tidyTemplateHtml(h);
+  const withNote = '<p>Dear {{vendorContact}},</p><p>Please confirm.</p><p>Best regards,<br>Use: Aeromexico</p><p>Remember to check the PO</p>';
+  check('a note after "Best regards," goes', tidy(withNote).html, '<p>Dear {{vendorContact}},</p><p>Please confirm.</p><p>Best regards,</p>');
+  check('and is reported', tidy(withNote).removed, 'Use: Aeromexico Remember to check the PO');
+  check('"Kind regards," works the same', tidy('<p>Hi</p><p>Kind regards,</p><p>Use: Delta</p>').html, '<p>Hi</p><p>Kind regards,</p>');
+  check('so does "Thank you and kind regards,"', tidy('<p>Hi</p><p>Thank you and kind regards,</p><p>Use: Delta</p>').html, '<p>Hi</p><p>Thank you and kind regards,</p>');
+  const signed = '<p>Hi</p><p>Kind regards,</p>{{signature}}';
+  check('the signature placeholder after the closing stays', tidy(signed).html, signed);
+  const signedNote = '<p>Hi</p><p>Kind regards,<br>{{signature}}</p><p>Use: XXX</p>';
+  const kept = tidy(signedNote).html;
+  ok('and stays when a note follows it', /Kind regards,/.test(kept) && /\{\{signature\}\}/.test(kept) && !/Use/.test(kept) && !/XXX/.test(kept), kept);
+  ok('a literal old signature after the closing is removed', !/555/.test(tidy('<p>Hi</p><p>Best regards,</p><p>Bo Price<br>555 0100</p>').html));
+  const plainBody = '<p>Hi</p><p>Please confirm. Thank you for your help with this order.</p>';
+  check('a body with no closing is left alone', tidy(plainBody).html, plainBody);
+  check('a "Use:" note with no closing is still taken out', tidy('<p>Hi</p><p>Use: Delta</p>').html, '<p>Hi</p>');
+  ok('markup stays balanced', /<\/div>$/.test(tidy('<div><p>Hi</p><p>Best regards,</p><p>note</p></div>').html));
+  const wk = tidy('<p>Hi</p><p>Thanks,</p><p>Use: A</p>');
+  check('a bare "Thanks," counts when nothing clearer closes the email', wk.html, '<p>Hi</p><p>Thanks,</p>');
+  check('cleaning twice changes nothing', tidy(tidy(withNote).html).found, false);
+  const mem = new Map();
+  const tstore = { read: async (p) => mem.get(p) || null, write: async (p, b) => { mem.set(p, b); }, list: async () => [], remove: async (p) => { mem.delete(p); } };
+  const saved = await AMI.saveTemplate(tstore, 'acc', { label: 'T', role: 'vendor', subject: 's', html: withNote });
+  ok('saving a template cleans it too', !/Use: Aeromexico/.test(new TextDecoder().decode(mem.get(saved.path))));
 
   console.log('\n' + '-'.repeat(52));
   console.log(passed + ' passed, ' + failed + ' failed');

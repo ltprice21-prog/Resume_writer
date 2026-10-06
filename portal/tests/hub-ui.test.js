@@ -79,7 +79,10 @@ async function buildBundle() {
       { id: 'look', name: 'Vera Viewer', divisionId: 'eu', accountIds: [], role: 'viewer' },
     ],
   };
+  const oldTemplate = AMI.templateFileText({ label: 'Old vendor mail', role: 'vendor', itemId: '', subject: 'Order', source: 'test' },
+    '<p>Dear {{vendorContact}},</p><p>Please confirm.</p><p>Kind regards,<br>{{signature}}</p><p>Use: Aeromexico</p>');
   return AMI.zip([
+    { name: 'templates/acc/old-vendor-mail.html', bytes: ENC.encode(oldTemplate) },
     { name: 'workspace.json', bytes: ENC.encode(JSON.stringify(workspace)) },
     { name: 'trackers/Test.xlsx', bytes: xlsx },
   ]);
@@ -295,6 +298,15 @@ async function buildBundle() {
   ok('Country of Origin reads the tracker', aliases.origin === 'Spain');
   ok('Shipping agent name reads Forwarder, spacing and case ignored', aliases.agent === 'STPI' && aliases.loose === 'STPI');
   ok('a PO with a blank Forwarder cell stays blank and says why', aliases.blank.value === '' && /blank/.test(aliases.blank.why));
+
+  console.log('\nTemplates carry nothing after the sign-off');
+  const tpl = await page.evaluate(async () => {
+    const t = AMI.ui.state.templates.find((x) => x.id === 'old-vendor-mail');
+    const onDisk = new TextDecoder().decode(await AMI.ui.state.store.read(t.path));
+    return { html: t.html, onDisk };
+  });
+  ok('a saved template with a trailing note is cleaned when the account loads', /Kind regards/.test(tpl.html) && !/Use:/.test(tpl.html) && /\{\{signature\}\}/.test(tpl.html), tpl.html);
+  ok('and the cleaned copy is what is in the shared folder', !/Use: Aeromexico/.test(tpl.onDisk));
 
   console.log('\nTeam email and branding');
   await go('accounts');

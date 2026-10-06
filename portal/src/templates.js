@@ -651,6 +651,88 @@
     return { html: balanceTags(kept).trim(), removed, found: true };
   }
 
+  /* ------------------------------------------------------------------ *
+   * Nothing after the sign-off
+   * ------------------------------------------------------------------ */
+
+  /* A template ends at its closing — "Best regards,", "Kind regards,", "Thank
+   * you and kind regards," — plus the sender's signature, which is a
+   * placeholder filled from their profile. Anything else after the closing is a
+   * note to whoever files the template ("Use: Aeromexico", reminders, old
+   * signatures) and has no business in an email that goes out. */
+  const SIGNOFF_REGARDS = /^(?:(?:and|with|very|many|thanks?|thank you|best|kind|kindest|warm|warmest|sincere|my|our)[ ,&]+)*regards[ ,.!]*$/i;
+  const SIGNOFF_OTHER = /^(?:yours\s+(?:sincerely|faithfully|truly)|sincerely(?:\s+yours)?|respectfully(?:\s+yours)?|cordially|cheers|(?:best|warmest|kindest)\s+wishes|with\s+thanks)[ ,.!]*$/i;
+  const SIGNOFF_WEAK = /^(?:thanks|thank you|many thanks|thanks again|thank you again|best)[ ,!]*$/i;
+
+  const lineText = (l) => l.replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
+
+  /** Index in `text` of the visible character at position `at` of its tag-flattened form. */
+  function sourceIndexAt(text, at) {
+    let seen = 0;
+    let inTag = false;
+    let tagStart = -1;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '<') { inTag = true; tagStart = i; continue; }
+      if (inTag) {
+        if (ch === '>') { inTag = false; seen++; if (seen > at) return tagStart; }
+        continue;
+      }
+      if (seen >= at) return i;
+      seen++;
+    }
+    return text.length;
+  }
+
+  /**
+   * Remove everything after the closing line of a template. Placeholders after
+   * it ({{signature}}) are the sign-off block and stay; so do images. Only
+   * wording is removed. The first clear closing wins; a bare "Thanks," counts
+   * only when the template has no clearer one, and then the last of them.
+   */
+  function trimAfterSignOff(html) {
+    const text = String(html || '');
+    const plain = text.replace(/<[^>]*>/g, '\n');
+    const lines = [];
+    let pos = 0;
+    for (const raw of plain.split('\n')) {
+      lines.push({ end: pos + raw.length, t: lineText(raw) });
+      pos += raw.length + 1;
+    }
+    const closing = (l) => l.t && l.t.length <= 60 && !/\{\{/.test(l.t);
+    let hit = lines.find((l) => closing(l) && (SIGNOFF_REGARDS.test(l.t) || SIGNOFF_OTHER.test(l.t)));
+    if (!hit) {
+      const weak = lines.filter((l) => l.t && SIGNOFF_WEAK.test(l.t));
+      hit = weak[weak.length - 1];
+    }
+    if (!hit) return { html: text, removed: '', found: false };
+
+    const cut = sourceIndexAt(text, hit.end);
+    const tail = text.slice(cut);
+    const visible = tail.replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim();
+    const holders = visible.match(/\{\{\s*[^{}<>]+?\s*\}\}/g) || [];
+    const literal = visible.replace(/\{\{\s*[^{}<>]+?\s*\}\}/g, '').replace(/\s+/g, '');
+    if (!literal) return { html: text, removed: '', found: false };
+
+    const extra = holders.length ? '<div>' + holders.join('<br>') + '</div>' : '';
+    return {
+      html: (balanceTags(text.slice(0, cut)).trim() + (extra ? '\n' + extra : '')).trim(),
+      removed: visible.replace(/\{\{\s*[^{}<>]+?\s*\}\}/g, '').replace(/\s+/g, ' ').trim(),
+      found: true,
+    };
+  }
+
+  /** Everything a saved template must not carry: text after the sign-off, then a "Use:" note. */
+  function tidyTemplateHtml(html) {
+    const a = trimAfterSignOff(html);
+    const b = stripInternalNote(a.html);
+    return {
+      html: b.html,
+      removed: [a.removed, b.removed].filter(Boolean).join(' '),
+      found: a.found || b.found,
+    };
+  }
+
   const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link', 'col', 'area', 'base']);
 
   /** Close any tags left open by a cut, innermost first. */
@@ -712,7 +794,7 @@
     readCfb, isCfb, decompressRtf, deEncapsulateHtml, rtfToText,
     textToHtml, innerBody, decodeRfc2047,
     templatePlaceholders, suggestPlaceholders, applyPlaceholderSuggestions,
-    stripInternalNote, balanceTags,
+    stripInternalNote, balanceTags, trimAfterSignOff, tidyTemplateHtml,
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = AMI;

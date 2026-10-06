@@ -594,13 +594,21 @@ is read from the delivery address:
    LTN and LCY and waits for you to pick. Sending wine to Gatwick because the address said
    "London" is exactly the mistake the table exists to prevent.
 
-### The internal note on an imported template
+### Nothing after the sign-off
 
-Templates often end with a note to whoever filed them — `Use: Aeromexico`. On import, that line
-and everything after it is removed from the copy the portal keeps. The editor shows what was
-taken out and offers **Put it back** if the guess was wrong.
+A template ends at its closing — `Best regards,`, `Kind regards,`, `Thank you and kind regards,`
+— and the sender's `{{signature}}`. Anything else after the closing (`Use: Aeromexico`, reminders,
+an old typed signature) is removed:
 
-**The file you uploaded is never written to.** Its note stays where it is.
+- **On import**, from the copy the portal keeps. The editor shows what was taken out and offers
+  **Put it back** if the guess was wrong. The file you uploaded is never written to.
+- **On every save.**
+- **On templates already saved.** When an account loads, any saved template with text after its
+  sign-off is cleaned and, for someone allowed to edit templates, rewritten in the shared folder.
+
+Placeholders after the closing (`{{signature}}`) stay, and so do images. A bare `Thanks,` counts as
+the closing only when the template has nothing clearer. A template with no closing is only trimmed
+if it has a `Use:` note.
 
 ### Editing
 

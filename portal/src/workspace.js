@@ -523,7 +523,7 @@
       label: template.label, role: template.role, itemId: template.itemId || '',
       subject: template.subject, to: template.to, cc: template.cc,
       source: template.source, updated: nowIso(),
-    }, template.html);
+    }, AMI.tidyTemplateHtml ? AMI.tidyTemplateHtml(template.html).html : template.html);
     await store.write(path, ENC.encode(text));
     return Object.assign({}, template, { id, path, accountId, updated: nowIso() });
   }

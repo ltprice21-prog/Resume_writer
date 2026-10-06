@@ -588,7 +588,7 @@
       return;
     }
 
-    state.templates = await AMI.listTemplates(state.store, account.id);
+    state.templates = await loadTemplates(account);
     const items = AMI.accountItems(account);
     state.itemId = items.some((i) => i.id === preferredItemId) ? preferredItemId
       : (items.length ? items[0].id : '');
@@ -1929,6 +1929,28 @@
     ]);
   }
 
+  /**
+   * The account's templates, with anything after the sign-off taken out. A saved
+   * template that still carries a note is cleaned in memory straight away and,
+   * for anyone allowed to edit templates, rewritten in the shared folder.
+   */
+  async function loadTemplates(account) {
+    const list = await AMI.listTemplates(state.store, account.id);
+    let tidied = 0;
+    for (const t of list) {
+      if (t.error || !t.html) continue;
+      const r = AMI.tidyTemplateHtml(t.html);
+      if (!r.found) continue;
+      t.html = r.html;
+      tidied++;
+      if (can('editTemplates')) {
+        try { await AMI.saveTemplate(state.store, account.id, t); } catch (e) { /* cleaned in memory regardless */ }
+      }
+    }
+    if (tidied) toast('Removed text after the sign-off from ' + tidied + ' template' + (tidied === 1 ? '' : 's') + '.', 'ok');
+    return list;
+  }
+
   const BUILTIN_VENDOR_TEMPLATE = {
     id: '', label: 'Built-in vendor order email', role: 'vendor', builtin: true, itemId: '',
     subject: 'AMI Wines for {{customer}} - {{poCount}} new Purchase Orders {{poGroups}} - {{product}}',
@@ -2174,7 +2196,7 @@
             label: 'Untitled template', role: state.selectedRole, itemId: '', subject: '',
             html: '<p></p>', source: 'created here',
           });
-          state.templates = await AMI.listTemplates(state.store, account.id);
+          state.templates = await loadTemplates(account);
           renderTemplates();
           openTemplateEditor(saved.id);
         },
@@ -2215,7 +2237,7 @@
                 if (!requirePermission('editTemplates', 'edit templates')) return;
                 if (!window.confirm('Delete "' + (t.label || t.id) + '" for everyone on this account?')) return;
                 await AMI.deleteTemplate(state.store, account.id, t.id);
-                state.templates = await AMI.listTemplates(state.store, account.id);
+                state.templates = await loadTemplates(account);
                 renderTemplates();
                 toast('Template deleted.', 'ok');
               },
@@ -2240,10 +2262,11 @@
     try {
       const parsed = await AMI.parseTemplateFile(new Uint8Array(await file.arrayBuffer()), file.name);
 
-      // "Use: Aeromexico" and anything after it is a note to whoever files the
-      // template, not part of the message. It comes out of the imported copy;
-      // the source file is only ever read, so its note stays where it is.
-      const trimmed = AMI.stripInternalNote(parsed.html);
+      // Anything after "Best regards," / "Kind regards," and the like — "Use:
+      // Aeromexico", reminders — is a note to whoever files the template, not
+      // part of the message. It comes out of the imported copy; the source file
+      // is only ever read, so its note stays where it is.
+      const trimmed = AMI.tidyTemplateHtml(parsed.html);
 
       const saved = await AMI.saveTemplate(state.store, account.id, {
         label: parsed.subject ? parsed.subject.slice(0, 60) : file.name.replace(/\.[a-z0-9]+$/i, ''),
@@ -2251,10 +2274,10 @@
         subject: parsed.subject, to: parsed.to, cc: parsed.cc,
         html: trimmed.html, source: file.name + ' — ' + parsed.bodySource,
       });
-      state.templates = await AMI.listTemplates(state.store, account.id);
+      state.templates = await loadTemplates(account);
       if (trimmed.found) state.lastStrippedNote = { templateId: saved.id, text: trimmed.removed, html: parsed.html };
       toast('Imported ' + file.name + ' (' + parsed.bodySource + ').'
-        + (trimmed.found ? ' The internal note was removed.' : ''), 'ok');
+        + (trimmed.found ? ' Text after the sign-off was removed.' : ''), 'ok');
       renderTemplates();
       openTemplateEditor(saved.id);
     } catch (e) {
@@ -2328,7 +2351,7 @@
         strippedNote ? el('div', { class: 'msg info' }, [
           el('span', { class: 'icon', text: 'i' }),
           el('div', {}, [
-            el('strong', { text: 'An internal note was removed from the end of this template.' }),
+            el('strong', { text: 'Text after the sign-off was removed from this template.' }),
             el('span', { class: 'detail', text: '“' + strippedNote.text + '” — this and everything after it was '
               + 'taken out of the imported copy. The file you uploaded is untouched.' }),
             el('div', { class: 'btn-row' }, [el('button', {
@@ -2366,7 +2389,7 @@
                 id: t.id, label: label.value, role: roleSel.value, itemId: scopeSel.value,
                 subject: subject.value, to: t.to, cc: t.cc, html: body.value, source: t.source,
               });
-              state.templates = await AMI.listTemplates(state.store, account.id);
+              state.templates = await loadTemplates(account);
               renderTemplates();
               toast('Template saved to the shared folder.', 'ok');
             },
