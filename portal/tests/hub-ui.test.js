@@ -299,6 +299,18 @@ async function buildBundle() {
   ok('Shipping agent name reads Forwarder, spacing and case ignored', aliases.agent === 'STPI' && aliases.loose === 'STPI');
   ok('a PO with a blank Forwarder cell stays blank and says why', aliases.blank.value === '' && /blank/.test(aliases.blank.why));
 
+  const orderNo = await page.evaluate(() => {
+    const r = AMI.ui.trackerResolver('tmp', ['T-200']);
+    return {
+      tracker: r('Order number').value, po: r('PO number').value,
+      fromDoc: AMI.fillTemplate('Order {{Order number}} / {{PO number}}', { orderNumber: 'T-201', poNumber: 'T-201', __resolve: r }),
+      noDoc: AMI.fillTemplate('Order {{Order number}}', { __resolve: r }),
+    };
+  });
+  ok('Order number / PO number read the tracker PO # column', orderNo.tracker === 'T-200' && orderNo.po === 'T-200', JSON.stringify(orderNo));
+  ok('Order number prefers the order document', orderNo.fromDoc === 'Order T-201 / T-201', orderNo.fromDoc);
+  ok('Order number falls back to the tracker', orderNo.noDoc === 'Order T-200', orderNo.noDoc);
+
   console.log('\nTemplates carry nothing after the sign-off');
   const tpl = await page.evaluate(async () => {
     const t = AMI.ui.state.templates.find((x) => x.id === 'old-vendor-mail');

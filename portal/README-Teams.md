@@ -544,6 +544,8 @@ Names are compared ignoring case, spaces and punctuation.
    `{{Item name}}` = Product Name, `{{Case and Pack Size}}` = Case size, `{{Final customer}}` =
    Customer, `{{Shipment Method}}` = Method of Shipment, `{{Country of Origin}}` = Country of
    Origin, `{{Shipping agent name}}` = Forwarder.
+   **`{{Order number}}`** (or `{{PO number}}`) is the PO number: read off the order document when
+   one is loaded, otherwise from the tracker's PO # column.
    **`{{US/Int team email}}`** is a field on each person (*Accounts & people → Edit → US/Int team
    email*), set by an administrator. A draft uses the address of the person drafting it.
 3. **Nothing** — left empty, never guessed, and reported on the *Fields in this template* panel.

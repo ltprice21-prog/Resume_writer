@@ -1334,6 +1334,9 @@
     shippingagentname: 'Forwarder',
   };
 
+  /** {{Order number}} / {{PO number}}: the PO number — off the order document, else the tracker's PO # column. */
+  const ORDER_NUMBER_NAMES = ['ordernumber', 'ponumber'];
+
   function trackerResolver(itemId, poNumbers) {
     const st = itemState(itemId);
     const book = st && (st.preview || st.base);
@@ -1391,6 +1394,11 @@
     return (name) => {
       const n = AMI.normName(name);
       if (!n) return null;
+      if (ORDER_NUMBER_NAMES.includes(n)) {
+        const col = header.columns.find((c) => c.col === poCol);
+        return Object.assign(col ? byColumn(col)
+          : { value: '', source: 'the tracker', why: 'the tracker has no PO # column' }, { fixed: true });
+      }
       if (TRACKER_ALIASES[n]) return byAlias(TRACKER_ALIASES[n]);
       const cols = header.columns;
       const exactCol = cols.filter((c) => AMI.normName(c.header) === n);
@@ -1471,6 +1479,8 @@
         poCount: included.length,
         poGroups: AMI.poGroups(rows.map((r) => r.po)),
         poList: rows.map((r) => r.po).join(', '),
+        orderNumber: rows.map((r) => r.po).filter(Boolean).join(', '),
+        poNumber: rows.map((r) => r.po).filter(Boolean).join(', '),
         docsEmail: first ? first.docsTo : '',
         finalDelivery: first ? first.finalDeliveryTo.join('<br>') : '',
         collectionAddress: first ? [first.vendorName, first.vendorAddress].filter(Boolean).join(', ') : '',
@@ -1510,6 +1520,7 @@
     customer: 'the tracker', product: 'the PO', size: 'the PO',
     vendorContact: 'the PO', recipientName: 'the saved contact', senderName: 'your profile',
     poCount: 'the loaded POs', poGroups: 'the loaded POs', poList: 'the loaded POs',
+    orderNumber: 'the PO document', poNumber: 'the PO document',
     docsEmail: 'the PO', finalDelivery: 'the PO', collectionAddress: 'the PO',
     deliveryAddress: 'the PO', collectionDate: 'the tracker', totalPallets: 'computed',
     totalCases: 'computed', totalWeight: 'computed', forwarder: 'the PO',
@@ -3306,6 +3317,8 @@
         usIntTeamEmail: AMI.teamEmailFor(state.workspace, user.id),
         __resolve: trackerResolver(itemId, group.map((i) => i.po)),
         poList: [...new Set(group.map((i) => i.po))].join(', '),
+        orderNumber: [...new Set(group.map((i) => i.po))].join(', '),
+        poNumber: [...new Set(group.map((i) => i.po))].join(', '),
         table: rowsHtml,
         signature: user.signature || '',
         senderName: user.name || '',
